@@ -2,3 +2,4 @@ tracker
 *.o
 *.obj
 *.so
+calib.txt
