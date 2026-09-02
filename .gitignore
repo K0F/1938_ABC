@@ -1,0 +1,4 @@
+tracker
+*.o
+*.obj
+*.so
