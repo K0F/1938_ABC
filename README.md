@@ -128,6 +128,37 @@ Place WAV files as `samples/track1.wav` through `samples/track8.wav` (only those
 | `S` | Save calibration to `calib.txt` |
 | `R` | Reset corners to full frame |
 
+## Troubleshooting
+
+### Qt6 / opencv package fails to install on Termux
+
+Known issue: Termux's Qt6 packages occasionally have dependency conflicts (`qt6-qtbase`, `qt6-qtwayland`, `qt6-qt5compat`). The `opencv` package depends on Qt6.
+
+**Fix (try first):**
+```bash
+pkg upgrade -y
+apt --fix-broken install -y
+pkg install -y opencv
+```
+
+**If that fails:** The `build_termux.sh` script automatically detects this and builds OpenCV from source without Qt (~15-25 min on phone). The tracker only uses OpenCV for image processing and tracking, not GUI, so Qt is not needed.
+
+**Manual fallback:**
+```bash
+pkg install -y clang make cmake git pkg-config raylib sdl2 sdl2-mixer
+# Then install opencv .deb with force (skip broken Qt6 deps):
+wget https://packages.termux.dev/apt/termux-x11/pool/main/o/opencv/opencv_*.deb
+dpkg -i --force-depends opencv_*.deb
+```
+
+### Build fails: "cannot find -lraylib"
+
+Ensure x11-repo is enabled: `pkg install -y x11-repo && pkg install -y raylib`
+
+### Build fails: "cannot find -lGL"
+
+Install OpenGL: `pkg install -y mesa`
+
 ## Files
 
 - `main.c` -- source
