@@ -1,4 +1,5 @@
 tracker
+tracker_test
 *.o
 *.obj
 *.so

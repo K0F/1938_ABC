@@ -1,0 +1,32 @@
+# Dockerfile.arm64-test — Cross-compile test for ARM64 (Termux-like)
+#
+# Build:  docker buildx build --platform linux/arm64 -f Dockerfile.arm64-test -t tracker-arm64-test .
+# Or:     docker buildx build --platform linux/amd64 -f Dockerfile.arm64-test -t tracker-amd64-test .
+#
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    g++ \
+    make \
+    pkg-config \
+    libopencv-dev \
+    libsdl2-dev \
+    libsdl2-mixer-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# raylib: not in Ubuntu repos for aarch64, build from source
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake libgl-dev libx11-dev \
+    && git clone --depth 1 --branch 5.5 https://github.com/raysan5/raylib.git /tmp/raylib \
+    && cd /tmp/raylib/src \
+    && make PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=SHARED \
+    && make install RAYLIB_INSTALL_PATH=/usr/lib \
+    && rm -rf /tmp/raylib \
+    && apt-get purge -y git cmake \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY . /app/
+
+CMD ["make", "all"]
