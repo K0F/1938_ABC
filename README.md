@@ -164,6 +164,8 @@ Install OpenGL: `pkg install -y mesa`
 - `main.c` -- source
 - `Makefile` -- build system (desktop + Termux)
 - `build_termux.sh` -- zero-dep Termux setup script
+- `remote_update.sh` -- pull + rebuild on Android over SSH
+- `docs/tracker_manual.pdf` -- user manual
 - `calib.txt` -- saved perspective calibration (gitignored)
 - `samples/` -- audio loops
 
