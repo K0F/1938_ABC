@@ -3,14 +3,13 @@
 Webcam-based multi-track amplitude modulation player. Tracked balls control volume of audio loops via SDL2_mixer, with perspective-correction for angled camera setups.
 
 ## How it works
-
-Each ball controls two audio loops via its perspective-corrected position:
-
-- **Ball 1 (red)**: X-axis -> Track 1 volume, Y-axis -> Track 2 volume
-- **Ball 2 (green)**: X-axis -> Track 3 volume, Y-axis -> Track 4 volume
-- Additional balls (when tracked) follow the same pattern: ball *n* -> tracks *2n* and *2n+1*
-- All tracks loop continuously, volume modulated in real-time by ball position
-- If a ball is not detected (lost), its tracks go **silent** (volume -> 0)
+ 
+ Each ball controls four audio loops via its perspective-corrected position:
+ 
+ - **Ball 1 (red)**: Y-axis (top) -> Track 1 (War), Y-axis (bottom) -> Track 2 (Peace), X-axis (left) -> Track 3 (Retro), X-axis (right) -> Track 4 (Futuro)
+ - **Ball 2 (green)**: Controls tracks 5-8 following the same pattern
+ - All tracks loop continuously, volume modulated in real-time by ball position
+ - If a ball is not detected (lost), its tracks go **silent** (volume -> 0)
 
 ## Perspective correction
 
@@ -27,8 +26,8 @@ The webcam view can be angled, foreshortening ball positions. Define a planar re
 ./tracker [N]
 ```
 
-- `N` -- number of balls to track (default `2`, max `16`)
-- Example: `./tracker 3` tracks three balls, controlling tracks 1-6
+- `N` -- number of balls to track (default `1`, max `16`)
+- Example: `./tracker 2` tracks two balls, controlling tracks 1-8
 
 Trackers auto-initialize at startup at staggered positions; lost trackers attempt to re-acquire.
 

@@ -83,7 +83,7 @@ static void loadCalib(int w, int h) {
 }
 
 int main(int argc, char* argv[]) {
-    int numBalls = 2;
+    int numBalls = 1;
     if (argc > 1) {
         int n = std::atoi(argv[1]);
         if (n >= 1 && n <= MAX_BALLS) numBalls = n;
@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
 
     SDL_Init(SDL_INIT_AUDIO);
     Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
-    int mixCh = 2 * numBalls;
+    int mixCh = 4 * numBalls;
     if (mixCh > 8) mixCh = 8;
     Mix_AllocateChannels(mixCh);
 
@@ -156,7 +156,7 @@ int main(int argc, char* argv[]) {
 
         for (int i = 0; i < numBalls; i++) {
             ok[i] = trackers[i]->update(frame, bboxes[i]);
-            int ch = 2 * i;
+            int ch = 4 * i;
             if (ok[i]) {
                 float cx = (float)bboxes[i].x + (float)bboxes[i].width / 2.0f;
                 float cy = (float)bboxes[i].y + (float)bboxes[i].height / 2.0f;
@@ -168,11 +168,15 @@ int main(int argc, char* argv[]) {
                 double v = dstPts[0].y;
                 if (u < 0) u = 0; if (u > 1) u = 1;
                 if (v < 0) v = 0; if (v > 1) v = 1;
-                if (ch < mixCh) Mix_Volume(ch, (int)(u * 128));
-                if (ch + 1 < mixCh) Mix_Volume(ch + 1, (int)(v * 128));
+                if (ch < mixCh)     Mix_Volume(ch,     (int)((1.0 - v) * 128)); // War (Y top)
+                if (ch + 1 < mixCh) Mix_Volume(ch + 1, (int)(v * 128));         // Peace (Y bottom)
+                if (ch + 2 < mixCh) Mix_Volume(ch + 2, (int)((1.0 - u) * 128)); // Retro (X left)
+                if (ch + 3 < mixCh) Mix_Volume(ch + 3, (int)(u * 128));         // Futuro (X right)
             } else {
-                if (ch < mixCh) Mix_Volume(ch, 0);
+                if (ch < mixCh)     Mix_Volume(ch,     0);
                 if (ch + 1 < mixCh) Mix_Volume(ch + 1, 0);
+                if (ch + 2 < mixCh) Mix_Volume(ch + 2, 0);
+                if (ch + 3 < mixCh) Mix_Volume(ch + 3, 0);
             }
         }
 
@@ -226,7 +230,7 @@ int main(int argc, char* argv[]) {
             float fill = (float)vol / 128.0f;
             int bx = i * barW + 5;
             int bw = barW - 10;
-            Color c = (i < 2) ? RED : GREEN;
+            Color c = ((i / 4) % 2 == 0) ? RED : GREEN;
             DrawRectangle(bx, barY, bw, barH, (Color){c.r, c.g, c.b, 40});
             DrawRectangle(bx, barY + barH - (int)(fill * barH), bw, (int)(fill * barH), c);
             DrawRectangleLines(bx, barY, bw, barH, WHITE);
