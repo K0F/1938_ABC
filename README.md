@@ -1,5 +1,7 @@
 # Tracker
 
+**Realizace:** Pavel Sterec, Kryštof Pešek
+
 Webcam-based multi-track amplitude modulation player. Tracked balls control volume of audio loops via SDL2_mixer, with perspective-correction for angled camera setups.
 
 ## How it works
