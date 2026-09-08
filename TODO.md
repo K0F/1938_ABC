@@ -21,5 +21,6 @@ Feature ideas and planned work for the tracker.
 
 ## Done
 
+- [x] v0.3.0 — 1938 Music interactive part mapping (4 tracks per ball in 2D quadrant space), default 1 ball
 - [x] v0.1.0 — perspective correction (4 draggable corners, grid, persistence), dynamic ball count, silence-on-loss
 - [x] v0.0.2 — 4-track continuous looping amp-mod via SDL2_mixer

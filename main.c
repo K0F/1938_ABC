@@ -1,7 +1,7 @@
 #define VERSION_MAJOR 0
-#define VERSION_MINOR 2
+#define VERSION_MINOR 3
 #define VERSION_PATCH 0
-#define VERSION_STRING "0.2.0"
+#define VERSION_STRING "0.3.0"
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>

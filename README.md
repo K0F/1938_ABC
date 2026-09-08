@@ -187,4 +187,4 @@ panel jacks, power distribution) are in [`docs/SCH.md`](docs/SCH.md). Czech lang
 
 ## Version
 
-0.2.0
+0.3.0
