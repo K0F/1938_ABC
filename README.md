@@ -1,5 +1,6 @@
 # Tracker
 
+**Režie:** Barbora Jeřábková  
 **Realizace:** Pavel Sterec, Kryštof Pešek  
 **Produkce:** Jakub Beran
 
