@@ -1,0 +1,57 @@
+DOSTUPNOST — kontrola zboží (8. 9. 2026, živý průzkum v prohlížeči)
+Verze 2 — aktualizace na hotová 433 MHz tlačítka (PŘEDNOSTNĚ objednat).
+====================================================================
+
+GME (gme.cz) — produktové stránky:
+[OK]  MASZCZYK KM-85 ABS krabička       209 Kč   Skladem (1 prodejna)         potřeba 3×
+[OK]  MASZCZYK Z30A (alt)               120 Kč   Skladem (2 prodejny)
+[!!]  PAM8403 2×3W potenciometrem        39 Kč   NENÍ SKLADEM → NÁHRADA:
+[REC] CREATALL CA-3110S (TP3110, D)     49 Kč   Skladem e-shop 965 ks          potřeba 2×
+[OK]  LS40N reproduktor 40mm             62 Kč   Skladem e-shop 84 ks          potřeba 2×
+[OK]  SRX882S přijímač 433 MHz ASK       79 Kč   Skladem (2 prodejny)          potřeba 2×
+      (nRF24L01+ 45 Kč e-shop 176 ks — jen jako náhradní jednotka, nově nepoužit)
+[!!]  Solight 1L67T bezdr. tlačítko   72,60 Kč   VÝPRODEJ / skladem jen 2 PRODEJNY
+      → OBJEDNAT PŘEDNOSTNĚ (potřeba 20×, nelze-li − náhrady viz HW.md §3.4)
+[OK]  DM1602AYG LCD 16×2                  85 Kč   Skladem e-shop 74 ks         potřeba 2×
+[OK]  I2C převodník PCF8574 (LCD)         69 Kč   Skladem (3 prodejny)         potřeba 2×
+[OK]  JT003 flexo 3×1,5 5 m              175 Kč   e-shop 595 ks (potřeba 2× = 10 m)
+[OK]  JT003 flexo 3×1,5 2 m               89 Kč   e-shop 407 ks (potřeba 2×)
+[OK]  CYA 1×0,5 mm² (6 barev)          3,50/m   e-shop stovky metrů (potřeba 30 m)
+[OK]  Svorkovnice KLS 2pól 5mm             5 Kč   e-shop 1864 ks (potřeba 10×)
+[OK]  Bužírky sada KSS VS-100BK          135 Kč   e-shop 227 ks
+[OK]  Distanční sloupek M2,5×10          5,50    e-shop 725 ks (potřeba 20×)
+[OK]  Mikrospínač TC-0107 (reset)       1,10    e-shop 1335 ks (potřeba 2×)
+[OK]  Camelion CR2032 BP5 (5 ks)          19 Kč   e-shop 1720 ks (volitelně 4×)
+
+ODSTRANĚNO z nákupu (stará DIY tlačítka): Digispark ATtiny85 135 Kč (1 prodejna),
+CooperKit nRF24L01 414 Kč (špatný produkt), mikrospínače 6×6 ×20, držáky CR2032 ×20.
+
+GME kategorie — POZOR NA PŘEČÍSLOVÁNÍ KATALOGU:
+[OK]  c/14852 flexo šňůry   |  c/15098 CYA lanko  |  c/15458 displeje I2C
+[!!]  c/14663 je nově „CYKY kabely" (původně elektro drobnosti) → nahrazeno produkty
+[!!]  c/14868 je nově „Chemie pro mazání" (původně USB zvukové karty) → na Alza
+[!!]  c/15056 je nově „HDMI kabely" (původně tlačítka) → mikrospínač přímý produkt
+[!!]  c/15016 je nově „Bateriové kontakty" (původně držáky CR2032) → nepoužito
+
+--------------------------------------------------------------------------------
+ALZA.cz — vyhledání + dostupnost:
+[OK]  Raspberry Pi 4 Model B 4 GB        ~3 029 Kč   Skladem (varianta 8/4/2 GB)
+[OK]  RPi 4B 8GB / 2GB                  4 629/1 899 Kč   Skladem >5 ks
+[!!]  JOY-IT RB-Heatsink Case (Alu)      NENALEZENO (jen chladič Pi 5)
+      → náhrady: Inter-Tech ODS-721 259 Kč (5 ks), JOY-IT Armor 299 Kč (4 ks)
+[OK]  Oficiální zdroj RPi 15,3 W černý   251 Kč   Skladem >10 ks
+[OK]  Logitech C270                      599 Kč   Skladem >10 ks
+[OK]  Logitech C920 (nové)             1 599 Kč   Skladem >5 ks
+[OK]  alt webkamery: C922 2 499 / C920s 2 299 / Brio 300 1 299  → skladem
+[OK]  SanDisk Ultra 64GB Lite            549 Kč   Skladem >10 ks
+[OK]  SanDisk Ultra A1 64GB              699 Kč   Skladem >5 ks
+[OK]  SanDisk Extreme 64GB / PRO         799/829 Kč   Skladem >5 ks
+[OK]  SanDisk Ultra 32GB A1              499 Kč (doc ≈350 — cena vyšší)   Skladem >10 ks
+[OK]  micro-HDMI→HDMI kabel 1,8 m (JOY-IT) 109 Kč   Skladem >20 ks
+[OK]  Apexel Mini Tripod                 189/459 Kč   Skladem >10 ks
+      vyhledání USB zvukové karty (Gembird) → skladem
+[!!]  Raspberry Pi Zero 2 W              NA ALZE NENÍ → RPishop (v skladu)
+
+--------------------------------------------------------------------------------
+RPishop.cz:
+[OK]  Raspberry Pi Zero 2 W                ~410 Kč   V SKLADU (InStock)  potřeba 2×

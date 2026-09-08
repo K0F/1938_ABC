@@ -5,6 +5,7 @@ Feature ideas and planned work for the tracker.
 ## Upcoming
 
 - [ ] **Re-acquire lost trackers** — when a ball goes missing, run foreground detection to find and re-init the tracker automatically (currently just remains silent until restart)
+- [ ] **433 MHz button decoding** — RCSwitch/433Utils map for the Solight 1L67T buttons on boxes B/C (code → sample), debounce + per-button payload routing to SDL_mixer
 - [ ] **Volume smoothing** — ramp volume over a few frames on loss/gain to avoid clicks
 - [ ] **Quadrant fill highlight** — tint the active rectified quadrant for each ball (currently only grid/crosshair drawn)
 - [ ] **More robust ball count** — auto-detect how many balls are present instead of fixed CLI arg

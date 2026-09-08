@@ -159,13 +159,28 @@ Ensure x11-repo is enabled: `pkg install -y x11-repo && pkg install -y raylib`
 
 Install OpenGL: `pkg install -y mesa`
 
+## Hardware / BOM (Czech)
+
+See [`HW.md`](HW.md) for the full hardware requirements and order list — 3-box setup
+(box A = tracker on Raspberry Pi 4, boxes B/C = wireless sampler triggers on Pi Zero 2 WH),
+20 ready-made 433 MHz wireless buttons (Solight 1L67T), 10 m mains cord, price estimate
+and GPIO wiring schemes. Complete connection diagrams for every part (box A/B/C, RF
+receiver SRX882S, power distribution) are in [`docs/SCH.md`](docs/SCH.md). Czech language.
+
 ## Files
 
+- `HW.md` -- hardware requirements / order list (Czech)
+- `docs/SCH.md` -- wiring schematics for all connected parts (Czech)
+- `docs/tracker_manual.pdf` -- user manual
+- `docs/HW.pdf` -- hardware requirements / order list (PDF)
+- `docs/SCH.pdf` -- wiring schematics (PDF)
+- `docs/md2pdf.py` -- Markdown-to-PDF helper (markdown -> HTML -> LibreOffice)
+- `nakup.txt` -- verified shopping list (Czech)
+- `dostupnost.txt` -- availability check report (Czech)
 - `main.c` -- source
 - `Makefile` -- build system (desktop + Termux)
 - `build_termux.sh` -- zero-dep Termux setup script
 - `remote_update.sh` -- pull + rebuild on Android over SSH
-- `docs/tracker_manual.pdf` -- user manual
 - `calib.txt` -- saved perspective calibration (gitignored)
 - `samples/` -- audio loops
 
