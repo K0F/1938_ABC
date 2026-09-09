@@ -96,8 +96,10 @@ SDL2_LIBS=$(pkg-config --libs sdl2 SDL2_mixer 2>/dev/null || echo "-lSDL2 -lSDL2
 
 # ── 5. Build tracker ──
 echo "[5/6] Building tracker..."
+GIT_VERSION=$(cd "$SCRIPT_DIR" && git describe --tags --abbrev=0 2>/dev/null || echo dev)
 g++ "$SCRIPT_DIR/main.c" \
     -o "$SCRIPT_DIR/tracker" \
+    -DGIT_VERSION="\"$GIT_VERSION\"" \
     ${OPENCV_CFLAGS} ${SDL2_CFLAGS} \
     -L"$PREFIX/lib" \
     ${SDL2_LIBS} \

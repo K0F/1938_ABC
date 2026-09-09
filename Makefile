@@ -5,6 +5,7 @@
 CXX      ?= g++
 SRC       = main.c
 BIN       = tracker
+GIT_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 
 # ── Platform detection ──
 PLATFORM ?= $(shell uname -m | sed 's/x86_64/desktop/;s/aarch64/termux/')
@@ -56,7 +57,7 @@ ifeq ($(PLATFORM),desktop)
     SYS_LIBS += -lrt -lX11
 endif
 
-ALL_CXXFLAGS = $(CXXFLAGS) $(OPENCV_CFLAGS) $(SDL2_CFLAGS)
+ALL_CXXFLAGS = $(CXXFLAGS) $(OPENCV_CFLAGS) $(SDL2_CFLAGS) -DGIT_VERSION='"$(GIT_VERSION)"'
 ALL_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(RAYLIB_LIBS) $(OPENCV_LIBS) $(SYS_LIBS)
 
 .PHONY: all clean docs

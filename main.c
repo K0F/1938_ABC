@@ -1,7 +1,7 @@
-#define VERSION_MAJOR 0
-#define VERSION_MINOR 3
-#define VERSION_PATCH 0
-#define VERSION_STRING "0.3.0"
+#ifndef GIT_VERSION
+#define GIT_VERSION "dev"
+#endif
+#define VERSION_STRING GIT_VERSION
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
@@ -18,11 +18,20 @@
 #include <fstream>
 #include <string>
 #include <cstdlib>
+#include <cstring>
 
 #define CALIB_FILE "calib.txt"
 #define MAX_BALLS 16
 #define HANDLE_RADIUS 20.0f
 #define GRID_DIV 8
+#define BLOB_MIN_AREA 500
+
+static cv::Scalar HSV_RED_LO(0, 100, 100);
+static cv::Scalar HSV_RED_HI(10, 255, 255);
+static cv::Scalar HSV_RED2_LO(160, 100, 100);
+static cv::Scalar HSV_RED2_HI(180, 255, 255);
+static cv::Scalar HSV_GREEN_LO(35, 100, 100);
+static cv::Scalar HSV_GREEN_HI(85, 255, 255);
 
 static cv::Point2f corners[4];
 
@@ -82,11 +91,45 @@ static void loadCalib(int w, int h) {
     }
 }
 
+static int detectBallCount(const cv::Mat& frame) {
+    cv::Mat hsv, mask;
+    cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
+
+    cv::Mat maskR1, maskR2, maskG;
+    cv::inRange(hsv, HSV_RED_LO, HSV_RED_HI, maskR1);
+    cv::inRange(hsv, HSV_RED2_LO, HSV_RED2_HI, maskR2);
+    cv::inRange(hsv, HSV_GREEN_LO, HSV_GREEN_HI, maskG);
+
+    mask = maskR1 | maskR2 | maskG;
+
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, {7, 7});
+    cv::dilate(mask, mask, kernel, cv::Point(-1, -1), 2);
+    cv::erode(mask, mask, kernel, cv::Point(-1, -1), 1);
+
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    int count = 0;
+    for (auto& c : contours) {
+        if (cv::contourArea(c) >= BLOB_MIN_AREA) count++;
+    }
+    if (count > MAX_BALLS) count = MAX_BALLS;
+    if (count < 1) count = 1;
+    return count;
+}
+
 int main(int argc, char* argv[]) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
+            std::cout << "tracker " << VERSION_STRING << std::endl;
+            return 0;
+        }
+    }
+
     int numBalls = 1;
-    if (argc > 1) {
-        int n = std::atoi(argv[1]);
-        if (n >= 1 && n <= MAX_BALLS) numBalls = n;
+    for (int i = 1; i < argc; i++) {
+        int n = std::atoi(argv[i]);
+        if (n >= 1 && n <= MAX_BALLS) { numBalls = n; break; }
     }
 
     cv::VideoCapture cap(0);
@@ -108,6 +151,10 @@ int main(int argc, char* argv[]) {
     InitWindow(frameWidth, frameHeight, "Tracker " VERSION_STRING);
     SetTargetFPS(60);
 
+    Font font = LoadFontEx("terminus.ttf", 20, NULL, 0);
+    if (font.texture.id <= 0) font = GetFontDefault();
+    else SetTextureFilter(font.texture, TEXTURE_FILTER_POINT);
+
     SDL_Init(SDL_INIT_AUDIO);
     Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
     int mixCh = 4 * numBalls;
@@ -119,6 +166,7 @@ int main(int argc, char* argv[]) {
         tracks[i] = Mix_LoadWAV(TextFormat("samples/track%d.wav", i + 1));
         if (tracks[i]) Mix_PlayChannel(i, tracks[i], -1);
     }
+    for (int i = 0; i < mixCh; i++) Mix_Volume(i, 0);
 
     loadCalib(frameWidth, frameHeight);
 
@@ -168,10 +216,10 @@ int main(int argc, char* argv[]) {
                 double v = dstPts[0].y;
                 if (u < 0) u = 0; if (u > 1) u = 1;
                 if (v < 0) v = 0; if (v > 1) v = 1;
-                if (ch < mixCh)     Mix_Volume(ch,     (int)((1.0 - v) * 128)); // War (Y top)
-                if (ch + 1 < mixCh) Mix_Volume(ch + 1, (int)(v * 128));         // Peace (Y bottom)
-                if (ch + 2 < mixCh) Mix_Volume(ch + 2, (int)((1.0 - u) * 128)); // Retro (X left)
-                if (ch + 3 < mixCh) Mix_Volume(ch + 3, (int)(u * 128));         // Futuro (X right)
+                if (ch < mixCh)     Mix_Volume(ch,     (int)((1.0 - v) * 128));
+                if (ch + 1 < mixCh) Mix_Volume(ch + 1, (int)(v * 128));
+                if (ch + 2 < mixCh) Mix_Volume(ch + 2, (int)((1.0 - u) * 128));
+                if (ch + 3 < mixCh) Mix_Volume(ch + 3, (int)(u * 128));
             } else {
                 if (ch < mixCh)     Mix_Volume(ch,     0);
                 if (ch + 1 < mixCh) Mix_Volume(ch + 1, 0);
@@ -182,6 +230,27 @@ int main(int argc, char* argv[]) {
 
         if (IsKeyPressed(KEY_S)) saveCalib();
         if (IsKeyPressed(KEY_R)) loadCalib(frameWidth, frameHeight);
+
+        if (IsKeyPressed(KEY_C)) {
+            int detected = detectBallCount(frame);
+            if (detected != numBalls) {
+                numBalls = detected;
+                mixCh = 4 * numBalls;
+                if (mixCh > 8) mixCh = 8;
+                Mix_AllocateChannels(mixCh);
+                bboxes.resize(numBalls, cv::Rect(100, 100, 80, 80));
+                trackers.resize(numBalls);
+                ok.resize(numBalls, false);
+                for (int i = 0; i < numBalls; i++) {
+                    bboxes[i].x = 100 + (i * 90) % (frameWidth - 200);
+                    bboxes[i].y = 100 + (i * 70) % (frameHeight - 200);
+                    trackers[i] = cv::TrackerCSRT::create();
+                    trackers[i]->init(frame, bboxes[i]);
+                    ok[i] = true;
+                }
+                for (int i = 0; i < mixCh; i++) Mix_Volume(i, 0);
+            }
+        }
 
         Vector2 mouse = GetMousePosition();
         cv::Point2f mp((float)mouse.x, (float)mouse.y);
@@ -216,9 +285,11 @@ int main(int argc, char* argv[]) {
                     (Rectangle){(float)bboxes[i].x, (float)bboxes[i].y, (float)bboxes[i].width, (float)bboxes[i].height},
                     3.0f, c
                 );
-                DrawText(TextFormat("B%d", i + 1), (int)bboxes[i].x, (int)bboxes[i].y - 20, 18, c);
+                DrawTextEx(font, TextFormat("B%d", i + 1),
+                    {(float)bboxes[i].x, (float)bboxes[i].y - 20}, 18, 0.0f, c);
             } else {
-                DrawText(TextFormat("B%d Lost", i + 1), 20, 20 + i * 30, 18, c);
+                DrawTextEx(font, TextFormat("B%d Lost", i + 1),
+                    {20, 20 + i * 30.0f}, 18, 0.0f, c);
             }
         }
 
@@ -234,16 +305,20 @@ int main(int argc, char* argv[]) {
             DrawRectangle(bx, barY, bw, barH, (Color){c.r, c.g, c.b, 40});
             DrawRectangle(bx, barY + barH - (int)(fill * barH), bw, (int)(fill * barH), c);
             DrawRectangleLines(bx, barY, bw, barH, WHITE);
-            DrawText(TextFormat("T%d", i + 1), bx + 4, barY + 2, 14, WHITE);
+            DrawTextEx(font, TextFormat("T%d", i + 1),
+                {(float)(bx + 4), (float)(barY + 2)}, 14, 0.0f, WHITE);
         }
 
-        DrawText("Drag corners | S save | R reset", 10, 10, 16, RAYWHITE);
-        DrawText(TextFormat("Balls: %d", numBalls), 10, frameHeight - 80, 16, RAYWHITE);
+        DrawTextEx(font, "Drag corners | S save | R reset | C calibrate",
+            {10, 10}, 16, 0.0f, RAYWHITE);
+        DrawTextEx(font, TextFormat("Balls: %d", numBalls),
+            {10, (float)(frameHeight - 80)}, 16, 0.0f, RAYWHITE);
 
         EndDrawing();
         UnloadTexture(texture);
     }
 
+    UnloadFont(font);
     for (int i = 0; i < 8; i++) if (tracks[i]) Mix_FreeChunk(tracks[i]);
     Mix_CloseAudio();
     SDL_Quit();
