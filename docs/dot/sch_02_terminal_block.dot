@@ -23,8 +23,8 @@ subgraph cluster_svorkovnice {
 // Outputs
 zasuvka_A [label="Zásuvka / kabel\nzdroje 15,3 W\n(box A)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
 zem [label="Uzemnění\n(připraveno pro\nkovovou ochranu)" shape=box fillcolor="#c8e6c9"];
-smer_B [label="→ Box B\n(2 m šňůra JT003)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
-smer_C [label="→ Box C\n(2 m šňůra JT003)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+smer_B [label="→ Box B\n2 m šňůra JT003\n(230 V → vlastní zdroj)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+smer_C [label="→ Box C\n2 m šňůra JT003\n(230 V → vlastní zdroj)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
 
 // Edges
 siet -> pruchodka -> L;

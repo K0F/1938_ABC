@@ -12,4 +12,7 @@ pi4 [label="Raspberry Pi 4\n(power konektor)" shape=box style="filled,rounded" f
 svorkovnice -> zdroj [label="  230 V  " color="#d32f2f" penwidth=1.5];
 zdroj -> usbc;
 usbc -> pi4 [label="  5,1 V / 3 A  " color="#ff6f00" penwidth=1.2];
+
+note [label="Každý box (A, B i C) má vlastní zdroj\n15,3 W — 5 V se mezi boxy nerozvádí." shape=note fillcolor="#f5f5f5" fontsize=10];
+zdroj -> note [style=dotted color="#666666"];
 }
