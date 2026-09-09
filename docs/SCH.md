@@ -11,9 +11,9 @@ Verze: 9. 9. 2026 — **všechny boxy Raspberry Pi 4 (stejný model)**, každý 
 
 ## 1) Blokové schéma systému
 
-- **Box A** (hlavní jednotka) — Pi 4, rozvod 230 V, USB zvukovka → jack 3,5 na panelu, GPIO: reset/LED, webkamera USB (stativ, analýza koulí), HDMI (konzole/setup). Napájení: vlastní zdroj 15,3 W
-- **Box B** (sampler) — Pi 4, SRX882S 433 MHz, LCD 16×2, amp + repro LS40N, USB zvukovka → Y-rozdvojka → jack 3,5 panel + CA-3110S. Napájení: vlastní zdroj 15,3 W (230 V dorazí 2 m šňůrou JT003 z A)
-- **Box C** — identický s boxem B (dalších 10× tlačítko, samostatná 2 m šňůra z A). Napájení: vlastní zdroj 15,3 W
+- **Box A** (hlavní jednotka) — Pi 4, USB zvukovka → jack 3,5 na panelu, GPIO: reset/LED, webkamera USB (stativ, analýza koulí), HDMI (konzole/setup). Napájení: vlastní zdroj 15,3 W (10 m šňůra 230 V)
+- **Box B** (sampler) — Pi 4, SRX882S 433 MHz, LCD 16×2, amp + repro LS40N, USB zvukovka → Y-rozdvojka → jack 3,5 panel + CA-3110S. Napájení: vlastní zdroj 15,3 W (230 V samostatnou 2 m šňůrou JT003 do zásuvky)
+- **Box C** — identický s boxem B (dalších 10× tlačítko). Napájení: vlastní zdroj 15,3 W (samostatná 2 m šňůra JT003 do zásuvky)
 
 Bezdrátová tlačítka: 10× Solight 1L67T (baterie uvnitř) pro B, 10× pro C — RF 433 MHz (ASK).
 
@@ -24,10 +24,10 @@ Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
 
 ## 2) BOX A — hlavní jednotka (Pi 4)
 
-### 2.1 Přípojka 230 V a rozvod
+### 2.1 Přípojka 230 V (box A)
 
 ```
-  Síť 230 V ── 2× flexo JT003 H05VV-F 3×1,5 (celkem 10 m)
+  Síť 230 V ── flexo JT003 H05VV-F 3×1,5 (10 m)
               ──► kabelová průchodka boxu A
                   ▼
             svorkovnice KLS 3pól (10 ks v sadě)
@@ -40,7 +40,7 @@ Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
             └────────┘                          ochranu / štít kabelů
 ```
 - Žluto-zelený vodič = PE; nikdy nepřerušovat spínačem.
-- Ze svorkovnice A jdou **dvě krátké 2 m šňůry JT003** ven k boxům B a C (230 V).
+- **Každý box se zapojuje do 230 V samostatně** (paralelně, ne do série): box A přes 10 m šňůru, boxy B a C každý svou vlastní 2 m šňůrou do zásuvky/odbočky.
 - Délkové rezervy: ≥0,8 m uvnitř boxu (manipulace, dotažení svorek).
 
 ### 2.2 Napájení Pi 4
@@ -167,20 +167,24 @@ Pouze **mapa tlačítek a nastavený obor vzorků je jiná** (C = sekce vzorků 
 
 ---
 
-## 6) Napájení — jeden jednotný rozvod
+## 6) Napájení — každý box samostatně
 
-Všechny tři boxy jsou **stejné** (Pi 4) a napájení je jednotné:
+Všechny tři boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý box se zapojuje do 230 V **samostatně** (paralelně), vlastní šňůrou do zásuvky/odbočky:
 
 ```
-  BOX A                  BOX B                   BOX C
-  ┌──────────┐    2 m   ┌──────────┐     2 m    ┌──────────┐
-  │ svorkov. ├─────────►│ vlastní  │◄──────────┤ svorkov. │
-  │ 230 V    │ šňůra    │ PSU 15,3W│  šňůra    │ (z A)    │
-  │ 15,3 W   │ JT003    │ (Pi 4)   │  JT003    │ 15,3 W   │
-  └──────────┘          └──────────┘           └──────────┘
+                    230 V zásuvka / odbočka
+                            │
+         ┌──────────────────┼──────────────────┐
+         10 m JT003         2 m JT003          2 m JT003
+         ▼                  ▼                  ▼
+   ┌──────────┐       ┌──────────┐       ┌──────────┐
+   │ BOX A    │       │ BOX B    │       │ BOX C    │
+   │ vlastní  │       │ vlastní  │       │ vlastní  │
+   │ PSU 15,3W│       │ PSU 15,3W│       │ PSU 15,3W│
+   └──────────┘       └──────────┘       └──────────┘
 ```
 - Žádný rozvod 5 V mezi boxy — Pi 4 (až 3 A) má vždy svůj zdroj.
-- V boxu A dát na oba „odbočkové" vývody jističku resp. vhodné jištění 230 V (≤10 A).
+- **Boxy nejsou zapojeny do série** — každý má vlastní přípojku 230 V (vhodné jištění ≤10 A dle kabeláže).
 - Odběr boxu < 1,5 A u Pi 4 běžně; 3A zdroj dává rezervu pro USB zvukovku + kameru (A).
 
 ---

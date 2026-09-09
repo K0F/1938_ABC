@@ -11,7 +11,7 @@ Kompletní schémata všech propojení: [`docs/SCH.md`](docs/SCH.md).
 
 ## 1) Architektura a role boxů
 
-- **Box A** — Hlavní jednotka, běží stávající software tracker (webkamera snímá stůl, koule ovládají hlasitost loopů přes SDL2_mixer). Rozvod sítě pro celou sestavu. Raspberry Pi 4 + webkamera + USB zvukovka + jack 3,5 na panelu. Napájení: vlastní zdroj 15,3 W
+- **Box A** — Hlavní jednotka, běží stávající software tracker (webkamera snímá stůl, koule ovládají hlasitost loopů přes SDL2_mixer). Raspberry Pi 4 + webkamera + USB zvukovka + jack 3,5 na panelu. Napájení: vlastní zdroj 15,3 W (10 m šňůra)
 - **Box B** — Spouštěč samplerů, 10 bezdrátových tlačítek, SDL Mixer přehrává X samplů, malý reproduktor přímo v krabici, displej 16×2 se stavem mixu, indikace chodu + reset. Raspberry Pi 4 + audio + LCD + RF přijímač 433 MHz + jack 3,5 na panelu. Napájení: vlastní zdroj 15,3 W
 - **Box C** — Stejná role jako B (druhá sekce, dalších 10 tlačítek). Raspberry Pi 4 + audio + LCD + RF přijímač 433 MHz + jack 3,5 na panelu. Napájení: vlastní zdroj 15,3 W
 - **20× tlačítko** — Hotové bezdrátové tlačítko Solight 1L67T (433 MHz, EV1527/learning-code, baterie uvnitř). 10 ks spárováno s B, 10 ks s C
@@ -19,7 +19,7 @@ Kompletní schémata všech propojení: [`docs/SCH.md`](docs/SCH.md).
 Komunikace: tlačítka → RF 433 MHz (ASK/OOK) → přijímač SRX882S v B/C (GPIO, knihovna RCSwitch) → SDL Mixer.
 Synchronizace samplerů a trackeru mezi A a B/C: WiFi (2,4 GHz; sample lze rsyncovat z A).
 Audio: každý box má USB zvukovou kartu; stereo výstup 3,5 mm je vyveden jackem na panelu krabice (boxy B/C ho sdílejí i s interním zesilovačem k reproduktoru).
-Napájení: **každý box má vlastní oficiální zdroj RPi 15,3 W** (5 V se mezi boxy nerozvádí). 230 V přivedeno 10 m šňůrou do elektroboxu A, odtud krátké 2 m síťové šňůry do B a C — do každého boxu vstoupí jen 230 V, které si box sám převede vlastním zdrojem (viz kapitola 4).
+Napájení: **každý box má vlastní oficiální zdroj RPi 15,3 W** (5 V se mezi boxy nerozvádí). Každý box se zapojuje do 230 V **samostatně** (paralelně) — box A 10 m šňůrou, boxy B a C svými 2 m šňůrami do zásuvky/odbočky (viz kapitola 4).
 
 ---
 
@@ -119,9 +119,10 @@ Napájení: **každý box má vlastní oficiální zdroj RPi 15,3 W** (5 V se me
 
 ## 4) Napájení a rozvod (předpoklad)
 
-- **230 V**: 2× flexo 5 m (celkem 10 m) H05VV-F 3×1,5 — koncovka šňůry do elektroboxu **A** (přípojka na svorkovnici KLS, vývod PE).
-- **V boxu A**: svorkovnice rozdělí síť: L/N/PE jde do hlavního zdroje A (Pi 4) **a dál krátkou 2 m šňůrou do boxů B a C**.
-- **Každý box má vlastní** oficiální zdroj RPi 15,3 W (USB-C 5,1 V / 3 A) — Pi 4 bere až 3 A, takže rozvod 5 V „lankem z A" se nedoporučuje (varianta 5 V lanka z předchozí verze rušena).
+- **230 V**: flexo JT003 H05VV-F 3×1,5 — **10 m** do boxu A, **2× 2 m** do boxů B a C. Každý box se zapojuje do 230 V **samostatně** (paralelně, ne do série) — do zásuvky/odbočky.
+- **BOX A**: přípojka 10 m šňůry na svorkovnici KLS (vývod PE) → vlastní zdroj 15,3 W.
+- **BOX B / C**: každý svou 2 m šňůrou do zásuvky/odbočky → vlastní zdroj 15,3 W.
+- **Každý box má vlastní** oficiální zdroj RPi 15,3 W (USB-C 5,1 V / 3 A) — Pi 4 bere až 3 A, takže rozvod 5 V už nemá smysl (varianta 5 V lanka z předchozí verze rušena).
 - Uvnitř boxů vše na svorkovnice/lanko (žádné holé kabely v blízkosti hran krabice), gumové průchodky na vývody.
 - **Reset tlačítko + indikace chodu**: dedikovaný GPIO pin → čistý shutdown/restart (systemd), power-LED na GPIO s rezistorem 330 Ω.
 
@@ -203,7 +204,7 @@ Sazba **350 Kč/h**, ideální délka instalace **2 týdny**.
 
 ## 8) Montážní checklist (RF 433 MHz, USB zvukovky, panelové jacky)
 
-1. Zapájení/naddimenzování kabeláže do svorkovnic v boxu A (2× 5 m šňůra + rozvod 230 V, PG-kabelky).
+1. Zapájení kabeláže do svorkovnic v boxu A (10 m šňůra 230 V, PG-kabelky); boxy B/C zapojit vlastními 2 m šňůrami do zásuvky/odbočky.
 2. Osazení boxu A: Pi 4 + ODS-721 + zdroj 15,3 W + webkamera na stativu + USB zvukovka + jack do panelu + kalibrace (README.md).
 3. Box B: Pi 4 (stejný) + LCD 16×2 na GPIO + CA-3110S + LS40N + USB zvukovka + panelový jack + SRX882S; totéž box C.
 4. 20 hotových tlačítek: dekódování kódu (RCSwitch), mapa kód → sample (10 → B, 10 → C).

@@ -1,19 +1,23 @@
-// SCH §6 — Napájení — jeden jednotný rozvod
+// SCH §6 — Napájení — každý box samostatně do zásuvky 230 V
 digraph G {
     graph [fontname="DejaVu Sans" rankdir=LR bgcolor="white" nodesep=0.8 ranksep=1.0];
 node [fontname="DejaVu Sans" fontsize=12 style="filled"];
 edge [fontname="DejaVu Sans" fontsize=10];
 
-// Boxes
-boxA [label="BOX A\n─────────\nSvorkovnice\n230 V\n+ vlastní zdroj 15,3 W" shape=box style="filled,rounded" fillcolor="#bbdefb" width=1.8];
-boxB [label="BOX B\n─────────\n230 V\n+ vlastní zdroj 15,3 W\n(Pi 4)" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=1.8];
-boxC [label="BOX C\n─────────\n230 V (z A)\n+ vlastní zdroj 15,3 W" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=1.8];
+// 230V source
+siet [label="230 V zásuvka\n/ odbočka" shape=oval fillcolor="#fff9c4"];
 
-// Cables — jen 230 V, 5 V se nerozvádí
-boxA -> boxB [label="  2 m šňůra JT003\n  (jen 230 V)  " color="#d32f2f" penwidth=1.5];
-boxA -> boxC [label="  2 m šňůra JT003\n  (jen 230 V)  " color="#d32f2f" penwidth=1.5 dir=back];
+// Boxes
+boxA [label="BOX A\n─────────\nVlastní zdroj\n15,3 W" shape=box style="filled,rounded" fillcolor="#bbdefb" width=1.8];
+boxB [label="BOX B\n─────────\nVlastní zdroj\n15,3 W (Pi 4)" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=1.8];
+boxC [label="BOX C\n─────────\nVlastní zdroj\n15,3 W" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=1.8];
+
+// Cables — každý box jde do zásuvky samostatně, jen 230 V, 5 V se nerozvádí
+siet -> boxA [label="  230 V\n  10 m JT003  " color="#d32f2f" penwidth=1.5];
+siet -> boxB [label="  230 V\n  2 m JT003  " color="#d32f2f" penwidth=1.2];
+siet -> boxC [label="  230 V\n  2 m JT003  " color="#d32f2f" penwidth=1.2];
 
 // Notes
-note [label="Žádný rozvod 5 V mezi boxy —\nkaždý box má vlastní zdroj 15,3 W.\nV boxu A: jištění 230 V ≤10 A." shape=note fillcolor="#f5f5f5" fontsize=10];
-boxA -> note [style=dotted color="#666666"];
+note [label="Žádný rozvod 5 V mezi boxy —\nkaždý box má vlastní zdroj 15,3 W.\nBoxy nejsou zapojeny do série." shape=note fillcolor="#f5f5f5" fontsize=10];
+siet -> note [style=dotted color="#666666"];
 }

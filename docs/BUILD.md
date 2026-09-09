@@ -39,7 +39,7 @@ Sestava se skládá ze tří krabiček (všechny Pi 4 Model B 4 GB):
 
 Komunikace: tlačítka → RF 433 MHz → SRX882S v B/C → GPIO → SDL Mixer.
 Synchronizace A↔B↔C: WiFi 2,4 GHz (rsync).
-Napájení: každý box má **vlastní zdroj 15,3 W** (5 V se mezi boxy nerozvádí). 230 V dorazí 10 m šňůrou do boxu A, odtud krátké 2 m šňůry do B a C — do každého boxu vstoupí 230 V a ten si ho sám převede vlastním zdrojem.
+Napájení: každý box má **vlastní zdroj 15,3 W** (5 V se mezi boxy nerozvádí). Každý box se zapojuje do 230 V **samostatně** (paralelně) — box A 10 m šňůrou, B a C svými 2 m šňůrami do zásuvky/odbočky.
 
 ---
 
@@ -151,8 +151,8 @@ Podrobné schéma: [`docs/SCH.md`](SCH.md) §2.1, [`docs/dot/sch_02_terminal_blo
    - **L** (černý/hnědý) → svorka L
    - **N** (modrý) → svorka N
    - **PE** (žluto-zelený) → svorka PE — **nikdy nepřerušovat spínačem!**
-3. Ze svorkovnice odbočte **dvě krátké 2 m šňůry JT003** → ven z boxu k boxům B a C (do nich vstoupí jen 230 V).
-4. Zbývající vývod → kabel oficiálního zdroje RPi 15,3 W (každý box má svůj vlastní zdroj — 5 V se mezi boxy nerozvádí).
+3. Zbývající vývod → kabel oficiálního zdroje RPi 15,3 W (každý box má svůj vlastní zdroj — 5 V se mezi boxy nerozvádí).
+4. **Boxy B a C se zapojují do 230 V samostatně** — každý svou vlastní 2 m šňůrou do zásuvky/odbočky (paralelně, ne do série z boxu A).
 
 ### 4.4 Zapojení GPIO — reset + LED
 
@@ -232,8 +232,8 @@ Stejný postup jako §4.2 — 4× sloupek M2,5, Pi 4 na sloupky.
 
 ### 5.3 Připojení 230 V
 
-1. Přiveďte **2 m šňůru JT003** z boxu A (odbočka ze svorkovnice) — do boxu vstoupí jen 230 V.
-2. Připojte na svorkovnici KLS (nebo přímo) → kabel zdroje RPi 15,3 W (box má svůj vlastní zdroj).
+1. Připojte **2 m šňůru JT003** do zásuvky/odbočky 230 V — box se zapojuje samostatně (paralelně), ne přes box A.
+2. Uvnitř boxu připojte na svorkovnici KLS (nebo přímo) → kabel zdroje RPi 15,3 W (box má svůj vlastní zdroj).
 
 ### 5.4 Zapojení GPIO
 

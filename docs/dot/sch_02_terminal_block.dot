@@ -1,11 +1,11 @@
-// SCH §2.1 — Přípojka 230 V a rozvod (svorkovnice KLS 3pól)
+// SCH §2.1 — Přípojka 230 V (svorkovnice KLS 3pól) — box A
 digraph G {
     graph [fontname="DejaVu Sans" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.7];
 node [fontname="DejaVu Sans" fontsize=12 style="filled"];
 edge [fontname="DejaVu Sans" fontsize=10];
 
 // Source
-siet [label="Síť 230 V\n2× flexo JT003\nH05VV-F 3×1,5\n(celkem 10 m)" shape=oval fillcolor="#fff9c4"];
+siet [label="Síť 230 V\nzásuvka / šňůra\nJT003 H05VV-F 3×1,5\n(10 m)" shape=oval fillcolor="#fff9c4"];
 pruchodka [label="Kabelová průchodka\nboxu A" shape=box style="filled,rounded" fillcolor="#e0e0e0"];
 
 // Terminal block
@@ -21,10 +21,8 @@ subgraph cluster_svorkovnice {
 }
 
 // Outputs
-zasuvka_A [label="Zásuvka / kabel\nzdroje 15,3 W\n(box A)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+zasuvka_A [label="Zásuvka / kabel\nzdroje 15,3 W\n(box A — vlastní zdroj)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
 zem [label="Uzemnění\n(připraveno pro\nkovovou ochranu)" shape=box fillcolor="#c8e6c9"];
-smer_B [label="→ Box B\n2 m šňůra JT003\n(230 V → vlastní zdroj)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
-smer_C [label="→ Box C\n2 m šňůra JT003\n(230 V → vlastní zdroj)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
 
 // Edges
 siet -> pruchodka -> L;
@@ -33,10 +31,7 @@ siet -> pruchodka -> PE;
 L -> zasuvka_A [label="  L  " color="#d32f2f"];
 N -> zasuvka_A [label="  N  " color="#1565c0"];
 PE -> zem [label="  PE  " color="#2e7d32"];
-L -> smer_B [style=dashed color="#d32f2f"];
-N -> smer_B [style=dashed color="#1565c0"];
-PE -> smer_B [style=dashed color="#2e7d32"];
-L -> smer_C [style=dashed color="#d32f2f"];
-N -> smer_C [style=dashed color="#1565c0"];
-PE -> smer_C [style=dashed color="#2e7d32"];
+
+note [label="Každý box se zapojuje do 230 V\nsamostatně — B a C stejně jako A.\nBoxy nejsou zapojeny do série." shape=note fillcolor="#f5f5f5" fontsize=10];
+zasuvka_A -> note [style=dotted color="#666666"];
 }
