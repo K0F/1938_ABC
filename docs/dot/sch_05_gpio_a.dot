@@ -1,8 +1,8 @@
 // SCH §2.4 — GPIO boxu A — reset + indikace chodu
 digraph G {
-    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.6 ranksep=0.8];
-node [fontname="Terminus" fontsize=11 style="filled"];
-edge [fontname="Terminus" fontsize=9];
+    graph [fontname="DejaVu Sans" rankdir=TB bgcolor="white" nodesep=0.6 ranksep=0.8];
+node [fontname="DejaVu Sans" fontsize=12 style="filled"];
+edge [fontname="DejaVu Sans" fontsize=10];
 
 // GPIO pins
 gpio17 [label="GPIO17\n(pin 11)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
@@ -31,6 +31,6 @@ rezistor -> led [label="  330 Ω  " penwidth=1.5];
 led -> gnd2 [label="  GND  " penwidth=1.5];
 
 // Note
-note [label="Krátký stisk = poweroff\ndvojitý stisk = restart" shape=note fillcolor="#f5f5f5" fontsize=9];
+note [label="Krátký stisk = poweroff\ndvojitý stisk = restart" shape=note fillcolor="#f5f5f5" fontsize=10];
 tlacitko -> note [style=dotted color="#666666"];
 }

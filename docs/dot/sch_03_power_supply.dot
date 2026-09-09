@@ -1,8 +1,8 @@
 // SCH §2.2 — Napájení Pi 4
 digraph G {
-    graph [fontname="Terminus" rankdir=LR bgcolor="white" nodesep=0.7 ranksep=0.9];
-node [fontname="Terminus" fontsize=11 style="filled"];
-edge [fontname="Terminus" fontsize=9];
+    graph [fontname="DejaVu Sans" rankdir=LR bgcolor="white" nodesep=0.7 ranksep=0.9];
+node [fontname="DejaVu Sans" fontsize=12 style="filled"];
+edge [fontname="DejaVu Sans" fontsize=10];
 
 svorkovnice [label="230 V\nsvorkovnice" shape=oval fillcolor="#fff9c4"];
 zdroj [label="Oficiální zdroj RPi\n15,3 W\nUSB-C 5,1 V / 3 A" shape=box style="filled,rounded" fillcolor="#ffecb3"];

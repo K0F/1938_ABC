@@ -1,8 +1,8 @@
 // SCH §3 — BOX B GPIO wiring
 digraph G {
-    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.7];
-node [fontname="Terminus" fontsize=11 style="filled"];
-edge [fontname="Terminus" fontsize=9];
+    graph [fontname="DejaVu Sans" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.7];
+node [fontname="DejaVu Sans" fontsize=12 style="filled"];
+edge [fontname="DejaVu Sans" fontsize=10];
 
 // Pi 4 GPIO pins
 subgraph cluster_pi {

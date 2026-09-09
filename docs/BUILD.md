@@ -31,17 +31,15 @@ sudo pacman -S graphviz python python-markdown python-pikepdf python-cairo pytho
 
 ### 1.3 Přehled systému
 
-Sestava se skládá ze **tří krabiček** (všechny Pi 4 Model B 4 GB):
+Sestava se skládá ze tří krabiček (všechny Pi 4 Model B 4 GB):
 
-| Box | Funkce | Specifika |
-|-----|--------|-----------|
-| **A** | Hlavní jednotka — běží tracker (webkamera snímá koule) | Webkamera + stativ, HDMI, USB zvukovka → jack |
-| **B** | Sampler — 10 tlačítek, LCD displej, interní reproduktor | SRX882S, LCD 16×2, CA-3110S + LS40N, Y-rozdvojka |
-| **C** | Identický s B (dalších 10 tlačítek) | Stejné zapojení jako B |
+- **Box A** — Hlavní jednotka, běží tracker (webkamera snímá koule). Webkamera + stativ, HDMI, USB zvukovka → jack. Napájení: vlastní zdroj 15,3 W
+- **Box B** — Sampler, 10 tlačítek, LCD displej, interní reproduktor. SRX882S, LCD 16×2, CA-3110S + LS40N, Y-rozdvojka. Napájení: vlastní zdroj 15,3 W
+- **Box C** — Identický s B (dalších 10 tlačítek). Stejné zapojení jako B. Napájení: vlastní zdroj 15,3 W
 
 Komunikace: tlačítka → RF 433 MHz → SRX882S v B/C → GPIO → SDL Mixer.
 Synchronizace A↔B↔C: WiFi 2,4 GHz (rsync).
-Napájení: 230 V přivedeno 10 m šňůrou do boxu A, odtud 2 m šňůry do B a C.
+Napájení: každý box má **vlastní zdroj 15,3 W** (5 V se mezi boxy nerozvádí). 230 V dorazí 10 m šňůrou do boxu A, odtud krátké 2 m šňůry do B a C — do každého boxu vstoupí 230 V a ten si ho sám převede vlastním zdrojem.
 
 ---
 
@@ -153,8 +151,8 @@ Podrobné schéma: [`docs/SCH.md`](SCH.md) §2.1, [`docs/dot/sch_02_terminal_blo
    - **L** (černý/hnědý) → svorka L
    - **N** (modrý) → svorka N
    - **PE** (žluto-zelený) → svorka PE — **nikdy nepřerušovat spínačem!**
-3. Ze svorkovnice odbočte **dvě krátké 2 m šňůry JT003** → ven z boxu k boxům B a C.
-4. Zbývající vývod → kabel oficiálního zdroje RPi 15,3 W.
+3. Ze svorkovnice odbočte **dvě krátké 2 m šňůry JT003** → ven z boxu k boxům B a C (do nich vstoupí jen 230 V).
+4. Zbývající vývod → kabel oficiálního zdroje RPi 15,3 W (každý box má svůj vlastní zdroj — 5 V se mezi boxy nerozvádí).
 
 ### 4.4 Zapojení GPIO — reset + LED
 
@@ -234,8 +232,8 @@ Stejný postup jako §4.2 — 4× sloupek M2,5, Pi 4 na sloupky.
 
 ### 5.3 Připojení 230 V
 
-1. Přiveďte **2 m šňůru JT003** z boxu A (odbočka ze svorkovnice).
-2. Připojte na svorkovnici KLS (nebo přímo) → kabel zdroje RPi 15,3 W.
+1. Přiveďte **2 m šňůru JT003** z boxu A (odbočka ze svorkovnice) — do boxu vstoupí jen 230 V.
+2. Připojte na svorkovnici KLS (nebo přímo) → kabel zdroje RPi 15,3 W (box má svůj vlastní zdroj).
 
 ### 5.4 Zapojení GPIO
 

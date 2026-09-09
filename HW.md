@@ -11,34 +11,15 @@ Kompletní schémata všech propojení: [`docs/SCH.md`](docs/SCH.md).
 
 ## 1) Architektura a role boxů
 
-| Box | Role | HW |
-|-----|------|----|
-| **A** | Hlavní jednotka — běží stávající software **tracker** (webkamera snímá stůl, koule ovládají hlasitost loopů přes SDL2_mixer). Rozvod sítě pro celou sestavu. | **Raspberry Pi 4** + webkamera + USB zvukovka + jack 3,5 na panelu |
-| **B** | **Spouštěč samplerů** — 10 bezdrátových tlačítek, SDL Mixer přehrává X samplů, malý reproduktor přímo v krabici, displej 16×2 se stavem mixu, indikace chodu + reset | **Raspberry Pi 4** + audio + LCD + RF přijímač 433 MHz + jack 3,5 na panelu |
-| **C** | Stejná role jako B (druhá sekce, dalších 10 tlačítek) | **Raspberry Pi 4** + audio + LCD + RF přijímač 433 MHz + jack 3,5 na panelu |
-| **20× tlačítko** | **Hotové bezdrátové tlačítko** Solight 1L67T (433 MHz, EV1527/learning-code, baterie uvnitř) | 10 ks spárováno s B, 10 ks s C |
+- **Box A** — Hlavní jednotka, běží stávající software tracker (webkamera snímá stůl, koule ovládají hlasitost loopů přes SDL2_mixer). Rozvod sítě pro celou sestavu. Raspberry Pi 4 + webkamera + USB zvukovka + jack 3,5 na panelu. Napájení: vlastní zdroj 15,3 W
+- **Box B** — Spouštěč samplerů, 10 bezdrátových tlačítek, SDL Mixer přehrává X samplů, malý reproduktor přímo v krabici, displej 16×2 se stavem mixu, indikace chodu + reset. Raspberry Pi 4 + audio + LCD + RF přijímač 433 MHz + jack 3,5 na panelu. Napájení: vlastní zdroj 15,3 W
+- **Box C** — Stejná role jako B (druhá sekce, dalších 10 tlačítek). Raspberry Pi 4 + audio + LCD + RF přijímač 433 MHz + jack 3,5 na panelu. Napájení: vlastní zdroj 15,3 W
+- **20× tlačítko** — Hotové bezdrátové tlačítko Solight 1L67T (433 MHz, EV1527/learning-code, baterie uvnitř). 10 ks spárováno s B, 10 ks s C
 
-Komunikace: tlačítka → RF **433 MHz** (ASK/OOK) → přijímač **SRX882S** v B/C (GPIO, knihovna RCSwitch) → SDL Mixer.
+Komunikace: tlačítka → RF 433 MHz (ASK/OOK) → přijímač SRX882S v B/C (GPIO, knihovna RCSwitch) → SDL Mixer.
 Synchronizace samplerů a trackeru mezi A a B/C: WiFi (2,4 GHz; sample lze rsyncovat z A).
-Audio: každý box má **USB zvukovou kartu**; stereo výstup 3,5 mm je vyveden **jackem na panelu** krabice (boxy B/C ho sdílejí i s interním zesilovačem k reproduktoru).
-Napájení: 230 V přivedeno **10 m šňůrou do elektroboxu A**; každý box má vlastní oficiální zdroj RPi 15,3 W (USB-C) — do B a C jde krátká síťová šňůra (viz kapitola 4).
-
-```
-        [20× hotové tlačítko Solight 1L67T ─ cca 10/B, 10/C]
-                        │ RF 433 MHz (ASK)
-         ┌──────────────┼──────────────┐
-         ▼              ▼              ▼
-      [Box B]        [Box C]        [Box A]
-      Pi 4 4 GB     Pi 4 4 GB      Pi 4 4 GB + webkamera (tracker)
-      SRX882S       SRX882S
-      LCD 16×2      LCD 16×2        (USB zvukovka → jack 3,5 na panelu
-      repro+amp     repro+amp        – stejně ve všech boxech)
-      USB zvukovka  USB zvukovka
-      jack 3,5      jack 3,5
-         │              │              │  ← krátké síťové šňůry 2 m
-         └──────┬───────┴──────┬───────┘
-      rozvod v boxu A ◄─── 10 m šňůra H05VV-F 3×1,5 s koncovkou (230 V)
-```
+Audio: každý box má USB zvukovou kartu; stereo výstup 3,5 mm je vyveden jackem na panelu krabice (boxy B/C ho sdílejí i s interním zesilovačem k reproduktoru).
+Napájení: **každý box má vlastní oficiální zdroj RPi 15,3 W** (5 V se mezi boxy nerozvádí). 230 V přivedeno 10 m šňůrou do elektroboxu A, odtud krátké 2 m síťové šňůry do B a C — do každého boxu vstoupí jen 230 V, které si box sám převede vlastním zdrojem (viz kapitola 4).
 
 ---
 

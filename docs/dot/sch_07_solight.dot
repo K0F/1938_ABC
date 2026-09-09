@@ -1,15 +1,15 @@
 // SCH §5.1 — Solight 1L67T (bezdrátové tlačítko)
 digraph G {
-    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.6];
-node [fontname="Terminus" fontsize=11 style="filled"];
-edge [fontname="Terminus" fontsize=9];
+    graph [fontname="DejaVu Sans" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.6];
+node [fontname="DejaVu Sans" fontsize=12 style="filled"];
+edge [fontname="DejaVu Sans" fontsize=10];
 
 subgraph cluster_solight {
     label="S O L I G H T  1L67T";
     style="filled,rounded";
     fillcolor="#fff3e0";
     fontsize=13;
-    fontname="Terminus";
+    fontname="DejaVu Sans";
 
     btn [label="██ TLAČÍTKO ██" shape=box style="filled" fillcolor="#ffccbc" fontsize=14];
     info [label="Kryt na jmenovku" shape=box fillcolor="#ffe0b2"];
@@ -17,8 +17,8 @@ subgraph cluster_solight {
     proto [label="Protokol: 433 MHz\nlearning-code (EV1527 kopie)\ndosah: uvnitř 30–60 m\nvýrobně 200 m" shape=box fillcolor="#e3f2fd"];
 }
 
-note [label="Žádné pájení, žádný firmware.\nUkončení = stisk → krátký RF burst\ns unikátním kódem." shape=note fillcolor="#f5f5f5" fontsize=9];
-oznaceni [label="Označit jmenovkou:\nB01…B10 / C01…C10\n+ pořadí vzorku" shape=note fillcolor="#f5f5f5" fontsize=9];
+note [label="Žádné pájení, žádný firmware.\nUkončení = stisk → krátký RF burst\ns unikátním kódem." shape=note fillcolor="#f5f5f5" fontsize=10];
+oznaceni [label="Označit jmenovkou:\nB01…B10 / C01…C10\n+ pořadí vzorku" shape=note fillcolor="#f5f5f5" fontsize=10];
 
 btn -> batt;
 btn -> info;

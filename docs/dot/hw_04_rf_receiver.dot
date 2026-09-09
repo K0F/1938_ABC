@@ -1,8 +1,8 @@
 // HW §5.4 — RF přijímač 433 MHz (SRX882S) na GPIO Pi 4
 digraph G {
-    graph [fontname="Terminus" rankdir=LR bgcolor="white" nodesep=0.7 ranksep=0.9];
-node [fontname="Terminus" fontsize=11 style="filled"];
-edge [fontname="Terminus" fontsize=9];
+    graph [fontname="DejaVu Sans" rankdir=LR bgcolor="white" nodesep=0.7 ranksep=0.9];
+node [fontname="DejaVu Sans" fontsize=12 style="filled"];
+edge [fontname="DejaVu Sans" fontsize=10];
 
 // SRX882S
 subgraph cluster_srx {
@@ -28,6 +28,6 @@ srx_vcc -> pi_3v3 [label="  VCC → 3V3  " color="#d32f2f" penwidth=1.5];
 srx_gnd -> pi_gnd [label="  GND  " color="#666666" penwidth=1.5];
 
 // Note
-note [label="Dekódování: rc-switch / 433Utils\nna GPIO 22.\nMapa: kód → sample\n(10 → B, 10 → C).\nHlásit dosah se zavřeným víkem." shape=note fillcolor="#f5f5f5" fontsize=9];
+note [label="Dekódování: rc-switch / 433Utils\nna GPIO 22.\nMapa: kód → sample\n(10 → B, 10 → C).\nHlásit dosah se zavřeným víkem." shape=note fillcolor="#f5f5f5" fontsize=10];
 srx_gnd -> note [style=dotted color="#666666"];
 }

@@ -5,9 +5,159 @@ import argparse
 import html
 import os
 import re
-import sys
+from html.parser import HTMLParser
 
 import markdown
+
+
+class _HtmlToPango(HTMLParser):
+    """Convert HTML from markdown to Pango markup for cairo rendering."""
+
+    def __init__(self):
+        super().__init__()
+        self._out = []
+        self._tag_stack = []
+        self._in_pre = False
+        self._in_table = False
+        self._table_rows = []
+        self._cur_cells = []
+        self._cur_is_header = False
+        self._link_href = None
+        self._list_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        self._tag_stack.append(tag)
+
+        if tag == "pre":
+            self._in_pre = True
+            self._nl(2)
+        elif tag == "code" and self._in_pre:
+            pass  # text handled in data
+        elif tag == "code":
+            self._out.append('<span font="DejaVu Sans Mono" size="small">')
+        elif tag in ("strong", "b"):
+            self._out.append("<b>")
+        elif tag in ("em", "i"):
+            self._out.append("<i>")
+        elif tag == "a":
+            self._link_href = a.get("href", "")
+        elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            self._nl(2)
+        elif tag == "p":
+            self._nl(1)
+        elif tag == "br":
+            self._out.append("\n")
+        elif tag == "hr":
+            self._nl(2)
+            self._out.append("─" * 60)
+            self._nl(1)
+        elif tag in ("ul", "ol"):
+            self._list_depth += 1
+            self._nl(1)
+        elif tag == "li":
+            self._nl(1)
+            self._out.append("  " * (self._list_depth - 1) + "• ")
+        elif tag == "table":
+            self._in_table = True
+            self._table_rows = []
+            self._nl(2)
+        elif tag == "tr":
+            self._cur_cells = []
+        elif tag == "th":
+            self._cur_is_header = True
+        elif tag == "td":
+            self._cur_is_header = False
+        elif tag == "blockquote":
+            self._nl(2)
+
+    def handle_endtag(self, tag):
+        if self._tag_stack and self._tag_stack[-1] == tag:
+            self._tag_stack.pop()
+
+        if tag == "pre":
+            self._in_pre = False
+            self._nl(2)
+        elif tag == "code" and not self._in_pre:
+            self._out.append("</span>")
+        elif tag in ("strong", "b"):
+            self._out.append("</b>")
+        elif tag in ("em", "i"):
+            self._out.append("</i>")
+        elif tag == "a":
+            if self._link_href:
+                self._out.append(f" ({self._link_href})")
+            self._link_href = None
+        elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            self._nl(2)
+        elif tag == "p":
+            self._nl(2)
+        elif tag in ("ul", "ol"):
+            self._list_depth = max(0, self._list_depth - 1)
+            self._nl(1)
+        elif tag == "tr":
+            self._table_rows.append((self._cur_is_header, list(self._cur_cells)))
+        elif tag == "table":
+            self._flush_table()
+            self._in_table = False
+            self._nl(2)
+        elif tag == "blockquote":
+            self._nl(2)
+
+    def handle_data(self, data):
+        if self._in_pre:
+            # strip <code> tags from inside <pre>, escape for Pango
+            cleaned = re.sub(r"</?code[^>]*>", "", data)
+            cleaned = (
+                cleaned.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            )
+            self._out.append(cleaned)
+            return
+
+        text = html.unescape(data)
+
+        if self._in_table and self._tag_stack:
+            top = self._tag_stack[-1]
+            if top in ("th", "td"):
+                text = text.strip()
+                text = (
+                    text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                )
+                if self._cur_is_header:
+                    self._cur_cells.append(f"<b>{text}</b>")
+                else:
+                    self._cur_cells.append(text)
+                return
+
+        escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        self._out.append(escaped)
+
+    def _nl(self, n=1):
+        self._out.append("\n" * n)
+
+    def _flush_table(self):
+        if not self._table_rows:
+            return
+        for idx, (is_hdr, cells) in enumerate(self._table_rows):
+            row = " │ ".join(cells)
+            self._out.append(row)
+            self._nl(1)
+            if idx == 0:
+                self._out.append("─" * 60)
+                self._nl(1)
+        self._nl(1)
+
+    def result(self):
+        raw = "".join(self._out)
+        raw = re.sub(r"\n{3,}", "\n\n", raw)
+        return raw.strip() + "\n"
+
+
+def html_to_pango(html_body):
+    p = _HtmlToPango()
+    p.feed(html_body)
+    return p.result()
+
 
 CSS = """\
 @page { size: A4; margin: 18mm 16mm; }
@@ -81,11 +231,10 @@ def convert_pdf(md_path, out_path=None):
     usable_w = page_w - 2 * margin
     usable_h = page_h - 2 * margin
 
-    clean = re.sub(r"<style>.*?</style>", "", body, flags=re.S)
-    clean = re.sub(r"<meta[^>]*>", "", clean)
+    pango_text = html_to_pango(body)
 
     fd = Pango.FontDescription("DejaVu Sans")
-    fd.set_size(10 * Pango.SCALE)
+    fd.set_size(9 * Pango.SCALE)
 
     surface = cairo.PDFSurface(pdf_path, page_w, page_h)
 
@@ -101,14 +250,18 @@ def convert_pdf(md_path, out_path=None):
 
     def text_height(ctx, txt):
         lay = make_layout(ctx)
-        lay.set_text(txt, -1)
+        lay.set_markup(txt, -1)
         return lay.get_pixel_size()[1]
 
     ctx = make_ctx()
 
     # render title
     lay = make_layout(ctx)
-    lay.set_text(re.sub(r"<[^>]+>", "", t), -1)
+    title_plain = html.unescape(re.sub(r"<[^>]+>", "", t))
+    escaped = (
+        title_plain.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    )
+    lay.set_markup(f"<b>{escaped}</b>", -1)
     ctx.move_to(margin, margin)
     PangoCairo.show_layout(ctx, lay)
     h = lay.get_pixel_size()[1]
@@ -119,7 +272,7 @@ def convert_pdf(md_path, out_path=None):
     y = margin + h + 8
 
     # split into paragraphs
-    paragraphs = re.split(r"\n\n+", clean)
+    paragraphs = re.split(r"\n\n+", pango_text)
 
     for para in paragraphs:
         if not para.strip():
@@ -136,7 +289,7 @@ def convert_pdf(md_path, out_path=None):
                 ctx = make_ctx()
                 y = margin
             lay = make_layout(ctx)
-            lay.set_text(para, -1)
+            lay.set_markup(para, -1)
             ctx.move_to(margin, y)
             PangoCairo.show_layout(ctx, lay)
             y += lay.get_pixel_size()[1]
@@ -163,7 +316,7 @@ def convert_pdf(md_path, out_path=None):
                     y = margin
 
                 lay = make_layout(ctx)
-                lay.set_text(chunk, -1)
+                lay.set_markup(chunk, -1)
                 ctx.move_to(margin, y)
                 PangoCairo.show_layout(ctx, lay)
                 y += lay.get_pixel_size()[1]

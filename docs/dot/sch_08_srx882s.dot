@@ -1,8 +1,8 @@
 // SCH §5.2 — SRX882S (přijímač 433 MHz) pinout
 digraph G {
-    graph [fontname="Terminus" rankdir=LR bgcolor="white" nodesep=0.6 ranksep=0.8];
-node [fontname="Terminus" fontsize=11 style="filled"];
-edge [fontname="Terminus" fontsize=9];
+    graph [fontname="DejaVu Sans" rankdir=LR bgcolor="white" nodesep=0.6 ranksep=0.8];
+node [fontname="DejaVu Sans" fontsize=12 style="filled"];
+edge [fontname="DejaVu Sans" fontsize=10];
 
 subgraph cluster_srx {
     label="SRX882S (433,92 MHz, ASK/OOK)";
@@ -27,6 +27,6 @@ data -> pi_gpio [label="  DATA  " color="#ff6f00" penwidth=1.5];
 gnd -> pi_gnd [label="  GND  " color="#666666" penwidth=1.5];
 
 // Note
-note [label="Pokud napájíte 5 V:\nDATA = 5 V logika\n→ převodník!" shape=note fillcolor="#ffcdd2" fontsize=9];
+note [label="Pokud napájíte 5 V:\nDATA = 5 V logika\n→ převodník!" shape=note fillcolor="#ffcdd2" fontsize=10];
 gnd -> note [style=dotted color="#666666"];
 }

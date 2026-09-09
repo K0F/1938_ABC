@@ -11,34 +11,14 @@ Verze: 9. 9. 2026 — **všechny boxy Raspberry Pi 4 (stejný model)**, každý 
 
 ## 1) Blokové schéma systému
 
-```
-            230 V / 50 Hz ── 10 m flexo JT003 (2× 5 m) ──┐
-                                                         ▼
-                                              ┌───────────────────┐
-                         ┌────────────────────►│   BOX A (Pi 4)    │◄──── webkamera (USB) ── stativ
-                         │  krátká smyčka běhu │  rozvod 230 V +   │      tracker (analýza koulí)
-                         │  (uvnitř A)         │  PSU 15,3 W       │
-                         │                     │  USB zvukovka ─► jack 3,5 na panelu
-                         │                     │  GPIO: reset/LED  │
-                         │                     └───────┬───────────┘
-                         │ krátké síťové šňůry 2 m      │
-                         ▼                              │
-              ┌───────────────────┐                     │
-              │    BOX B (Pi 4)   │◄────────────────────┘
-              │  SRX882S 433 MHz  │        (230 V smyčka z A → vlastní PSU)
-              │  LCD 16×2 + amp + │       (krátká 2 m šňůra JT003)
-              │  repro LS40N      │
-              │  USB zvukovka ─► Y-rozdvojka ─► jack 3,5 panel + CA-3110S
-              └─────────┬─────────┘
-                        │ RF 433 MHz (ASK)
-                        ▼
-                 10× tlačítko Solight 1L67T (baterie uvnitř)
+- **Box A** (hlavní jednotka) — Pi 4, rozvod 230 V, USB zvukovka → jack 3,5 na panelu, GPIO: reset/LED, webkamera USB (stativ, analýza koulí), HDMI (konzole/setup). Napájení: vlastní zdroj 15,3 W
+- **Box B** (sampler) — Pi 4, SRX882S 433 MHz, LCD 16×2, amp + repro LS40N, USB zvukovka → Y-rozdvojka → jack 3,5 panel + CA-3110S. Napájení: vlastní zdroj 15,3 W (230 V dorazí 2 m šňůrou JT003 z A)
+- **Box C** — identický s boxem B (dalších 10× tlačítko, samostatná 2 m šňůra z A). Napájení: vlastní zdroj 15,3 W
 
-   BOX C — identický s boxem B (dalších 10× tlačítko, samostatná 2 m šňůra z A).
+Bezdrátová tlačítka: 10× Solight 1L67T (baterie uvnitř) pro B, 10× pro C — RF 433 MHz (ASK).
 
-   Všechny tři boxy: Raspberry Pi 4 Model B 4 GB (stejný HW).
-   Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
-```
+Všechny tři boxy: Raspberry Pi 4 Model B 4 GB (stejný HW), každý s **vlastním zdrojem 15,3 W** (5 V se mezi boxy nerozvádí).
+Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
 
 ---
 
