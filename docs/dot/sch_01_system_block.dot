@@ -1,0 +1,30 @@
+// SCH §1 — Blokové schéma systému
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.6 ranksep=0.8];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+// 230V source
+net230v [label="230 V / 50 Hz\n10 m flexo JT003\n(2×5 m)" shape=oval fillcolor="#fff9c4"];
+
+// Boxes
+boxA [label="BOX A (Pi 4)\n─────────────\nRozvod 230 V\nPSU 15,3 W\nUSB zvukovka → jack 3,5\nGPIO: reset / LED" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+boxB [label="BOX B (Pi 4)\n─────────────\nSRX882S 433 MHz\nLCD 16×2\nAmp + repro LS40N\nUSB zvukovka → Y-rozdvojka\n→ jack 3,5 + CA-3110S" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+boxC [label="BOX C (Pi 4)\n─────────────\nidentický s B" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+
+// Peripherals
+webkamera [label="Webkamera (USB)\n+ stativ" shape=component fillcolor="#e1bee7"];
+tlačítka [label="10× tlačítko\nSolight 1L67T\n(433 MHz, baterie)" shape=octagon fillcolor="#ffccbc"];
+
+// Edges
+net230v -> boxA [label="  230 V  " color="#d32f2f" penwidth=1.5];
+boxA -> boxB [label="  230 V smyčka\n  2 m šňůra JT003  " color="#d32f2f" penwidth=1.2];
+boxA -> boxC [label="  230 V smyčka\n  2 m šňůra JT003  " color="#d32f2f" penwidth=1.2];
+webkamera -> boxA [label="  USB  " style=dashed];
+boxB -> tlačítka [label="  RF 433 MHz (ASK)  " color="#ff6f00" penwidth=1.5 style=bold];
+boxC -> tlačítka [label="  RF 433 MHz (ASK)  " color="#ff6f00" penwidth=1.5 style=bold];
+
+// Sync note
+sync [label="Synchronizace A↔B↔C:\nWiFi 2,4 GHz (rsync)\nmimo pásmo RF 433 MHz" shape=note fillcolor="#f5f5f5" fontsize=9];
+boxA -> sync [style=dotted color="#666666"];
+}

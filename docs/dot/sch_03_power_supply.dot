@@ -1,0 +1,15 @@
+// SCH §2.2 — Napájení Pi 4
+digraph G {
+    graph [fontname="Terminus" rankdir=LR bgcolor="white" nodesep=0.7 ranksep=0.9];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+svorkovnice [label="230 V\nsvorkovnice" shape=oval fillcolor="#fff9c4"];
+zdroj [label="Oficiální zdroj RPi\n15,3 W\nUSB-C 5,1 V / 3 A" shape=box style="filled,rounded" fillcolor="#ffecb3"];
+usbc [label="USB-C" shape=box fillcolor="#e0e0e0" width=0.8];
+pi4 [label="Raspberry Pi 4\n(power konektor)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+
+svorkovnice -> zdroj [label="  230 V  " color="#d32f2f" penwidth=1.5];
+zdroj -> usbc;
+usbc -> pi4 [label="  5,1 V / 3 A  " color="#ff6f00" penwidth=1.2];
+}

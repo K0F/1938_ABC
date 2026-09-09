@@ -4,3 +4,8 @@ tracker_test
 *.obj
 *.so
 calib.txt
+
+# generated docs
+docs/dot/*.pdf
+docs/*.pdf
+*.html

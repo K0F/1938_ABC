@@ -1,0 +1,18 @@
+// SCH §2.3 — Periferie Box A (USB / audio)
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.6];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+pi4 [label="Pi 4 (box A)" shape=box style="filled,rounded" fillcolor="#bbdefb" width=1.8];
+
+cam [label="Webkamera\nLogitech C270 / C920\n→ stativ nad hrací plochou" shape=box style="filled,rounded" fillcolor="#e1bee7"];
+zvuk [label="USB zvuková karta\n(Gembird)\nstereo OUT → panelový jack EY-512C" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+hdmi [label="micro-HDMI → HDMI\nkabel 1,8 m\n(konzole / setup)" shape=box style="filled,rounded" fillcolor="#e0e0e0"];
+note [label="(interní 3,5 mm jack Pi 4\nse NEPOUŽÍVÁ)" shape=note fillcolor="#f5f5f5" fontsize=9];
+
+pi4 -> cam [label="  USB-A  " style=dashed];
+pi4 -> zvuk [label="  USB-A  " style=dashed];
+pi4 -> hdmi [label="  micro-HDMI  " style=dotted];
+pi4 -> note [style=dotted color="#999999"];
+}

@@ -1,0 +1,42 @@
+// SCH §8 — Zvukové výstupy — panelové stereo jacky
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.6 ranksep=0.8];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+// Source
+zvuk [label="USB zvuková karta\n(každý box)\n3,5 mm stereo OUT" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2.2];
+
+// Branches
+a_přímo [label="Box A: přímo" shape=box fillcolor="#bbdefb"];
+bc_y [label="Boxy B/C:\nY-rozdvojka\nPremiumCord" shape=box style="filled,rounded" fillcolor="#ffe0b2"];
+
+// Panel jack
+subgraph cluster_jack {
+    label="Panelový jack EY-512C";
+    style="filled,rounded";
+    fillcolor="#e3f2fd";
+    fontsize=11;
+
+    tip [label="TIP (špička)\n= L (levý)" shape=box fillcolor="#bbdefb"];
+    ring [label="RING (kroužek)\n= R (pravý)" shape=box fillcolor="#c8e6c9"];
+    sleeve [label="SLEEVE (plášť)\n= GND" shape=box fillcolor="#e0e0e0"];
+}
+
+output [label="→ Stereo kabel\n→ mixážní pult /\npódiový zesilovač / DL" shape=box style="filled,rounded" fillcolor="#fff9c4"];
+
+// Connections
+zvuk -> a_přímo [label="  A: přímo  " style=dashed];
+zvuk -> bc_y [label="  B/C: přes Y  "];
+bc_y -> tip [label="  TIP  "];
+bc_y -> ring [label="  RING  "];
+bc_y -> sleeve [label="  SLEEVE  "];
+a_přímo -> tip [style=dashed color="#666666"];
+tip -> output;
+ring -> output;
+sleeve -> output;
+
+// Mount note
+note [label="Montáž: otvor Ø6 mm\ndo čelní stěny krabice,\njack přitáhnout maticí (motýlek)." shape=note fillcolor="#f5f5f5" fontsize=9];
+sleeve -> note [style=dotted color="#666666"];
+}

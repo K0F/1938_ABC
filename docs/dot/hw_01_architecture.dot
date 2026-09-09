@@ -1,0 +1,30 @@
+// HW §1 — Architektura a role boxů (3-box topology)
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.7 ranksep=0.9];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+// Tlačítka
+tlačítka [label="20× hotové tlačítko\nSolight 1L67T\ncca 10/B, 10/C" shape=octagon style="filled" fillcolor="#ffccbc" width=2.2];
+
+// Boxes
+boxB [label="BOX B\n─────────\nPi 4 4 GB\nSRX882S\nLCD 16×2\nrepro + amp\nUSB zvukovka\njack 3,5" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2];
+boxC [label="BOX C\n─────────\nPi 4 4 GB\nSRX882S\nLCD 16×2\nrepro + amp\nUSB zvukovka\njack 3,5" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2];
+boxA [label="BOX A\n─────────\nPi 4 4 GB\n+ webkamera (tracker)\nUSB zvukovka\njack 3,5 na panelu" shape=box style="filled,rounded" fillcolor="#bbdefb" width=2.2];
+
+// Power
+rozvod [label="Rozvod v boxu A\n◄── 10 m šňůra\nH05VV-F 3×1,5\ns koncovkou (230 V)" shape=oval fillcolor="#fff9c4"];
+
+// RF
+tlačítka -> boxB [label="  RF 433 MHz (ASK)  " color="#ff6f00" penwidth=1.5 style=bold];
+tlačítka -> boxC [label="  RF 433 MHz (ASK)  " color="#ff6f00" penwidth=1.5 style=bold];
+
+// Power
+boxA -> rozvod [label="  " color="#d32f2f" penwidth=1.2];
+boxB -> rozvod [label="  krátké síťové šňůry 2 m  " color="#d32f2f" penwidth=1.0 style=dashed];
+boxC -> rozvod [label="  krátké síťové šňůry 2 m  " color="#d32f2f" penwidth=1.0 style=dashed];
+
+// Note
+note [label="Synchronizace samplerů:\nWiFi 2,4 GHz (rsync z A)" shape=note fillcolor="#f5f5f5" fontsize=9];
+boxA -> note [style=dotted color="#666666"];
+}

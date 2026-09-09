@@ -1,0 +1,28 @@
+// HW §5.3 — Zvukový výstup (USB zvukovka → panelový stereo jack)
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.6 ranksep=0.8];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+// Source
+usb [label="USB zvuková karta\n(USB-A na Pi)\nstereo výstup 3,5 mm" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2.2];
+
+// Box A path
+a_direct [label="Box A: přímo\n→ jack 3,5 stereo\ndo panelu (EY-512C)" shape=box style="filled,rounded" fillcolor="#bbdefb" width=2];
+
+// Box B/C path
+y_split [label="Y-rozdvojka\nPremiumCord\nJACK 3,5 M → 2× JACK 3,5 F" shape=box style="filled,rounded" fillcolor="#ffe0b2" width=2.2];
+
+panel_jack [label="Jack EY-512C\ndo panelu\nTIP = L, RING = R\nSLEEVE = GND" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+amp [label="CA-3110S\nzesilovač\n→ LS40N\n(interní reproduktor B/C)" shape=box style="filled,rounded" fillcolor="#ffccbc"];
+
+// Edges
+usb -> a_direct [label="  A: přímo  " style=dashed];
+usb -> y_split [label="  B/C: přes Y  "];
+y_split -> panel_jack [label="  " penwidth=1.2];
+y_split -> amp [label="  " penwidth=1.2];
+
+// Note
+note [label="Vždy USB zvukovku,\nne interní jack Pi." shape=note fillcolor="#f5f5f5" fontsize=9];
+usb -> note [style=dotted color="#666666"];
+}

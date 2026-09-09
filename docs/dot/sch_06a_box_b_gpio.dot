@@ -1,0 +1,66 @@
+// SCH §3 — BOX B GPIO wiring
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.7];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+// Pi 4 GPIO pins
+subgraph cluster_pi {
+    label="Raspberry Pi 4 (4 GB) — BOX B";
+    style="filled,rounded";
+    fillcolor="#e3f2fd";
+    fontsize=12;
+
+    pin1 [label="GPIO 1\n(3V3, pin 1)" shape=box fillcolor="#fff9c4" width=1.5];
+    pin3 [label="GPIO 3\n(SDA, pin 3)" shape=box fillcolor="#bbdefb"];
+    pin5 [label="GPIO 5\n(SCL, pin 5)" shape=box fillcolor="#bbdefb"];
+    pin6 [label="GPIO 6\n(GND, pin 6)" shape=box fillcolor="#e0e0e0"];
+    pin11 [label="GPIO17\n(pin 11)" shape=box fillcolor="#bbdefb"];
+    pin15 [label="GPIO22\n(pin 15)" shape=box fillcolor="#bbdefb"];
+    pin37 [label="GPIO26\n(pin 37)" shape=box fillcolor="#bbdefb"];
+    usb_a [label="USB-A" shape=box fillcolor="#e1bee7"];
+    usb_c [label="USB-C\nzdroj 15,3 W" shape=box fillcolor="#ffecb3"];
+}
+
+// Peripherals
+lcd [label="LCD 1602\n(I2C PCF8574)\nVCC / SDA / SCL / GND" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2];
+srx [label="SRX882S\n433 MHz\nVCC / DATA / GND" shape=box style="filled,rounded" fillcolor="#ffccbc" width=1.8];
+pullups [label="Pull-upy 4,7 kΩ\n(SDA / SCL)" shape=box fillcolor="#ffe0b2"];
+tlacitko [label="Tlačítko reset\n(NO)" shape=box style="filled,rounded" fillcolor="#ffccbc"];
+led_gnd [label="LED (–)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+pullup10k [label="10 kΩ" shape=box fillcolor="#ffe0b2"];
+gnd_btn [label="GND" shape=oval fillcolor="#e0e0e0"];
+
+// Power
+v33 [label="3V3" shape=oval fillcolor="#fff9c4"];
+
+// 3V3 connections
+pin1 -> lcd [label="  VCC  " color="#d32f2f"];
+pin1 -> srx [label="  VCC  " color="#d32f2f"];
+pin1 -> pullups [label="  " color="#d32f2f" style=dashed];
+
+// I2C
+pin3 -> lcd [label="  SDA  " color="#1565c0"];
+pin5 -> lcd [label="  SCL  " color="#1565c0"];
+
+// GND
+pin6 -> lcd [label="  GND  " color="#666666"];
+pin6 -> srx [label="  GND  " color="#666666"];
+pin6 -> tlacitko [label="  GND  " color="#666666" style=dashed];
+pin6 -> led_gnd [label="  GND  " color="#666666" style=dashed];
+
+// Reset button
+pin11 -> tlacitko [label="  " penwidth=1.5];
+pin11 -> pullup10k [label="  " penwidth=1.5 style=dashed];
+pullup10k -> v33 [label="  3V3  " color="#d32f2f"];
+
+// RF data
+srx -> pin15 [label="  DATA  " color="#ff6f00" penwidth=1.5];
+
+// LED
+pin37 -> led_gnd [label="  330 Ω → LED  " color="#2e7d32" penwidth=1.2];
+
+// USB
+zvuk [label="USB zvuková karta\n(Gembird)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+usb_a -> zvuk [label="  USB-A  " style=dashed];
+}

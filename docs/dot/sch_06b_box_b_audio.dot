@@ -1,0 +1,28 @@
+// SCH §3 — BOX B Audio chain
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.6 ranksep=0.8];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+// Source
+zvuk [label="USB zvuková karta\n(Gembird)\n3,5 mm stereo OUT" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2.2];
+
+// Y-splitter
+y [label="Y-rozdvojka\nPremiumCord\nJACK 3,5 M → 2× JACK 3,5 F" shape=box style="filled,rounded" fillcolor="#ffe0b3" width=2.2];
+
+// Outputs
+panel [label="Panelový jack\nEY-512C (stereo)\n─────────────\nTIP (špička) = L\nRING (kroužek) = R\nSLEEVE (plášť) = GND\n─────────────\n→ výstup do mixu /\next. zesilovače" shape=box style="filled,rounded" fillcolor="#bbdefb" width=2.5];
+
+amp [label="CA-3110S zesilovač\n(TP3110, třída D)\nnapájení 5–26 V" shape=box style="filled,rounded" fillcolor="#ffccbc" width=2];
+repro [label="LS40N\n40 mm, 8 Ω\n(interní repro)" shape=box style="filled,rounded" fillcolor="#e1bee7"];
+
+// Edges
+zvuk -> y [label="  3,5 mm stereo  " penwidth=1.5];
+y -> panel [label="  JACK 3,5 F  " penwidth=1.2];
+y -> amp [label="  JACK 3,5 F  " penwidth=1.2];
+amp -> repro [label="  " penwidth=1.2];
+
+// Notes
+note1 [label="Box A: přímo bez Y-rozdvojky" shape=note fillcolor="#f5f5f5" fontsize=9];
+zvuk -> note1 [style=dotted color="#666666"];
+}

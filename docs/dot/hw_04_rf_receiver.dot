@@ -1,0 +1,33 @@
+// HW §5.4 — RF přijímač 433 MHz (SRX882S) na GPIO Pi 4
+digraph G {
+    graph [fontname="Terminus" rankdir=LR bgcolor="white" nodesep=0.7 ranksep=0.9];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+// SRX882S
+subgraph cluster_srx {
+    label="SRX882S (ASK/OOK, 433,92 MHz)";
+    style="filled,rounded";
+    fillcolor="#fff3e0";
+    fontsize=11;
+
+    srx_data [label="DATA" shape=box fillcolor="#ffccbc"];
+    srx_vcc [label="VCC" shape=box fillcolor="#fff9c4"];
+    srx_gnd [label="GND" shape=box fillcolor="#e0e0e0"];
+    srx_ant [label="ANT\nintegrovaná anténa" shape=box fillcolor="#e1bee7"];
+}
+
+// Pi 4 pins
+pi_gpio [label="Pi GPIO22\n(pin 15)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+pi_3v3 [label="3V3\n(pin 1)" shape=oval fillcolor="#fff9c4"];
+pi_gnd [label="GND\n(pin 6)" shape=oval fillcolor="#e0e0e0"];
+
+// Connections
+srx_data -> pi_gpio [label="  DATA  " color="#ff6f00" penwidth=1.5];
+srx_vcc -> pi_3v3 [label="  VCC → 3V3  " color="#d32f2f" penwidth=1.5];
+srx_gnd -> pi_gnd [label="  GND  " color="#666666" penwidth=1.5];
+
+// Note
+note [label="Dekódování: rc-switch / 433Utils\nna GPIO 22.\nMapa: kód → sample\n(10 → B, 10 → C).\nHlásit dosah se zavřeným víkem." shape=note fillcolor="#f5f5f5" fontsize=9];
+srx_gnd -> note [style=dotted color="#666666"];
+}

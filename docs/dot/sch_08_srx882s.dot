@@ -1,0 +1,32 @@
+// SCH §5.2 — SRX882S (přijímač 433 MHz) pinout
+digraph G {
+    graph [fontname="Terminus" rankdir=LR bgcolor="white" nodesep=0.6 ranksep=0.8];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+subgraph cluster_srx {
+    label="SRX882S (433,92 MHz, ASK/OOK)";
+    style="filled,rounded";
+    fillcolor="#fff3e0";
+    fontsize=12;
+
+    ant [label="[ANT]\nIntegrovaná anténa (PCB)" shape=box fillcolor="#e1bee7"];
+    vcc [label="[VCC]" shape=box fillcolor="#fff9c4"];
+    data [label="[DATA]" shape=box fillcolor="#ffccbc"];
+    gnd [label="[GND]" shape=box fillcolor="#e0e0e0"];
+}
+
+// Pi 4 pins
+pi3v3 [label="3V3\n(pin 1)" shape=oval fillcolor="#fff9c4"];
+pi_gpio [label="GPIO22\n(pin 15)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+pi_gnd [label="GND\n(pin 6)" shape=oval fillcolor="#e0e0e0"];
+
+// Connections
+vcc -> pi3v3 [label="  3V3  " color="#d32f2f" penwidth=1.5];
+data -> pi_gpio [label="  DATA  " color="#ff6f00" penwidth=1.5];
+gnd -> pi_gnd [label="  GND  " color="#666666" penwidth=1.5];
+
+// Note
+note [label="Pokud napájíte 5 V:\nDATA = 5 V logika\n→ převodník!" shape=note fillcolor="#ffcdd2" fontsize=9];
+gnd -> note [style=dotted color="#666666"];
+}

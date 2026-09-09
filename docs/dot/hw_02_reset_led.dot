@@ -1,0 +1,36 @@
+// HW §5.2 — Reset tlačítko + indikace chodu
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.6 ranksep=0.8];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+// GPIO pins
+gpio17 [label="Pi GPIO17\n(pin 11)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+gpio26 [label="Pi GPIO26\n(pin 37)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+v33 [label="3V3" shape=oval fillcolor="#fff9c4"];
+gnd1 [label="GND" shape=oval fillcolor="#e0e0e0"];
+gnd2 [label="GND" shape=oval fillcolor="#e0e0e0"];
+
+// Button circuit
+tlacitko [label="Tlačítko (NO)" shape=box style="filled,rounded" fillcolor="#ffccbc"];
+pullup [label="10 kΩ pull-up" shape=box fillcolor="#ffe0b2"];
+
+// LED circuit
+rezistor [label="330 Ω" shape=box fillcolor="#ffe0b2"];
+led [label="LED [–>]" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+
+// Button edges
+gpio17 -> tlacitko [label="  " penwidth=1.5];
+gpio17 -> pullup [label="  " penwidth=1.5 style=dashed];
+tlacitko -> gnd1 [label="  GND  " penwidth=1.5];
+pullup -> v33 [label="  3V3  " color="#d32f2f" penwidth=1.2];
+
+// LED edges
+gpio26 -> rezistor [label="  " penwidth=1.5];
+rezistor -> led [label="  330 Ω  " penwidth=1.5];
+led -> gnd2 [label="  GND  " penwidth=1.5];
+
+// Software note
+note [label="Software: debounce\n(indikace chodu = LED)" shape=note fillcolor="#f5f5f5" fontsize=9];
+pullup -> note [style=dotted color="#666666"];
+}

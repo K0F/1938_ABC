@@ -59,12 +59,15 @@ endif
 ALL_CXXFLAGS = $(CXXFLAGS) $(OPENCV_CFLAGS) $(SDL2_CFLAGS)
 ALL_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(RAYLIB_LIBS) $(OPENCV_LIBS) $(SYS_LIBS)
 
-.PHONY: all clean
+.PHONY: all clean docs
 
 all: $(BIN)
 
 $(BIN): $(SRC)
 	$(CXX) $< -o $@ $(ALL_CXXFLAGS) $(ALL_LDFLAGS)
+
+docs:
+	sh docs/build-docs.sh
 
 clean:
 	rm -f $(BIN) $(BIN)_test

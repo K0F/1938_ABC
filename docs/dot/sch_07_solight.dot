@@ -1,0 +1,28 @@
+// SCH §5.1 — Solight 1L67T (bezdrátové tlačítko)
+digraph G {
+    graph [fontname="Terminus" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.6];
+node [fontname="Terminus" fontsize=11 style="filled"];
+edge [fontname="Terminus" fontsize=9];
+
+subgraph cluster_solight {
+    label="S O L I G H T  1L67T";
+    style="filled,rounded";
+    fillcolor="#fff3e0";
+    fontsize=13;
+    fontname="Terminus";
+
+    btn [label="██ TLAČÍTKO ██" shape=box style="filled" fillcolor="#ffccbc" fontsize=14];
+    info [label="Kryt na jmenovku" shape=box fillcolor="#ffe0b2"];
+    batt [label="Baterie CR2032\n(uvnitř, vydrží ~1–2 roky)" shape=box fillcolor="#c8e6c9"];
+    proto [label="Protokol: 433 MHz\nlearning-code (EV1527 kopie)\ndosah: uvnitř 30–60 m\nvýrobně 200 m" shape=box fillcolor="#e3f2fd"];
+}
+
+note [label="Žádné pájení, žádný firmware.\nUkončení = stisk → krátký RF burst\ns unikátním kódem." shape=note fillcolor="#f5f5f5" fontsize=9];
+oznaceni [label="Označit jmenovkou:\nB01…B10 / C01…C10\n+ pořadí vzorku" shape=note fillcolor="#f5f5f5" fontsize=9];
+
+btn -> batt;
+btn -> info;
+btn -> proto;
+proto -> note [style=dotted color="#666666"];
+btn -> oznaceni [style=dotted color="#666666"];
+}
