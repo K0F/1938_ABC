@@ -165,10 +165,11 @@ Install OpenGL: `pkg install -y mesa`
 ## Hardware / BOM (Czech)
 
 See [`HW.md`](HW.md) for the full hardware requirements and order list — 3-box setup
-(all three boxes = the same **Raspberry Pi 4 (4 GB)**; box A = tracker + webcam, boxes
-B/C = wireless sampler triggers), each box has its **own USB sound card** and a
-**panel-mount 3.5 mm stereo output jack**, 20 ready-made 433 MHz wireless buttons
-(Solight 1L67T), 10 m mains cord, price estimate and GPIO wiring schemes. Complete
+(all three boxes = the same **Raspberry Pi 4 (8 GB)**; box A = tracker + webcam, boxes
+B/C = wireless sampler triggers), each box has its **own USB sound card (AXAGON ADA-17)**
+and a **panel-mount 3.5 mm stereo output jack**, **internal speaker + amplifier
+(CA-3110S + LS40N)**, 20 ready-made 433 MHz wireless buttons
+(Solight 1L67T), 3× 5 m mains cord, price estimate and GPIO wiring schemes. Complete
 connection diagrams for every part (box A/B/C, RF receiver SRX882S, USB sound cards +
 panel jacks, power distribution) are in [`docs/SCH.md`](docs/SCH.md). Czech language.
 

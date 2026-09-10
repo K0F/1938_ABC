@@ -4,20 +4,21 @@ Dokument navazuje na [`HW.md`](../HW.md). Pokrývá **všechna elektrická propo
 box A (hlavní), boxy B/C (samplerové spouštěče), 20 bezdrátových tlačítek (433 MHz, hotová)
 a rozvod napájení. GPIO čísla jsou **BCM**, v závorce číslo pinu 40pin konektoru.
 
-Verze: 9. 9. 2026 — **všechny boxy Raspberry Pi 4 (stejný model)**, každý box má
-**USB zvukovou kartu** a **stereo jack 3,5 mm na panelu** krabice.
+Verze: 10. 9. 2026 — **všechny boxy Raspberry Pi 4 8 GB (stejný model)**, každý box má
+**USB zvukovou kartu AXAGON ADA-17** a **stereo jack 3,5 mm na panelu** krabice.
+Každý box má **zesilovač CA-3110S + reproduktor LS40N** (interní reproduktor).
 
 ---
 
 ## 1) Blokové schéma systému
 
-- **Box A** (hlavní jednotka) — Pi 4, USB zvukovka → jack 3,5 na panelu, GPIO: reset/LED, webkamera USB (stativ, analýza koulí), HDMI (konzole/setup). Napájení: vlastní zdroj 15,3 W (10 m šňůra 230 V)
-- **Box B** (sampler) — Pi 4, SRX882S 433 MHz, LCD 16×2, amp + repro LS40N, USB zvukovka → Y-rozdvojka → jack 3,5 panel + CA-3110S. Napájení: vlastní zdroj 15,3 W (230 V samostatnou 2 m šňůrou JT003 do zásuvky)
-- **Box C** — identický s boxem B (dalších 10× tlačítko). Napájení: vlastní zdroj 15,3 W (samostatná 2 m šňůra JT003 do zásuvky)
+- **Box A** (hlavní jednotka) — Pi 4, USB zvukovka AXAGON ADA-17 → jack 3,5 na panelu + zesilovač CA-3110S → reproduktor LS40N, GPIO: reset/LED, webkamera USB (stativ, analýza koulí), HDMI (konzole/setup). Napájení: vlastní zdroj 15,3 W (5 m šňůra 230 V)
+- **Box B** (sampler) — Pi 4, SRX882S 433 MHz, LCD 16×2, amp + repro LS40N, USB zvukovka AXAGON ADA-17 → Y-rozdvojka → jack 3,5 panel + CA-3110S. Napájení: vlastní zdroj 15,3 W (230 V samostatnou 5 m šňůrou JT003 do zásuvky)
+- **Box C** — identický s boxem B (dalších 10× tlačítko). Napájení: vlastní zdroj 15,3 W (samostatná 5 m šňůra JT003 do zásuvky)
 
 Bezdrátová tlačítka: 10× Solight 1L67T (baterie uvnitř) pro B, 10× pro C — RF 433 MHz (ASK).
 
-Všechny tři boxy: Raspberry Pi 4 Model B 4 GB (stejný HW), každý s **vlastním zdrojem 15,3 W** (5 V se mezi boxy nerozvádí).
+Všechny tři boxy: Raspberry Pi 4 Model B 8 GB (stejný HW), každý s **vlastním zdrojem 15,3 W** (5 V se mezi boxy nerozvádí).
 Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
 
 ---
@@ -55,18 +56,21 @@ Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
 
 ```
   Pi 4 (box A)
-   ├─ USB-A ── webkamera (Logitech C270 / C920) ──► stativ nad hrací plochou
-   ├─ USB-A ── USB zvuková karta (Gembird) ─► stereo OUT ──► panelový jack EY-512C
+   ├─ USB-A ── webkamera (Logitech C920) ──► stativ nad hrací plochou
+   ├─ USB-A ── USB zvuková karta AXAGON ADA-17 ─► stereo OUT ──► Y-rozdvojka
+   │                                               ├► panelový jack EY-512C (stereo)
+   │                                               └► CA-3110S → LS40N (interní repro)
    ├─ micro-HDMI ── HDMI kabel 1,8 m ──► (konzole / setup)
-   └─ (interní 3,5 mm jack Pi 4 se NEPOUŽÍVÁ — audio vždy přes USB zvukovku)
+   └─ (interní 3,5 mm jack Pi 4 se NEPOUŽÍVÁ — audio vždy přes USB zvukovku AXAGON)
 ```
 
-### 2.4 GPIO boxu A — reset + indikace chodu (BCM 17 a 26, jako v B/C)
+### 2.4 GPIO boxu A — reset + indikace chodu + tlačítko do panelu
 
 ```
   Pi 4 GPIO17 (pin 11) ──┬── TLAČÍTKO (NO) ── GND (pin 6)
                          └── 10 kΩ pull-up ── 3V3 (pin 1)
   Pi 4 GPIO26 (pin 37) ──┬── 330 Ω ── LED [+] ── GND (pin 9)
+                         └── tlačítko do panelu (PBS-12B) ── GND
 ```
 - Krátký stisk = `systemctl poweroff`, dvojitý stisk = restart (systémová služba).
 - Pull-up může být i interní (`RPi.GPIO`/`/sys/class/gpio`), externí 10 kΩ je bezpečnější.
@@ -79,7 +83,7 @@ Kompletní zapojení jedné jednotky; box C je identický (§4).
 
 ```
                 ┌──────────────────────────────────────────────────┐
-                │              Raspberry Pi 4 (4 GB)                │
+                │              Raspberry Pi 4 (8 GB)                │
                 │                                                    │
                 │  GPIO 1 (3V3) ──┬──► LCD 1602  VCC (3,3 V varianta)│
                 │                ├──► SRX882S  VCC                   │
@@ -95,7 +99,7 @@ Kompletní zapojení jedné jednotky; box C je identický (§4).
                 │  GPIO15 (GPIO22) ◄──── SRX882S  DATA                │
                 │  GPIO37 (GPIO26) ── 330 Ω ─► LED [+] ─► GND         │
                 │                                                    │
-                │  USB-A ──► USB zvuková karta (Gembird)             │
+                │  USB-A ──► USB zvuková karta AXAGON ADA-17             │
                 │  USB-A ──► (volné porty)                           │
                 │  USB-C ──► zdroj 15,3 W (230 V z A, 2 m šňůra)     │
                 └───────────────┬────────────────────────────────────┘
@@ -169,13 +173,13 @@ Pouze **mapa tlačítek a nastavený obor vzorků je jiná** (C = sekce vzorků 
 
 ## 6) Napájení — každý box samostatně
 
-Všechny tři boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý box se zapojuje do 230 V **samostatně** (paralelně), vlastní šňůrou do zásuvky/odbočky:
+Všechny tři boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý box se zapojuje do 230 V **samostatně** (paralelně), vlastní 5 m šňůrou JT003 do zásuvky/odbočky:
 
 ```
                     230 V zásuvka / odbočka
                             │
          ┌──────────────────┼──────────────────┐
-         10 m JT003         2 m JT003          2 m JT003
+         5 m JT003          5 m JT003          5 m JT003
          ▼                  ▼                  ▼
    ┌──────────┐       ┌──────────┐       ┌──────────┐
    │ BOX A    │       │ BOX B    │       │ BOX C    │
@@ -189,7 +193,7 @@ Všechny tři boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý
 
 ---
 
-## 7) Souhrn použitých GPIO pinů (Raspberry Pi 4 — stejné pro všechny boxy)
+## 7) Souhrn použitých GPIO pinů (Raspberry Pi 4 8 GB — stejné pro všechny boxy)
 
 | Funkce         | GPIO (BCM) | Pin | Zapojeno s |
 |----------------|-----------|-----|------------|
@@ -201,18 +205,17 @@ Všechny tři boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý
 | 3V3            | —         | 1   | SRX882S VCC, LCD VCC (3,3 V varianta), pull-upy |
 | GND            | —         | 6   | SRX882S, LCD, tlačítko, LED, zesilovač (společná zem) |
 
-Pi 4 i Pi Zero sdílí stejné 40pin GPIO rozvržení a BCM číslování → schémata jsou přenositelná.
+Pi 4 8 GB sdílé 40pin GPIO rozvržení a BCM číslování → schémata jsou přenositelná.
 Box A: BCM **17** (reset) a **26** (LED) — stejná schémata jako §3/§7.
-Webkamera, HDMI, audio (USB zvukovka + panelový jack) — bez GPIO (USB báze).
+Webkamera, HDMI, audio (USB zvukovka AXAGON ADA-17 + panelový jack) — bez GPIO (USB báze).
 
 ---
 
 ## 8) Zvukové výstupy — panelové stereo jacky (všechny boxy)
 
 ```
-  USB zvuková karta (každý box) ──► 3,5 mm stereo OUT
-       │ box A: přímo
-       │ boxy B/C: Y-rozdvojka PremiumCord
+  USB zvuková karta AXAGON ADA-17 (každý box) ──► 3,5 mm stereo OUT
+       │ Y-rozdvojka (všechny boxy)
        ▼
   Panelový jack EY-512C (zásuvka do panelu, montáž na čelní stěnu krabice)
     ┌────────────────────────────┐
@@ -234,4 +237,4 @@ Webkamera, HDMI, audio (USB zvukovka + panelový jack) — bez GPIO (USB báze).
 3. LED/rezistor/cca: rezistor 330 Ω (3,3 V) → I ≈ 8–10 mA.
 4. Spárování a mapa tlačítek před montáží do stolu; značení dolů na spodní straně.
 5. Zátěžový test: RF dosah se zavřeným víkem boxu, výdrž baterie, kabeláž bez tepelných stop (termokamera).
-6. **Audio:** každý box prozvukovat z USB zvukovky (ne interní jack Pi) — levý/pravý kanál na panelovém jacku.
+6. **Audio:** každý box prozvukovat z USB zvukovky AXAGON ADA-17 (ne interní jack Pi) — levý/pravý kanál na panelovém jacku + interní reproduktor přes CA-3110S.

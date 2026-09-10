@@ -1,127 +1,106 @@
 Nákupní seznam — HW požadavky Tracker (3 boxy)
-Verze: 9. 9. 2026 — JEDNOTNÁ platforma: 3× Raspberry Pi 4 + USB zvukovky + panelové jacky.
+Verze: 10. 9. 2026 — JEDNOTNÁ platforma: 3× Raspberry Pi 4 + USB zvukovky + panelové jacky.
 Ceny: Alza.cz, GM Electronic (gme.cz). „≈" = orientační cena.
 
-Rotace: tlačítka Solight 1L67T jsou ve VÝPRODEJI (skladem jen na 2 prodejnách) — objednat PŘEDNOSTNĚ.
-Všechny tři boxy = Raspberry Pi 4 Model B 4 GB (stejný HW); Pi Zero 2 WH se NEpoužívá.
+Nákup elektroniky Alza:
 
-================================================================================
-2) ALZA.CZ — 3× Pi 4 + ODS-721 + zdroje + karty + kabeláž + webkamera + stativ
-================================================================================
-[*] Raspberry Pi 4 Model B 4 GB  (×3 — boxy A, B, C)          3×   3 029 Kč
-    https://www.alza.cz/search.htm?exps=raspberry+pi+4+4gb
-    alt. RPi 4B 8/3/2 GB 4 629/2 239/1 899 Kč
-    https://www.alza.cz/search.htm?exps=raspberry+pi+4
-[*] Krabička na Pi 4: Inter-Tech ODS-721 (hliník)              3×   ≈259 Kč
-    (JOY-IT RB-Heatsink na Alze NENÍ — náhrada ODS-721 / Armor 299 Kč)
-    https://www.alza.cz/search.htm?exps=inter-tech+ods-721
-[*] Oficiální zdroj RPi 15,3 W / USB-C 5,1 V 3 A               3×   od 251 Kč (černý skladem)
-    https://www.alza.cz/search.htm?exps=raspberry+pi+15.3w
-[*] USB zvuková karta USB-A → 3,5 mm (VE VŠECH 3 boxech)       3×   ≈115–150 Kč
-    https://www.alza.cz/search.htm?exps=gembird+usb+audio+adapter
-[*] Webkamera Logitech C270 HD (rozpočet) — box A              1×   599–799 Kč
-    https://www.alza.cz/search.htm?exps=logitech+c270
-[*] Webkamera Logitech C920 Full HD (doporučeno) — box A       1×   1 599 Kč
-    https://www.alza.cz/search.htm?exps=logitech+c920
-    alt. C922 2 499 / C920s 2 299 / Brio 300 1 299 / Brio 100 749 Kč
-    https://www.alza.cz/search.htm?exps=logitech+webkamera
-[*] microSD 64 GB SanDisk Ultra (rozpočet) — box A             1×   549 Kč
-    https://www.alza.cz/search.htm?exps=sandisk+ultra+64gb+microsd
-[*] microSD 64 GB Ultra A1 (doporučeno) — box A                1×   699 Kč
-    https://www.alza.cz/search.htm?exps=sandisk+ultra+a1+64gb
-    alt. Extreme A2 799 / Extreme PRO 829 Kč
-    https://www.alza.cz/search.htm?exps=sandisk+extreme+64gb+microsd
-[*] microSD 32 GB A1 — boxy B a C                              2×   499 Kč
-    https://www.alza.cz/search.htm?exps=sandisk+ultra+32gb+a1+microsd
-[*] micro-HDMI → HDMI kabel 1,8 m (setup/konzole)              1×   109 Kč (3 m 125)
-    https://www.alza.cz/search.htm?exps=micro+hdmi+hdmi+kabel
-[*] Stativ na kameru: Apexel Mini Tripod                       1×   189 Kč (rozkládací 459)
-    https://www.alza.cz/search.htm?exps=apexel+mini+tripod
+3x Raspberry Pi 4 Model B
 
-Mezisoučet ALZA ≈ 13 600 Kč (C270) / 14 600 Kč (C920) — viz poznámka §7.
+https://www.alza.cz/raspberry-pi-4-model-b-8gb-ram-d5863776.htm?o=1
 
-================================================================================
-3.1) GME — elektroboxy (3× KM-85)
-================================================================================
-[*] MASZCZYK KM-85 ABS černá 180×160×84 mm (A, B i C)          3×   209 Kč/ks
-    https://www.gme.cz/v/1508143/maszczyk-km-85-abs-black-krabicka-plastova
-    alt. MASZCZYK Z30A 120×70×46 mm (úspora B/C)               2×   120 Kč/ks
-    https://www.gme.cz/v/1514976/maszczyk-z30a-abs-blackkp21-krabicka-plastova
+3x Hliníková krabičkaInter-Tech ODS-721
 
-Krabice celkem ≈ 630 Kč (KM-85 ×3).
+https://www.alza.cz/inter-tech-ods-721-pro-raspberry-pi-4-b-blue-d7993874.htm?o=1
 
-================================================================================
-3.2) GME — napájecí šňůry, kabeláž, drobnosti
-================================================================================
-[*] Napájecí flexo JT003 H05VV-F 3×1,5 mm², černá, 5 m          2×   175 Kč/ks  (2×5 = 10 m)
-    https://www.gme.cz/v/1509985/jt003-h05vv-f-3x15-cerna-5m-napajeci-sitovy-kabel-flexo
-[*] Krátká napájecí šňůra JT003 3×1,5, 2 m (z A do B a C)       2×   89 Kč/ks
-    https://www.gme.cz/v/1510505/jt003-h05vv-f-3x15-cerna-2m-napajeci-sitovy-kabel-flexo
-[*] Lanko CYA 1×0,5 mm² (H05V-K) — vnitřní rozvod, GPIO        30 m   3,50 Kč/m
-    https://www.gme.cz/c/15098/cya-jednozilove-vodice-lanko
-    (př. černý https://www.gme.cz/v/1512360/elektrokabel-cya-1x05-cerny-h05v-k-izolovany-vodic-lanko)
-[*] Svorkovnice KLS 301-5.00-02P 2pól 5mm 16A (230 V + rozvod) 10×    5 Kč/ks
-    https://www.gme.cz/v/1497538/kls-301-500-02p-2-sc-svorkovnice-2pol-roztec-5mm-16a-250v-vstup-90-sroub
-[*] Sada smršťovacích bužírek KSS VS-100BK                      1×   135 Kč
-    https://www.gme.cz/v/1483738/kss-vs-100bk-sada-smrstovacich-buzirek
-[*] Distanční sloupek M2,5 ×10 mm (matka/šroub) — montáž 3× Pi 4  40×  5,50 Kč/ks
-    https://www.gme.cz/v/1482591/da5m25x10-nikl-distancni-sloupek-10mm-m25-matka-sroub
+3x Napájecí adaptér RPiOficiální 15,3 W (5,1 V / 3 A) USB-C
 
-Šňůry + kabeláž + drobnosti ≈ 940 Kč.
+https://www.alza.cz/raspberry-pi-4-5v-3a-bily-d5662378.htm?o=1
 
-================================================================================
-3.3) GME — stereo výstupy na panelech (3×) + rozdvojky (B/C)
-================================================================================
-[*] Jack 3,5 mm STEREO do panelu EY-512C (čelní stěna krabice) 3×   15 Kč/ks
-    https://www.gme.cz/v/1496892/ey-512c-jack-35-stereo
-[*] Rozdvojka PremiumCord JACK 3,5 M → 2× JACK 3,5 F (10 cm)   2×   25 Kč/ks
-    https://www.gme.cz/v/1496896/premiumcord-jack-35-m-2x-jack-35-f-stereo-10cm-rozdvojka
+3x USB zvuková kartaAXAGON ADA-17 AUDIGO (USB-A → 3,5 mm jack)
 
-Jacky + rozdvojky = 95 Kč.
+https://www.alza.cz/axagon-ada-ha-hi-res-dac-audio-adapter-384khz-32bit-stereo-usb-a-to-3-5mm-jack-d13390081.htm?o=1
 
-================================================================================
-3.4) GME — elektro souhvězdí B/C (samplerový box; bez Pi/zdroje — viz ALZA)
-================================================================================
-[*] Znakový LCD 16×2 (DM1602AYG) + I2C převodník PCF8574        2×  (L+AD) LCD 85 + ad. 69 Kč
-    https://www.gme.cz/v/1495826/dm1602ayg-alfanumericky-lcd-displej
-    https://www.gme.cz/v/1508988/adapter-prevodnik-i2c-pro-displej-lcd1602-a-2004
-[*] Digitální zesilovač CREATALL CA-3110S (TP3110) — náhrada PAM8403 (vyprodán)
-                                                               2×   49 Kč
-    https://www.gme.cz/v/1518915/creatall-ca-3110s-digitalni-zesilovac-tridy-d-s-cipem-tp3110-napajeni-826v-3a
-[*] Reproduktor 40 mm, 8 Ω (LS40N-27-R8)                        2×   62 Kč
-    https://www.gme.cz/v/1497252/ls40n-27-r8-reproduktor
-[*] RF přijímač 433 MHz SRX882S (ASK) — náhrada nRF24L01+       2×   79 Kč
-    https://www.gme.cz/v/1514654/srx882s-prijimac-433mhz-ask
-[*] Reset: mikrospínač 6×6 mm + LED 5 mm + rezistory            3 sady  ≈20 Kč
-    https://www.gme.cz/v/1501885/wealthmetal-tc-0107-t-mikrospinac
+3x microSD karta32 GB SanDisk Ultra Class 10 A1 UHS-I3 ks
 
-B/C elektronika celkem ≈ 1 020 Kč.  (Pi 4 + ODS-721 + zdroj + USB zvukovka + jack z odd. 2/3.3)
+https://www.alza.cz/sandisk-microsdhc-32gb-ultra-sd-adapter-d6250713.htm?o=2
 
-================================================================================
-3.5) GME — bezdrátová tlačítka (20 ks) — HOTOVÁ, 433 MHz
-================================================================================
-[*] Solight 1L67T bezdrátové tlačítko (433 MHz, learning-code, 200 m)  20× 72,60 Kč (VÝPRODEJ!)
-    https://www.gme.cz/vysledky-vyhledavani?q=Solight+1L67T   (kód 757-233)
-    POZOR: skladem jen na 2 prodejnách → objednat přednostně
-[*] (volitelně) Náhradní CR2032, blistr 5 ks (Camelion BP5)     4×   19 Kč/blistr
-    https://www.gme.cz/v/1519272/camelion-cr2032-bp5-lithiova-knoflikova-baterie-blistr-5ks
+1x WebkameraLogitech C920 Full HD
 
-Tlačítka celkem ≈ 1 452 Kč (+76 Kč baterie).
+https://www.alza.cz/logitech-hd-pro-webcam-c920-d292394.htm?o=2
 
-================================================================================
-Součty (9. 9. 2026):
-================================================================================
-Box A ≈ 5 500 Kč (C270) / 6 500 Kč (C920)
-Box B/C ×2 ≈ 9 600 Kč
-Tlačítka ≈ 1 452 Kč
-Šňůry/kabeláž/drobnosti ≈ 940 Kč
-──────────────────────────────────────
-HW celkem ≈ 17 500 / 18 500 Kč  + práce (60–112 h × 350 Kč/h) → viz HW.md §6–7.
+1x Kabel micro-HDMIPremiumCord micro-HDMI (M) → HDMI (M) 1,8 m
 
-Poznámky:
-- 3× Pi 4 (4 GB) je JEDNOTNÁ platforma pro A, B i C; každý box má vlastní USB zvukovku,
-  zdroj 15,3 W a panelový stereo jack EY-512C (§3.3).
-- Interní 3,5 mm jack Pi 4 se nepoužívá — audio vždy přes USB zvukovku.
-- Ověřeno: GME 200 OK; Alza = search.htm (bot-protection 403, v prohlížeči OK).
-- Kategorie: GME katalog je přečíslovaný — staré odkazy 14663/14868/15056/15016 jsou
-  neplatné, nahrazeny přímými produkty v tomto seznamu.
+https://www.alza.cz/tactical-fast-rope-aramid-2-0-cable-usb-a-usb-c-2m-d13228246.htm?o=1
+
+
+Nákup elektra v GM:
+
+3x Plastová krabiceMASZCZYK KM-85 ABS (180 × 160 × 84 mm)
+
+https://www.gme.cz/v/1508143/maszczyk-km-85-abs-black-krabicka-plastova
+
+3x Napájecí kabelFlexo kabel JT003 3×1,5 mm² s vidlicí (5 m)
+
+https://www.gme.cz/v/1509985/jt003-h05vv-f-3x15-cerna-5m-napajeci-sitovy-kabel-flexo
+
+3x 3m jiné barvy Montážní vodičLanko CYA 1×0,5 mm²
+
+https://www.gme.cz/v/1512384/elektrokabel-cya-1x05-hnedy-h05v-k-izolovany-vodic-lanko
+
+https://www.gme.cz/v/1512208/elektrokabel-cya-1x05-modry-h05v-k-izolovany-vodic-lanko
+
+https://www.gme.cz/v/1511550/elektrokabel-cya-1x05-zluty-h05v-k-izolovany-vodic-lanko
+
+3x SvorkovniceKLS 301-5.00-02P (2pólová do DPS/panelu)
+
+https://www.gme.cz/v/1497538/kls-301-500-02p-2-sc-svorkovnice-2pol-roztec-5mm-16a-250v-vstup-90-sroub
+
+12x Distanční sloupkyM2,5 × 10 mm (mosaz/plast, šroub + matka)
+
+https://www.gme.cz/v/1482591/da5m25x10-nikl-distancni-sloupek-10mm-m25-matka-sroub
+
+1x Sada smršťovacích bužírek KSS VS-100BK
+
+https://www.gme.cz/v/1483738/kss-vs-100bk-sada-smrstovacich-buzirek
+
+1x Tavici pistole
+
+https://www.gme.cz/v/1517598/proskit-gk-390nf-tavna-lepici-pistole-11mm-100w
+
+3x Panelový jackEY-512C 3,5 mm stereo zásuvka do panelu
+
+https://www.gme.cz/v/1496892/ey-512c-jack-35-stereo
+
+3x koncovky Jack 3.5
+
+https://www.gme.cz/v/1501905/np-107-en-jack-35-stereo
+
+3x ZesilovačCA-3110S (TPA3110, třída D, stereo)
+
+https://www.gme.cz/v/1518915/creatall-ca-3110s-digitalni-zesilovac-tridy-d-s-cipem-tp3110-napajeni-826v-3a
+
+6x ReproduktorLS40N-27-R8 (průměr 40 mm, 8 Ω)
+
+https://www.gme.cz/v/1497252/ls40n-27-r8-reproduktor
+
+2x RF PřijímačSRX882S 433 MHz ASK/FSK
+
+https://www.gme.cz/v/1514654/srx882s-prijimac-433mhz-ask
+20x Tlačítko bezdrátové Solight 1L67T (433 MHz, samostatné tlačítko)
+
+https://www.gme.cz/v/1503395/solight-1l67t-bezdratove-tlacitko-pro-1l67
+6x BaterieCamelion CR2032 (blistr 5 ks)
+
+https://www.gme.cz/v/1519272/camelion-cr2032-bp5-lithiova-knoflikova-baterie-blistr-5ks
+3x Tlačítko do panelu
+
+https://www.gme.cz/v/1497195/pbs-12b-r-tlacitko-do-panelu-1-pol-offon
+
+10x LED dioda5 mm červená
+
+https://www.gme.cz/v/1492965/bright-led-bl-b5141-l-led-3mm-cervena
+
+10x Rezistory 10 kΩ 0,25 W (3 ks) + 330 Ω 0,25 W
+
+https://www.gme.cz/v/1494150/gym-cym-rm-10k-06w-1-0207-metalizovany-rezistor
+

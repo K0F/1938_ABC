@@ -1,33 +1,48 @@
-DOSTUPNOST — kontrola zboží (9. 9. 2026, živý průzkum v prohlížeči)
-Verze 3 — JEDNOTNÁ platforma: 3× Raspberry Pi 4, USB zvukovky + panelové jacky v každém boxu.
+DOSTUPNOST — kontrola zboží (10. 9. 2026, živý průzkum v prohlížeči)
+Verze 4 — JEDNOTNÁ platforma: 3× Raspberry Pi 4 8 GB, USB zvukovky AXAGON ADA-17 + panelové jacky v každém boxu.
 ====================================================================
 
-GME (gme.cz) — produktové stránky:
-[OK]  MASZCZYK KM-85 ABS krabička       209 Kč   Skladem (1 prodejna)         potřeba 3×
-[OK]  MASZCZYK Z30A (alt)               120 Kč   Skladem (2 prodejny)
-[!!]  PAM8403 2×3W potenciometrem        39 Kč   NENÍ SKLADEM → NÁHRADA:
-[REC] CREATALL CA-3110S (TP3110, D)     49 Kč   Skladem e-shop 965 ks          potřeba 2×
-[OK]  LS40N reproduktor 40mm             62 Kč   Skladem e-shop 84 ks          potřeba 2×
-[OK]  SRX882S přijímač 433 MHz ASK       79 Kč   Skladem (2 prodejny)          potřeba 2×
-      (nRF24L01+ 45 Kč e-shop 176 ks — jen jako náhradní jednotka, nově nepoužit)
-[!!]  Solight 1L67T bezdr. tlačítko   72,60 Kč   VÝPRODEJ / skladem jen 2 PRODEJNY
-      → OBJEDNAT PŘEDNOSTNĚ (potřeba 20×, nelze-li − náhrady viz HW.md §3.5)
-[OK]  DM1602AYG LCD 16×2                  85 Kč   Skladem e-shop 74 ks         potřeba 2×
-[OK]  I2C převodník PCF8574 (LCD)         69 Kč   Skladem (3 prodejny)         potřeba 2×
-[OK]  JT003 flexo 3×1,5 5 m              175 Kč   e-shop 595 ks (potřeba 2× = 10 m)
-[OK]  JT003 flexo 3×1,5 2 m               89 Kč   e-shop 407 ks (potřeba 2×)
-[OK]  CYA 1×0,5 mm² (6 barev)          3,50/m   e-shop stovky metrů (potřeba 30 m)
-[OK]  Svorkovnice KLS 2pól 5mm             5 Kč   e-shop 1864 ks (potřeba 10×)
-[OK]  Bužírky sada KSS VS-100BK          135 Kč   e-shop 227 ks
-[OK]  Distanční sloupek M2,5×10          5,50    e-shop 725 ks (potřeba 40× — montáž 3× Pi 4)
-[OK]  Mikrospínač TC-0107 (reset)       1,10    e-shop 1335 ks (potřeba 3× — boxy A/B/C)
-[OK]  Camelion CR2032 BP5 (5 ks)          19 Kč   e-shop 1720 ks (volitelně 4×)
-[NEW] EY-512C stereo jack 3,5 do panelu   15 Kč   Skladem e-shop 1942 ks      potřeba 3×
-[NEW] PremiumCord rozdvojka 3,5 M→2×F     25 Kč   Skladem e-shop 23 ks        potřeba 2×
+ALZA.cz — vyhledání + dostupnost:
+[OK]  Raspberry Pi 4 Model B 8 GB        ~4 629 Kč   Skladem            potřeba 3×
+[OK]  RPi 4B 4GB / 2GB                  3 029/1 899 Kč   Skladem >5 ks
+[OK]  Inter-Tech ODS-721 (hliník)        259 Kč   Skladem 5 ks        potřeba 3×
+[OK]  Oficiální zdroj RPi 15,3 W černý   251 Kč   Skladem >10 ks      potřeba 3×
+[OK]  Logitech C920 (Full HD)          1 599 Kč   Skladem >5 ks       potřeba 1×
+[!!]  alt webkamery: C922 2 499 / C920s 2 299 / Brio 300 1 299  → skladem
+[OK]  SanDisk Ultra 32GB A1              ~350 Kč   Skladem >10 ks      potřeba 3×
+[OK]  AXAGON ADA-17 AUDIGO USB zvukovka  ~150 Kč   Skladem             potřeba 3×
+[OK]  micro-HDMI→HDMI PremiumCord 1,8 m  109 Kč   Skladem >20 ks      potřeba 1×
+[OK]  Apexel Mini Tripod                 189 Kč   Skladem >10 ks      potřeba 1×
 
-ODSTRANĚNO z nákupu (stará DIY tlačítka): Digispark ATtiny85 135 Kč (1 prodejna),
-CooperKit nRF24L01 414 Kč (špatný produkt), mikrospínače 6×6 ×20, držáky CR2032 ×20.
-ODSTRANĚNO: Raspberry Pi Zero 2 WH (RPishop) — vše = Pi 4 → neuvažuje se.
+GME (gme.cz) — produktové stránky:
+[OK]  MASZCZYK KM-85 ABS krabička       209 Kč   Skladem             potřeba 3×
+[OK]  JT003 flexo 3×1,5 5 m             175 Kč   e-shop 595 ks       potřeba 3×
+[OK]  CYA 1×0,5 mm² (hnědá/modrá/žlutá) 3,50/m  e-shop stovky metrů potřeba 3×3 m
+[OK]  Svorkovnice KLS 2pól 5mm             5 Kč   e-shop 1864 ks      potřeba 3×
+[OK]  Distanční sloupek M2,5×10          5,50    e-shop 725 ks       potřeba 12×
+[OK]  Bužírky sada KSS VS-100BK          135 Kč   e-shop 227 ks       potřeba 1×
+[OK]  Tavicí pistole Pro'sKit GK-390NF  ~200 Kč   e-shop              potřeba 1×
+[OK]  EY-512C stereo jack 3,5 do panelu   15 Kč   e-shop 1942 ks      potřeba 3×
+[OK]  NP-107 koncovka jack 3,5 stereo    ~10 Kč   e-shop              potřeba 3×
+[OK]  CREATALL CA-3110S zesilovač (D)     49 Kč   e-shop 965 ks       potřeba 3×
+[OK]  LS40N reproduktor 40mm 8Ω           62 Kč   e-shop 84 ks        potřeba 6×
+[OK]  SRX882S přijímač 433 MHz ASK       79 Kč   Skladem (2 prodejny) potřeba 2×
+[!!]  Solight 1L67T bezdr. tlačítko   72,60 Kč   ⚠ VÝPRODEJ / jen 2 PRODEJNY
+      → OBJEDNAT PŘEDNOSTNĚ (potřeba 20×, nelze-li — náhrady viz HW.md §3.4)
+[OK]  Camelion CR2032 BP5 (5 ks)          19 Kč   e-shop 1720 ks      potřeba 6×
+[OK]  PBS-12B-R tlačítko do panelu       ~15 Kč   e-shop              potřeba 3×
+[OK]  LED 5mm červená                     ~2 Kč   e-shop              potřeba 10×
+[OK]  Rezistor 10 kΩ 0,25W              ~0,50    e-shop              potřeba 3×
+[OK]  Rezistor 330 Ω 0,25W             ~0,50    e-shop              potřeba 6×
+
+ODSTRANĚNO z nákupu (stará verze):
+- Raspberry Pi 4 4 GB → nahrazeno 8 GB
+- USB zvukovka Gembird → nahrazena AXAGON ADA-17 AUDIGO
+- PremiumCord Y-rozdvojka 3,5 mm → odstraněna (nakup.txt ji neuvádí)
+- LCD 16×2 + I2C převodník → odstraněno z nakupu (není v nakup.txt)
+- Napájecí kabel JT003 2 m ×2 → nahrazeno 3×5 m
+- Digispark ATtiny85, CooperKit nRF24L01, mikrospínače 6×6, držáky CR2032 → stará DIY tlačítka
+- Raspberry Pi Zero 2 WH → vše = Pi 4
 
 GME kategorie — POZOR NA PŘEČÍSLOVÁNÍ KATALOGU:
 [OK]  c/14852 flexo šňůry   |  c/15098 CYA lanko  |  c/15458 displeje I2C
@@ -35,27 +50,3 @@ GME kategorie — POZOR NA PŘEČÍSLOVÁNÍ KATALOGU:
 [!!]  c/14868 je nově „Chemie pro mazání" (původně USB zvukové karty) → na Alza
 [!!]  c/15056 je nově „HDMI kabely" (původně tlačítka) → mikrospínač přímý produkt
 [!!]  c/15016 je nově „Bateriové kontakty" (původně držáky CR2032) → nepoužito
-
---------------------------------------------------------------------------------
-ALZA.cz — vyhledání + dostupnost:
-[OK]  Raspberry Pi 4 Model B 4 GB        ~3 029 Kč   Skladem (varianta 8/4/2 GB)  potřeba 3×
-[OK]  RPi 4B 8GB / 2GB                  4 629/1 899 Kč   Skladem >5 ks
-[!!]  JOY-IT RB-Heatsink Case (Alu)      NENALEZENO (jen chladič Pi 5)
-      → náhrady: Inter-Tech ODS-721 259 Kč (5 ks), JOY-IT Armor 299 Kč (4 ks)  potřeba 3×
-[OK]  Oficiální zdroj RPi 15,3 W černý   251 Kč   Skladem >10 ks                  potřeba 3×
-[OK]  Logitech C270                      599 Kč   Skladem >10 ks
-[OK]  Logitech C920 (nové)             1 599 Kč   Skladem >5 ks
-[OK]  alt webkamery: C922 2 499 / C920s 2 299 / Brio 300 1 299  → skladem
-[OK]  SanDisk Ultra 64GB Lite            549 Kč   Skladem >10 ks
-[OK]  SanDisk Ultra A1 64GB              699 Kč   Skladem >5 ks
-[OK]  SanDisk Extreme 64GB / PRO         799/829 Kč   Skladem >5 ks
-[OK]  SanDisk Ultra 32GB A1              499 Kč (doc ≈350 — cena vyšší)   Skladem >10 ks  potřeba 2×
-[OK]  micro-HDMI→HDMI kabel 1,8 m (JOY-IT) 109 Kč   Skladem >20 ks
-[OK]  Apexel Mini Tripod                 189/459 Kč   Skladem >10 ks
-[NEW] USB zvuková karta (Gembird, USB-A→3,5 mm)  ≈115–150 Kč   Skladem        potřeba 3×
-      (gme.cz kategorie zvukových karet je „Chemie pro mazání" — chyba katalogu → ALZA)
-[ODB] Raspberry Pi Zero 2 W              NEPOUŽITO (všechny boxy = Pi 4)
-
---------------------------------------------------------------------------------
-RPishop.cz:
-[ODB] Raspberry Pi Zero 2 W                — vyřazeno (jednotná platforma Pi 4)
