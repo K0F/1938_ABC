@@ -1,0 +1,15 @@
+# mapa.csv example — RF button code -> sample file for box B/C sampler
+#
+# Format: decimal_code, sample_file
+# - codes come from running `sampler --listen --box b` and pressing each button
+# - sample files live in samples/ (e.g. sample_b_01.wav .. sample_b_20.wav)
+# - one line per button, max 20 entries; '#' starts a comment
+#
+# Box B (sample_b_*.wav) — uncomment and fill in your real codes:
+#12200123, sample_b_01.wav
+#12200124, sample_b_02.wav
+#12200125, sample_b_03.wav
+#
+# Box C (sample_c_*.wav) — use sampler --box c with a different mapa.csv:
+#13370001, sample_c_01.wav
+#13370002, sample_c_02.wav

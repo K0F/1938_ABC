@@ -35,6 +35,80 @@ The webcam view can be angled, foreshortening ball positions. Define a planar re
 
 Trackers auto-initialize at startup at staggered positions; lost trackers attempt to re-acquire.
 
+## Box B/C — Sampler (`sampler`)
+
+**Boxes B and C** are wireless sampler triggers. Each runs the `sampler` binary: 20 wireless
+433 MHz buttons (Solight 1L67T, EV1527 protocol) trigger one-shot audio samples through
+SDL2_mixer. A 16×2 I2C display shows box / slot / hit status.
+
+- Button RF codes are read on **GPIO22** with a self-contained **EV1527 decoder over libgpiod**
+  (no rc-switch/wiringPi needed).
+- `mapa.csv` maps a button's **decimal RF code** → **sample file** (max 20 entries per box).
+- Samples are one-shot (a new press **retriggers** the sample); per-button debounce (default 300 ms)
+  collapses the button's ~4 repeated EV1527 frames into one trigger.
+- Box identity is selected with `--box b|c`; box C uses its own `mapa.csv` and `sample_c_*.wav`.
+
+### Build (Raspberry Pi OS)
+
+```bash
+sudo apt install -y libgpiod-dev libsdl2-dev libsdl2-mixer-dev
+make sampler
+```
+
+On a desktop without libgpiod the sampler still builds and runs in `--simulate` mode (RF off).
+
+### Usage
+
+```
+./sampler --box b|c [options]
+```
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--box b\|c` | — | box identity (required; shown on the LCD) |
+| `--map FILE` | `mapa.csv` | code → sample map |
+| `--samples-dir DIR` | `samples` | where the WAV files live |
+| `--lcd-addr HEX` | `0x27` | PCF8574 I2C address, or `off` |
+| `--te-us N` | `320` | EV1527 base timing in µs (tune per button) |
+| `--debounce-ms N` | `300` | per-button debounce window |
+| `--listen` | — | decode-only: print each new button code |
+| `--simulate` | — | read codes from stdin instead of the RF receiver |
+| `--version` / `-v` | — | print version and exit |
+
+### Recording button codes (fills `mapa.csv`)
+
+```bash
+# on the box, with the RF receiver wired to GPIO22:
+./sampler --box b --listen
+# press each button once; copy the printed `code=` numbers
+# into mapa.csv, e.g.:
+# 12200123, sample_b_01.wav
+```
+
+Then drop `samples/sample_b_01.wav` … `samples/sample_b_20.wav` (or `sample_c_*.wav` for box C)
+into `samples/` and run `./sampler --box b`. See `mapa.csv.example`.
+
+### Desktop / CI test
+
+```bash
+make sampler
+# simulate two presses; listen mode decodes+prints, normal mode plays audio:
+printf '12200123\n12200124\n' | ./sampler --box b --simulate --listen
+printf '12200123\n' | ./sampler --box b --simulate
+```
+
+### systemd autostart
+
+`sampler.service` runs `sampler --box b` at boot (`Restart=always`). Install with:
+
+```bash
+sudo cp sampler.service /etc/systemd/system/
+sudo cp sampler /usr/local/bin/sampler
+sudo systemctl enable --now sampler
+```
+
+Edit the `ExecStart=` line (and place a `mapa.csv` with box C codes) for box C.
+
 ## Build (Desktop Linux)
 
 ```bash
@@ -183,13 +257,16 @@ panel jacks, power distribution) are in [`docs/SCH.md`](docs/SCH.md). Czech lang
 - `docs/md2pdf.py` -- Markdown-to-PDF helper (markdown -> HTML -> LibreOffice)
 - `nakup.txt` -- verified shopping list (Czech)
 - `dostupnost.txt` -- availability check report (Czech)
-- `main.c` -- source
-- `Makefile` -- build system (desktop + Termux)
+- `main.c` -- tracker source (box A)
+- `sampler.c` -- box B/C sampler source (EV1527 RF + SDL2_mixer + LCD)
+- `mapa.csv.example` -- code → sample map template for the sampler
+- `sampler.service` -- systemd unit for autostart on B/C
+- `Makefile` -- build system (desktop + Termux; tracker + sampler)
 - `build_termux.sh` -- zero-dep Termux setup script
 - `remote_update.sh` -- pull + rebuild on Android over SSH
 - `calib.txt` -- saved perspective calibration (gitignored)
-- `samples/` -- audio loops
+- `samples/` -- audio loops (tracker) and samples (sampler)
 
 ## Version
 
-0.3.0
+0.5.0

@@ -2,9 +2,11 @@
 # Usage:  make              (desktop)
 #         make PLATFORM=termux
 
-CXX      ?= g++
+CXX       ?= g++
 SRC       = main.c
 BIN       = tracker
+SAMPLER_SRC = sampler.c
+SAMPLER_BIN = sampler
 GIT_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 
 # ── Platform detection ──
@@ -48,6 +50,15 @@ endif
 SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 SDL2_LIBS   := $(shell pkg-config --libs sdl2 SDL2_mixer 2>/dev/null || echo "-lSDL2 -lSDL2_mixer")
 
+# ── libgpiod (sampler RF receiver; optional on desktop) ──
+ifeq ($(shell pkg-config --exists libgpiod && echo yes),yes)
+    GPIOD_CFLAGS := $(shell pkg-config --cflags libgpiod) -DHAVE_GPIOD=1
+    GPIOD_LIBS   := $(shell pkg-config --libs libgpiod)
+else
+    GPIOD_CFLAGS := -DHAVE_GPIOD=0
+    GPIOD_LIBS   :=
+endif
+
 # ── Raylib ──
 RAYLIB_LIBS := $(shell pkg-config --libs raylib 2>/dev/null || echo "-lraylib")
 
@@ -60,15 +71,21 @@ endif
 ALL_CXXFLAGS = $(CXXFLAGS) $(OPENCV_CFLAGS) $(SDL2_CFLAGS) -DGIT_VERSION='"$(GIT_VERSION)"'
 ALL_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(RAYLIB_LIBS) $(OPENCV_LIBS) $(SYS_LIBS)
 
+SAMPLER_CXXFLAGS = $(CXXFLAGS) $(SDL2_CFLAGS) $(GPIOD_CFLAGS) -DGIT_VERSION='"$(GIT_VERSION)"'
+SAMPLER_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(GPIOD_LIBS) -lm -lpthread
+
 .PHONY: all clean docs
 
-all: $(BIN)
+all: $(BIN) $(SAMPLER_BIN)
 
 $(BIN): $(SRC)
 	$(CXX) $< -o $@ $(ALL_CXXFLAGS) $(ALL_LDFLAGS)
+
+$(SAMPLER_BIN): $(SAMPLER_SRC)
+	$(CXX) $< -o $@ $(SAMPLER_CXXFLAGS) $(SAMPLER_LDFLAGS)
 
 docs:
 	sh docs/build-docs.sh
 
 clean:
-	rm -f $(BIN) $(BIN)_test
+	rm -f $(BIN) $(BIN)_test $(SAMPLER_BIN)

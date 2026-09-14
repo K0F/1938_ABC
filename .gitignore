@@ -1,9 +1,16 @@
 tracker
 tracker_test
+sampler
 *.o
 *.obj
 *.so
 calib.txt
+
+# tool scratch
+__pycache__/
+*.pyc
+docs/log-docs-sync.txt
+session-*.md
 
 # generated docs
 docs/dot/*.pdf

@@ -162,7 +162,7 @@ Pi GPIO22 (pin 15) ◄── DATA ── SRX882S [VCC ◄── 3V3 (pin 1)]
 Pi GND (pin 6)     ◄────── GND ── SRX882S [ANT ── integrovaná anténa]
 ```
 - SRX882S (ASK/OOK, 433,92 MHz): DATA = 3,3 V logika, napájet **3V3**.
-- Dekódování: `rc-switch`/`433Utils` na GPIO 22. Mapa `kód → sample` (10 → B, 10 → C). Hlásit dosah se zavřeným víkem.
+- Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 22. Mapa `kód → sample` (10 → B, 10 → C). Hlásit dosah se zavřeným víkem.
 
 ---
 

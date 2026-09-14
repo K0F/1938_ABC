@@ -158,7 +158,7 @@ Pouze **mapa tlačítek a nastavený obor vzorků je jiná** (C = sekce vzorků 
    │ [GND] ───► GND (pin 6)
    └──────────┘    (pokud napájíte 5 V, DATA = 5 V logika → převodník!)
 ```
-- Dekódování: `rc-switch` (C: `RCSwitch rc; rc.enableReceive(22);`) nebo `433Utils`.
+- Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 22. Mapa `kód → sample` (10 → B, 10 → C). Hlásit dosah se zavřeným víkem.
 - **První nastavení**: každým tlačítkem stisknout a zapsat kód → soubor `mapa.csv`:
 
   ```
