@@ -1,7 +1,7 @@
 # Tracker
 
 **Režie:** Barbora Jeřábková  
-**Realizace:** Pavel Sterec, Matouš Hakela, Kryštof Pešek
+**Realizace:** Pavel Sterec, Matouš Hakela, Kryštof Pešek  
 **Produkce:** Jakub Beran
 
 Webcam-based multi-track amplitude modulation player. Tracked balls control volume of audio loops via SDL2_mixer, with perspective-correction for angled camera setups.
