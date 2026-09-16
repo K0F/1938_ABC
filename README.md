@@ -1,272 +1,172 @@
-# Tracker
+# Multi-Track Audio Tracker & RF Sampler
+
+Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní zvukovou instalaci:
+1. **Tracker (Box A)**: Přehrávač s amplitudovou modulací více stop založený na webkameře. Sledované barevné míčky ovládají hlasitost zvukových smyček s korekcí perspektivy.
+2. **Sampler (Box B & C)**: Bezdrátový sampler, ve kterém 433 MHz RF tlačítka spouští jednorázové zvukové samply.
 
 **Režie:** Barbora Jeřábková  
 **Realizace:** Pavel Sterec, Matouš Hakela, Kryštof Pešek  
 **Produkce:** Jakub Beran
 
-Webcam-based multi-track amplitude modulation player. Tracked balls control volume of audio loops via SDL2_mixer, with perspective-correction for angled camera setups.
+---
 
-## How it works
- 
- Each ball controls four audio loops via its perspective-corrected position:
- 
- - **Ball 1 (red)**: Y-axis (top) -> Track 1 (War), Y-axis (bottom) -> Track 2 (Peace), X-axis (left) -> Track 3 (Retro), X-axis (right) -> Track 4 (Futuro)
- - **Ball 2 (green)**: Controls tracks 5-8 following the same pattern
- - All tracks loop continuously, volume modulated in real-time by ball position
- - If a ball is not detected (lost), its tracks go **silent** (volume -> 0)
+## 1. Tracker (Box A)
 
-## Perspective correction
+Tracker používá webkameru k detekci polohy fyzických míčků (až 16) a mapuje jejich X/Y souřadnice na hlasitost neustále hrajících zvukových stop.
 
-The webcam view can be angled, foreshortening ball positions. Define a planar region with 4 draggable corner handles; ball positions are rectified through a homography before mapping to volume.
+### Jak to funguje
+Každý sledovaný míček ovládá čtyři zvukové smyčky:
+- **Míček 1 (červený)**: Osa Y (nahoře) -> Stopa 1, Osa Y (dole) -> Stopa 2, Osa X (vlevo) -> Stopa 3, Osa X (vpravo) -> Stopa 4
+- **Míček 2 (zelený)**: Ovládá stopy 5-8 podle stejného vzoru, a tak dále.
+- Všechny stopy se neustále opakují a hlasitost je modulována v reálném čase podle polohy míčku.
+- Pokud míček není detekován (je ztracen), jeho stopy **ztichnou** (hlasitost = 0). Ztracené trackery se automaticky pokusí znovu cíl zaměřit.
 
-- **Drag** the 4 corner handles (red circles = X axis, blue circles = Y axis) to outline the tracking plane
-- **S** -- save calibration to `calib.txt` (auto-loaded next run)
-- **R** -- reset corners to the full frame
-- A perspective grid + quadrant crosshair is overlaid so you can see the rectification
+### Korekce perspektivy
+Pokud je webkamera nakloněna, může být sledovaná plocha zkreslená. Software to koriguje pomocí homografické projekce.
+- **Táhnutím** 4 rohových bodů (červené kruhy = osa X, modré kruhy = osa Y) ohraničíte reálnou sledovanou plochu.
+- **S** – uloží kalibraci do `calib.txt` (automaticky se načte při dalším spuštění).
+- **R** – resetuje rohy na plný snímek.
+Pro snazší vizualizaci rektifikace je přes obraz překryta perspektivní mřížka.
 
-## Usage / arguments
+### Závislosti (Tracker)
+| Knihovna | Verze | Poznámky |
+|---------|---------|-------|
+| Raylib | 5.x-6.x | Vykreslování oken a vstup |
+| OpenCV | 4.x-5.x | Zpracování obrazu, kalibrace, sledování |
+| SDL2 + SDL2_mixer | 2.x | Přehrávání zvuku a ovládání hlasitosti |
 
+### Sestavení (Desktop Linux)
+```bash
+make
 ```
-./tracker [N]
+
+### Sestavení (Android / Termux)
+Rychlá instalace v čistém Termuxu bez dalších závislostí:
+```bash
+git clone <repo-url> tracker
+cd tracker
+bash build_termux.sh # Jednorázová instalace a sestavení
+```
+*(Pro manuální kroky a řešení problémů na Termuxu viz sekci [Řešení problémů](#řešení-problémů))*
+
+### Spuštění Trackeru
+Umístěte své WAV soubory jako `samples/track1.wav` až `samples/track8.wav` do složky `samples`, poté spusťte tracker:
+```bash
+# ./tracker [počet_míčků]
+./tracker 2  # Sleduje 2 míčky, ovládá stopy 1-8
 ```
 
-- `N` -- number of balls to track (default `1`, max `16`)
-- Example: `./tracker 2` tracks two balls, controlling tracks 1-8
+### Ovládání (Tracker)
+| Vstup | Akce |
+|-------|--------|
+| Tažení myší / Dotyk | Přesun nejbližšího rohového bodu |
+| `S` | Uloží kalibraci do `calib.txt` |
+| `R` | Resetuje rohy na celý obraz |
 
-Trackers auto-initialize at startup at staggered positions; lost trackers attempt to re-acquire.
+---
 
-## Box B/C — Sampler (`sampler`)
+## 2. Sampler (Boxy B & C)
 
-**Boxes B and C** are wireless sampler triggers. Each runs the `sampler` binary: 20 wireless
-433 MHz buttons (Solight 1L67T, EV1527 protocol) trigger one-shot audio samples through
-SDL2_mixer. A 16×2 I2C display shows box / slot / hit status.
+Sampler funguje jako samostatná bezdrátová spouštěcí jednotka. Využívá 433 MHz RF přijímač pro příjem signálů z 20 bezdrátových tlačítek (Solight 1L67T, protokol EV1527) a přehrává jednorázové zvukové samply přes `SDL2_mixer`. Také může volitelně aktualizovat stav úderů na 16×2 I2C displeji.
 
-- Button RF codes are read on **GPIO22** with a self-contained **EV1527 decoder over libgpiod**
-  (no rc-switch/wiringPi needed).
-- `mapa.csv` maps a button's **decimal RF code** → **sample file** (max 20 entries per box).
-- Samples are one-shot (a new press **retriggers** the sample); per-button debounce (default 300 ms)
-  collapses the button's ~4 repeated EV1527 frames into one trigger.
-- Box identity is selected with `--box b|c`; box C uses its own `mapa.csv` and `sample_c_*.wav`.
+- RF kódy jsou dekódovány nativně na **GPIO22** pomocí interního EV1527 dekodéru přes `libgpiod` (není potřeba rc-switch/wiringPi).
+- Samply jsou jednorázové a spouští se znovu při každém stisknutí.
+- Identita boxu (`b` nebo `c`) určuje, jaké samply a jaký mapovací soubor se použijí.
 
-### Build (Raspberry Pi OS)
-
+### Sestavení (Raspberry Pi OS)
 ```bash
 sudo apt install -y libgpiod-dev libsdl2-dev libsdl2-mixer-dev
 make sampler
 ```
+*Poznámka: Na PC bez GPIO se sampler stále úspěšně sestaví a lze jej testovat v režimu `--simulate`.*
 
-On a desktop without libgpiod the sampler still builds and runs in `--simulate` mode (RF off).
-
-### Usage
-
-```
-./sampler --box b|c [options]
+### Spuštění Sampleru
+```bash
+./sampler --box b [možnosti]
 ```
 
-| Option | Default | Meaning |
+| Možnost | Výchozí | Význam |
 |--------|---------|---------|
-| `--box b\|c` | — | box identity (required; shown on the LCD) |
-| `--map FILE` | `mapa.csv` | code → sample map |
-| `--samples-dir DIR` | `samples` | where the WAV files live |
-| `--lcd-addr HEX` | `0x27` | PCF8574 I2C address, or `off` |
-| `--te-us N` | `320` | EV1527 base timing in µs (tune per button) |
-| `--debounce-ms N` | `300` | per-button debounce window |
-| `--listen` | — | decode-only: print each new button code |
-| `--simulate` | — | read codes from stdin instead of the RF receiver |
-| `--version` / `-v` | — | print version and exit |
+| `--box b\|c` | — | Identita boxu (vyžadováno, zobrazeno na LCD) |
+| `--map SOUBOR` | `mapa.csv` | Soubor mapující kódy na samply |
+| `--samples-dir SLOŽKA` | `samples` | Složka obsahující WAV soubory |
+| `--lcd-addr HEX` | `0x27` | I2C adresa PCF8574 displeje, nebo `off` |
+| `--te-us N` | `320` | Základní časování EV1527 v µs (nutno doladit pro každé tlačítko) |
+| `--debounce-ms N` | `300` | Časové okno pro debounce každého tlačítka |
+| `--listen` | — | Režim pouhého poslechu: vypíše každý detekovaný kód |
+| `--simulate` | — | Načítá kódy ze standardního vstupu (stdin) místo RF přijímače |
 
-### Recording button codes (fills `mapa.csv`)
-
+### Mapování a nahrávání tlačítek
+Použijte přepínač `--listen` ke zjištění desítkového RF kódu každého fyzického tlačítka:
 ```bash
-# on the box, with the RF receiver wired to GPIO22:
 ./sampler --box b --listen
-# press each button once; copy the printed `code=` numbers
-# into mapa.csv, e.g.:
-# 12200123, sample_b_01.wav
 ```
+Stiskněte každé tlačítko a zkopírujte vypsaná čísla `code=` do `mapa.csv`. Formát:
+```csv
+12200123, sample_b_01.wav
+```
+Umístěte příslušné soubory (`sample_b_*.wav` nebo `sample_c_*.wav`) do složky `samples/`.
 
-Then drop `samples/sample_b_01.wav` … `samples/sample_b_20.wav` (or `sample_c_*.wav` for box C)
-into `samples/` and run `./sampler --box b`. See `mapa.csv.example`.
-
-### Desktop / CI test
-
+### Testování na desktopu
 ```bash
-make sampler
-# simulate two presses; listen mode decodes+prints, normal mode plays audio:
+# Simulace stisku dvou tlačítek, pouze vypíše dekódování:
 printf '12200123\n12200124\n' | ./sampler --box b --simulate --listen
+# Přehrání zvuku pro simulované stisky:
 printf '12200123\n' | ./sampler --box b --simulate
 ```
 
-### systemd autostart
-
-`sampler.service` runs `sampler --box b` at boot (`Restart=always`). Install with:
-
+### Automatické spuštění (systemd)
 ```bash
 sudo cp sampler.service /etc/systemd/system/
 sudo cp sampler /usr/local/bin/sampler
 sudo systemctl enable --now sampler
 ```
+*Pro Box C upravte řádek `ExecStart=` ve spouštěcím souboru služby.*
 
-Edit the `ExecStart=` line (and place a `mapa.csv` with box C codes) for box C.
+---
 
-## Build (Desktop Linux)
+## Hardware / BOM (Česky)
+Kompletní požadavky na hardware a nákupní seznam naleznete v souboru [`HW.md`](HW.md). 
+Systém běží na sestavě tří zařízení (vše Raspberry Pi 4, 8 GB). Box A je tracker s webkamerou, zatímco Boxy B/C jsou bezdrátové spouštěče samplů. Každý box má vlastní USB zvukovou kartu (AXAGON ADA-17), panelové audio výstupy a interní reproduktor se zesilovačem.
+Kompletní schémata zapojení jsou k dispozici v [`docs/SCH.md`](docs/SCH.md).
 
+---
+
+## Řešení problémů
+
+### Problémy s kamerou na Termuxu
+Android neposkytuje přímý přístup k `/dev/video0`. OpenCV `VideoCapture(0)` vyžaduje buď USB webkameru přes OTG adaptér, nebo přesměrování z `termux-camera-photo` do virtuálního zařízení (experimentální).
+
+### Konflikty mezi Termux Qt6 a OpenCV
+Pokud se OpenCV nenainstaluje na Termuxu kvůli chybám v závislostech Qt6:
 ```bash
-make
-# or manually:
-g++ main.c -o tracker -I/usr/include/opencv5 \
-    $(pkg-config --cflags --libs sdl2 SDL2_mixer) \
-    -lraylib -lopencv_core -lopencv_videoio -lopencv_video \
-    -lopencv_imgproc -lopencv_calib -lopencv_geometry -lopencv_tracking \
-    -lGL -lm -lpthread -ldl -lrt -lX11
+pkg upgrade -y && apt --fix-broken install -y && pkg install -y opencv
 ```
+Pokud to selže, spusťte `build_termux.sh`, který sestaví OpenCV ze zdrojových kódů bez podpory Qt.
 
-## Build (Android / Termux)
-
-Zero-dependency install from a fresh Termux session:
-
+### Nastavení GUI na Termuxu (X11)
 ```bash
-# Clone the repo
-git clone <repo-url> tracker
-cd tracker
-
-# One-shot install + build (installs all deps automatically)
-bash build_termux.sh
-```
-
-Or step-by-step:
-
-```bash
-# 1. Enable x11-repo (for opencv, raylib, sdl2-mixer)
-pkg install -y x11-repo
-
-# 2. Install dependencies
-pkg update -y
-pkg install -y clang make pkg-config opencv raylib sdl2 sdl2-mixer
-
-# 3. Build
-make
-# or: make PLATFORM=termux
-```
-
-### Termux runtime requirements
-
-| Component | Package | Purpose |
-|-----------|---------|---------|
-| Camera | `termux-api` | Access device camera from CLI |
-| Display | `termux-x11` or VNC | Render the window |
-| Audio | Built-in | SDL2_mixer works out of the box |
-
-```bash
-# Install termux-api for camera access
-pkg install termux-api
-
-# Option A: termux-x11 (recommended, better performance)
 pkg install termux-x11
-# In another session:
 termux-x11 :0 &
 export DISPLAY=:0
 ./tracker
-
-# Option B: VNC
-pkg install tigervnc
-vncserver :1 -geometry 1280x720
-export DISPLAY=:1
-./tracker
 ```
 
-### Camera on Android
+### Chybějící knihovny (Linux)
+- **-lraylib**: `pkg install -y x11-repo && pkg install -y raylib`
+- **-lGL**: `pkg install -y mesa`
 
-Android does not expose `/dev/video0`. Use `termux-api` to pipe camera frames, or run the tracker on a device with USB webcam OTG support. OpenCV's `VideoCapture(0)` requires either:
-- A USB webcam via OTG (some Android devices support this)
-- `termux-camera-photo` piped to a virtual device (experimental)
+---
 
-## Run
+## Struktura projektu
+- `main.c` — Zdrojový kód aplikace Tracker
+- `sampler.c` — Zdrojový kód aplikace Sampler (EV1527 RF + SDL2_mixer + volitelně LCD)
+- `Makefile` — Systém sestavení
+- `mapa.csv.example` — Šablona pro mapování RF kódů na zvukové stopy
+- `build_termux.sh` — Skript pro nastavení v prostředí Termux
+- `sampler.service` — systemd služba pro automatický start Boxů B/C
+- `docs/` — Schémata, manuály a generátory PDF
+- `HW.md` / `nakup.txt` / `dostupnost.txt` — Seznam hardwaru a součástek (česky)
 
-Place WAV files as `samples/track1.wav` through `samples/track8.wav` (only those needed for your ball count), then:
-
-```
-./tracker
-```
-
-## Dependencies
-
-| Library | Version | Notes |
-|---------|---------|-------|
-| Raylib | 5.x-6.x | Windowing, rendering, input |
-| OpenCV | 4.x-5.x | core, video, videoio, imgproc, calib, geometry, tracking |
-| SDL2 + SDL2_mixer | 2.x | Audio playback and volume control |
-
-## Controls
-
-| Input | Action |
-|-------|--------|
-| Mouse drag / Touch | Move nearest corner handle |
-| `S` | Save calibration to `calib.txt` |
-| `R` | Reset corners to full frame |
-
-## Troubleshooting
-
-### Qt6 / opencv package fails to install on Termux
-
-Known issue: Termux's Qt6 packages occasionally have dependency conflicts (`qt6-qtbase`, `qt6-qtwayland`, `qt6-qt5compat`). The `opencv` package depends on Qt6.
-
-**Fix (try first):**
-```bash
-pkg upgrade -y
-apt --fix-broken install -y
-pkg install -y opencv
-```
-
-**If that fails:** The `build_termux.sh` script automatically detects this and builds OpenCV from source without Qt (~15-25 min on phone). The tracker only uses OpenCV for image processing and tracking, not GUI, so Qt is not needed.
-
-**Manual fallback:**
-```bash
-pkg install -y clang make cmake git pkg-config raylib sdl2 sdl2-mixer
-# Then install opencv .deb with force (skip broken Qt6 deps):
-wget https://packages.termux.dev/apt/termux-x11/pool/main/o/opencv/opencv_*.deb
-dpkg -i --force-depends opencv_*.deb
-```
-
-### Build fails: "cannot find -lraylib"
-
-Ensure x11-repo is enabled: `pkg install -y x11-repo && pkg install -y raylib`
-
-### Build fails: "cannot find -lGL"
-
-Install OpenGL: `pkg install -y mesa`
-
-## Hardware / BOM (Czech)
-
-See [`HW.md`](HW.md) for the full hardware requirements and order list — 3-box setup
-(all three boxes = the same **Raspberry Pi 4 (8 GB)**; box A = tracker + webcam, boxes
-B/C = wireless sampler triggers), each box has its **own USB sound card (AXAGON ADA-17)**
-and a **panel-mount 3.5 mm stereo output jack**, **internal speaker + amplifier
-(CA-3110S + LS40N)**, 20 ready-made 433 MHz wireless buttons
-(Solight 1L67T), 3× 5 m mains cord, price estimate and GPIO wiring schemes. Complete
-connection diagrams for every part (box A/B/C, RF receiver SRX882S, USB sound cards +
-panel jacks, power distribution) are in [`docs/SCH.md`](docs/SCH.md). Czech language.
-
-## Files
-
-- `HW.md` -- hardware requirements / order list (Czech)
-- `docs/SCH.md` -- wiring schematics for all connected parts (Czech)
-- `docs/tracker_manual.pdf` -- user manual
-- `docs/HW.pdf` -- hardware requirements / order list (PDF)
-- `docs/SCH.pdf` -- wiring schematics (PDF)
-- `docs/md2pdf.py` -- Markdown-to-PDF helper (markdown -> HTML -> LibreOffice)
-- `nakup.txt` -- verified shopping list (Czech)
-- `dostupnost.txt` -- availability check report (Czech)
-- `main.c` -- tracker source (box A)
-- `sampler.c` -- box B/C sampler source (EV1527 RF + SDL2_mixer + LCD)
-- `mapa.csv.example` -- code → sample map template for the sampler
-- `sampler.service` -- systemd unit for autostart on B/C
-- `Makefile` -- build system (desktop + Termux; tracker + sampler)
-- `build_termux.sh` -- zero-dep Termux setup script
-- `remote_update.sh` -- pull + rebuild on Android over SSH
-- `calib.txt` -- saved perspective calibration (gitignored)
-- `samples/` -- audio loops (tracker) and samples (sampler)
-
-## Version
-
+## Verze
 0.5.0
