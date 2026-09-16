@@ -16,3 +16,7 @@ session-*.md
 docs/dot/*.pdf
 docs/*.pdf
 *.html
+
+# QEMU Raspberry Pi 4 image assets
+rom/*
+!rom/.gitkeep
