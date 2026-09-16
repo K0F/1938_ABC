@@ -159,7 +159,9 @@ run() {
 
     step "Booting $(basename "$IMG") in QEMU (raspi4b)"
     echo "  Ctrl-A X  to quit QEMU"
-    echo "  SSH:      ssh -p $SSH_PORT $RPI_USER@localhost  (pass: $RPI_PASS)"
+    echo
+    echo "  NOTE: qemu's raspi4b has no working NIC (usb-net RNDIS fails)."
+    echo "  No SSH/apt inside the VM; install build deps with 'provision'."
     echo
 
     exec qemu-system-aarch64 \
@@ -176,7 +178,7 @@ run() {
         -device usb-kbd \
         -device usb-net,netdev=net0 \
         -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22 \
-        -append "root=/dev/mmcblk1p2 rootwait rw console=ttyAMA1,115200"
+        -append "root=/dev/mmcblk1p2 rootwait rw console=ttyAMA0,115200 earlycon=pl011,0xfe201000"
 }
 
 # ─────────────────────────────────────────────────────────────
