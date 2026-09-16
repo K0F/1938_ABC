@@ -13,7 +13,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROM_DIR="$SCRIPT_DIR/rom"
-IMG_PATTERN="$ROM_DIR/*.img"
+IMG_PATTERN="$ROM_DIR/raspios-*.img"
 
 FIRMWARE_BASE="https://github.com/raspberrypi/firmware/raw/master/boot"
 OVERLAY_BASE="$FIRMWARE_BASE/overlays"
@@ -34,6 +34,7 @@ step() { echo; echo "=== $* ==="; }
 find_image() {
     local img
     if [ -n "$1" ]; then img="$1"; else img=$(ls $IMG_PATTERN 2>/dev/null | head -1); fi
+    [ "$(basename "$img")" = "$KERNEL_IMG" ] && die "Refusing to use $KERNEL_IMG (kernel, not a disk image)."
     [ -n "$img" ] && [ -f "$img" ] || die "No image found. Run 'setup' first or pass an image path."
     echo "$img"
 }
