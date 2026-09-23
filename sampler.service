@@ -5,6 +5,7 @@ Wants=sound.target
 
 [Service]
 Type=simple
+WorkingDirectory=/home/pi/tracker
 ExecStart=/usr/local/bin/sampler --box b
 Restart=always
 RestartSec=2

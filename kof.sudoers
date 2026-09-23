@@ -1,0 +1,5 @@
+# /etc/sudoers.d/kof — allow kof (no password) to:
+#  - mount/unmount block devices (SD cards, USB)
+#  - write/verify block devices (dd, blockdev, losetup, sync, eject)
+#  - run the tracker SD-card prep/burn scripts
+kof ALL=(root) NOPASSWD: /usr/bin/mount, /usr/bin/umount, /usr/bin/dd, /usr/bin/sync, /usr/bin/blockdev, /usr/bin/losetup, /usr/bin/eject, /usr/bin/systemctl, /home/kof/src/tracker/prepare-sd.sh, /home/kof/src/tracker/qemu_raspi4.sh

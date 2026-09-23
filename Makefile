@@ -10,7 +10,7 @@ SAMPLER_BIN = sampler
 GIT_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 
 # ── Platform detection ──
-PLATFORM ?= $(shell uname -m | sed 's/x86_64/desktop/;s/aarch64/termux/')
+PLATFORM ?= $(shell [ -d /data/data/com.termux/files/usr ] && echo termux || echo desktop)
 
 ifeq ($(PLATFORM),termux)
     PREFIX  ?= /data/data/com.termux/files/usr
