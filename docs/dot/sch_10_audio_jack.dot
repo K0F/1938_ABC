@@ -1,4 +1,4 @@
-// SCH §8 — Zvukové výstupy — panelové stereo jacky
+// SCH §7 — Zvukové výstupy — panelové stereo jacky
 digraph G {
     graph [fontname="DejaVu Sans" rankdir=TB bgcolor="white" nodesep=0.6 ranksep=0.8];
 node [fontname="DejaVu Sans" fontsize=12 style="filled"];
@@ -9,7 +9,7 @@ zvuk [label="USB zvuková karta\n(každý box)\n3,5 mm stereo OUT" shape=box sty
 
 // Branches
 a_přímo [label="Box A: přímo" shape=box fillcolor="#bbdefb"];
-bc_y [label="Boxy B/C:\nY-rozdvojka\nPremiumCord" shape=box style="filled,rounded" fillcolor="#ffe0b2"];
+bc_y [label="Box B:\nY-rozdvojka\nPremiumCord" shape=box style="filled,rounded" fillcolor="#ffe0b2"];
 
 // Panel jack
 subgraph cluster_jack {
@@ -27,7 +27,7 @@ output [label="→ Stereo kabel\n→ mixážní pult /\npódiový zesilovač / D
 
 // Connections
 zvuk -> a_přímo [label="  A: přímo  " style=dashed];
-zvuk -> bc_y [label="  B/C: přes Y  "];
+zvuk -> bc_y [label="  B: přes Y  "];
 bc_y -> tip [label="  TIP  "];
 bc_y -> ring [label="  RING  "];
 bc_y -> sleeve [label="  SLEEVE  "];

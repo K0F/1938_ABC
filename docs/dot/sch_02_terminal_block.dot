@@ -1,24 +1,25 @@
-// SCH §2.1 — Přípojka 230 V (svorkovnice KLS 3pól) — box A
+// SCH §2.1 — Přípojka 230 V (svorkovnice KLS 2pól + PE) — box A
 digraph G {
     graph [fontname="DejaVu Sans" rankdir=TB bgcolor="white" nodesep=0.5 ranksep=0.7];
 node [fontname="DejaVu Sans" fontsize=12 style="filled"];
 edge [fontname="DejaVu Sans" fontsize=10];
 
 // Source
-siet [label="Síť 230 V\nzásuvka / šňůra\nJT003 H05VV-F 3×1,5\n(10 m)" shape=oval fillcolor="#fff9c4"];
+siet [label="Síť 230 V\nzásuvka / šňůra\nJT003 H05VV-F 3×1,5\n(5 m)" shape=oval fillcolor="#fff9c4"];
 pruchodka [label="Kabelová průchodka\nboxu A" shape=box style="filled,rounded" fillcolor="#e0e0e0"];
 
-// Terminal block
+// Terminal block — 2-pole block (L/N) as purchased (KLS 301-5.00-02P)
 subgraph cluster_svorkovnice {
-    label="Svorkovnice KLS 3pól";
+    label="Svorkovnice KLS 2pól";
     style="filled,rounded";
     fillcolor="#f5f5f5";
     fontsize=10;
 
-    L [label="L\n(černý)" shape=box fillcolor="#ffcdd2" width=1.2];
-    N [label="N" shape=box fillcolor="#bbdefb" width=1.2];
-    PE [label="PE\n(žluto-zelený)" shape=box fillcolor="#c8e6c9" width=1.2];
+    L [label="L\n(hnědý)" shape=box fillcolor="#ffcdd2" width=1.2];
+    N [label="N\n(modrý)" shape=box fillcolor="#bbdefb" width=1.2];
 }
+
+PE [label="PE\n(žluto-zelený)\nsamostatně" shape=box fillcolor="#c8e6c9" width=1.4];
 
 // Outputs
 zasuvka_A [label="Zásuvka / kabel\nzdroje 15,3 W\n(box A — vlastní zdroj)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
@@ -32,6 +33,6 @@ L -> zasuvka_A [label="  L  " color="#d32f2f"];
 N -> zasuvka_A [label="  N  " color="#1565c0"];
 PE -> zem [label="  PE  " color="#2e7d32"];
 
-note [label="Každý box se zapojuje do 230 V\nsamostatně — B a C stejně jako A.\nBoxy nejsou zapojeny do série." shape=note fillcolor="#f5f5f5" fontsize=10];
+note [label="Každý box se zapojuje do 230 V\nsamostatně — B stejně jako A.\nBoxy nejsou zapojeny do série." shape=note fillcolor="#f5f5f5" fontsize=10];
 zasuvka_A -> note [style=dotted color="#666666"];
 }

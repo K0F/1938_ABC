@@ -5,7 +5,7 @@ node [fontname="DejaVu Sans" fontsize=12 style="filled"];
 edge [fontname="DejaVu Sans" fontsize=10];
 
 // Source
-zvuk [label="USB zvuková karta\n(Gembird)\n3,5 mm stereo OUT" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2.2];
+zvuk [label="USB zvuková karta\nAXAGON ADA-17\n3,5 mm stereo OUT" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2.2];
 
 // Y-splitter
 y [label="Y-rozdvojka\nPremiumCord\nJACK 3,5 M → 2× JACK 3,5 F" shape=box style="filled,rounded" fillcolor="#ffe0b3" width=2.2];

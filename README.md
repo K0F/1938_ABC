@@ -2,7 +2,7 @@
 
 Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní zvukovou instalaci:
 1. **Tracker (Box A)**: Přehrávač s amplitudovou modulací více stop založený na webkameře. Sledované barevné míčky ovládají hlasitost zvukových smyček s korekcí perspektivy.
-2. **Sampler (Box B & C)**: Bezdrátový sampler, ve kterém 433 MHz RF tlačítka spouští jednorázové zvukové samply.
+2. **Sampler (Box B)**: Bezdrátový sampler, ve kterém 433 MHz RF tlačítka spouští jednorázové zvukové samply.
 
 **Režie:** Barbora Jeřábková  
 **Realizace:** Pavel Sterec, Matouš Hakela, Kryštof Pešek  
@@ -65,13 +65,13 @@ Umístěte své WAV soubory jako `samples/track1.wav` až `samples/track8.wav` d
 
 ---
 
-## 2. Sampler (Boxy B & C)
+## 2. Sampler (Box B)
 
-Sampler funguje jako samostatná bezdrátová spouštěcí jednotka. Využívá 433 MHz RF přijímač pro příjem signálů z 20 bezdrátových tlačítek (Solight 1L67T, protokol EV1527) a přehrává jednorázové zvukové samply přes `SDL2_mixer`. Také může volitelně aktualizovat stav úderů na 16×2 I2C displeji.
+Sampler funguje jako samostatná bezdrátová spouštěcí jednotka. Využívá 433 MHz RF přijímač pro příjem signálů z 10 bezdrátových tlačítek (Solight 1L67T, protokol EV1527) a přehrává jednorázové zvukové samply přes `SDL2_mixer`. Také může volitelně aktualizovat stav úderů na 16×2 I2C displeji.
 
 - RF kódy jsou dekódovány nativně na **GPIO22** pomocí interního EV1527 dekodéru přes `libgpiod` (není potřeba rc-switch/wiringPi).
 - Samply jsou jednorázové a spouští se znovu při každém stisknutí.
-- Identita boxu (`b` nebo `c`) určuje, jaké samply a jaký mapovací soubor se použijí.
+- Identita boxu (`b`) určuje, jaké samply a jaký mapovací soubor se použijí.
 
 ### Sestavení (Raspberry Pi OS)
 ```bash
@@ -87,7 +87,7 @@ make sampler
 
 | Možnost | Výchozí | Význam |
 |--------|---------|---------|
-| `--box b\|c` | — | Identita boxu (vyžadováno, zobrazeno na LCD) |
+| `--box b` | — | Identita boxu (vyžadováno, zobrazeno na LCD) |
 | `--map SOUBOR` | `mapa.csv` | Soubor mapující kódy na samply |
 | `--samples-dir SLOŽKA` | `samples` | Složka obsahující WAV soubory |
 | `--lcd-addr HEX` | `0x27` | I2C adresa PCF8574 displeje, nebo `off` |
@@ -105,7 +105,7 @@ Stiskněte každé tlačítko a zkopírujte vypsaná čísla `code=` do `mapa.cs
 ```csv
 12200123, sample_b_01.wav
 ```
-Umístěte příslušné soubory (`sample_b_*.wav` nebo `sample_c_*.wav`) do složky `samples/`.
+Umístěte příslušné soubory (`sample_b_*.wav`) do složky `samples/`.
 
 ### Testování na desktopu
 ```bash
@@ -121,13 +121,13 @@ sudo cp sampler.service /etc/systemd/system/
 sudo cp sampler /usr/local/bin/sampler
 sudo systemctl enable --now sampler
 ```
-*Pro Box C upravte řádek `ExecStart=` ve spouštěcím souboru služby.*
+*Služba je předkonfigurována pro Box B (`--box b`); vzorový soubor obsahuje `WorkingDirectory=/home/pi/tracker`.*
 
 ---
 
 ## Hardware / BOM (Česky)
 Kompletní požadavky na hardware a nákupní seznam naleznete v souboru [`HW.md`](HW.md). 
-Systém běží na sestavě tří zařízení (vše Raspberry Pi 4, 8 GB). Box A je tracker s webkamerou, zatímco Boxy B/C jsou bezdrátové spouštěče samplů. Každý box má vlastní USB zvukovou kartu (AXAGON ADA-17), panelové audio výstupy a interní reproduktor se zesilovačem.
+Systém běží na sestavě dvou zařízení (vše Raspberry Pi 4, 8 GB). Box A je tracker s webkamerou, zatímco Box B je bezdrátový spouštěč samplů. Každý box má vlastní USB zvukovou kartu (AXAGON ADA-17), panelové audio výstupy a interní reproduktor se zesilovačem.
 Kompletní schémata zapojení jsou k dispozici v [`docs/SCH.md`](docs/SCH.md).
 
 ---
@@ -164,7 +164,7 @@ export DISPLAY=:0
 - `Makefile` — Systém sestavení
 - `mapa.csv.example` — Šablona pro mapování RF kódů na zvukové stopy
 - `build_termux.sh` — Skript pro nastavení v prostředí Termux
-- `sampler.service` — systemd služba pro automatický start Boxů B/C
+- `sampler.service` — systemd služba pro automatický start Boxu B
 - `docs/` — Schémata, manuály a generátory PDF
 - `HW.md` / `nakup.txt` / `dostupnost.txt` — Seznam hardwaru a součástek (česky)
 

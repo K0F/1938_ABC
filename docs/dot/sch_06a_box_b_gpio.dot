@@ -6,7 +6,7 @@ edge [fontname="DejaVu Sans" fontsize=10];
 
 // Pi 4 GPIO pins
 subgraph cluster_pi {
-    label="Raspberry Pi 4 (4 GB) — BOX B";
+    label="Raspberry Pi 4 (8 GB) — BOX B";
     style="filled,rounded";
     fillcolor="#e3f2fd";
     fontsize=12;
@@ -61,6 +61,6 @@ srx -> pin15 [label="  DATA  " color="#ff6f00" penwidth=1.5];
 pin37 -> led_gnd [label="  330 Ω → LED  " color="#2e7d32" penwidth=1.2];
 
 // USB
-zvuk [label="USB zvuková karta\n(Gembird)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+zvuk [label="USB zvuková karta\nAXAGON ADA-17" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
 usb_a -> zvuk [label="  USB-A  " style=dashed];
 }

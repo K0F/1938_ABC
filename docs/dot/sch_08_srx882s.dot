@@ -1,4 +1,4 @@
-// SCH §5.2 — SRX882S (přijímač 433 MHz) pinout
+// SCH §4.2 — SRX882S (přijímač 433 MHz) pinout
 digraph G {
     graph [fontname="DejaVu Sans" rankdir=LR bgcolor="white" nodesep=0.6 ranksep=0.8];
 node [fontname="DejaVu Sans" fontsize=12 style="filled"];

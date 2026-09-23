@@ -1,10 +1,10 @@
 # Schémata zapojení — Tracker (všechna propojení)
 
 Dokument navazuje na [`HW.md`](../HW.md). Pokrývá **všechna elektrická propojení** sestavy:
-box A (hlavní), boxy B/C (samplerové spouštěče), 20 bezdrátových tlačítek (433 MHz, hotová)
+box A (hlavní), box B (samplerový spouštěč), 10 bezdrátových tlačítek (433 MHz, hotová)
 a rozvod napájení. GPIO čísla jsou **BCM**, v závorce číslo pinu 40pin konektoru.
 
-Verze: 10. 9. 2026 — **všechny boxy Raspberry Pi 4 8 GB (stejný model)**, každý box má
+Verze: 23. 9. 2026 — **oba boxy Raspberry Pi 4 8 GB (stejný model)**, každý box má
 **USB zvukovou kartu AXAGON ADA-17** a **stereo jack 3,5 mm na panelu** krabice.
 Každý box má **zesilovač CA-3110S + reproduktor LS40N** (interní reproduktor).
 
@@ -13,13 +13,12 @@ Každý box má **zesilovač CA-3110S + reproduktor LS40N** (interní reprodukto
 ## 1) Blokové schéma systému
 
 - **Box A** (hlavní jednotka) — Pi 4, USB zvukovka AXAGON ADA-17 → jack 3,5 na panelu + zesilovač CA-3110S → reproduktor LS40N, GPIO: reset/LED, webkamera USB (stativ, analýza koulí), HDMI (konzole/setup). Napájení: vlastní zdroj 15,3 W (5 m šňůra 230 V)
-- **Box B** (sampler) — Pi 4, SRX882S 433 MHz, LCD 16×2, amp + repro LS40N, USB zvukovka AXAGON ADA-17 → Y-rozdvojka → jack 3,5 panel + CA-3110S. Napájení: vlastní zdroj 15,3 W (230 V samostatnou 5 m šňůrou JT003 do zásuvky)
-- **Box C** — identický s boxem B (dalších 10× tlačítko). Napájení: vlastní zdroj 15,3 W (samostatná 5 m šňůra JT003 do zásuvky)
+- **Box B** (sampler) — Pi 4, SRX882S 433 MHz, LCD 16×2 (volitelný), amp + repro LS40N, USB zvukovka AXAGON ADA-17 → Y-rozdvojka → jack 3,5 panel + CA-3110S. Napájení: vlastní zdroj 15,3 W (230 V samostatnou 5 m šňůrou JT003 do zásuvky)
 
-Bezdrátová tlačítka: 10× Solight 1L67T (baterie uvnitř) pro B, 10× pro C — RF 433 MHz (ASK).
+Bezdrátová tlačítka: 10× Solight 1L67T (baterie uvnitř) pro B — RF 433 MHz (ASK).
 
-Všechny tři boxy: Raspberry Pi 4 Model B 8 GB (stejný HW), každý s **vlastním zdrojem 15,3 W** (5 V se mezi boxy nerozvádí).
-Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
+Oba boxy: Raspberry Pi 4 Model B 8 GB (stejný HW), každý s **vlastním zdrojem 15,3 W** (5 V se mezi boxy nerozvádí).
+Synchronizace samplů A↔B: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
 
 ---
 
@@ -28,20 +27,20 @@ Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
 ### 2.1 Přípojka 230 V (box A)
 
 ```
-  Síť 230 V ── flexo JT003 H05VV-F 3×1,5 (10 m)
+  Síť 230 V ── flexo JT003 H05VV-F 3×1,5 (5 m)
               ──► kabelová průchodka boxu A
                   ▼
-            svorkovnice KLS 3pól (10 ks v sadě)
+            svorkovnice KLS 2pól + PE
             ┌────────┐
-   L  ──►  │ L (černý)│ ) ──► L ──► zásuvka/kabel zdroje 15,3 W (box A)
+   L  ──►  │ L (hnědý)│ ) ──► L ──► zásuvka/kabel zdroje 15,3 W (box A)
             │        │
-   N  ──►  │ N       │ ) ──► N ──► zásuvka/kabel zdroje 15,3 W (box A)
+   N  ──►  │ N (modrý)│ ) ──► N ──► zásuvka/kabel zdroje 15,3 W (box A)
             │        │
    PE ──►  │ PE (z/ž)│ ) ──► PE (uzemnění) ─► připraveno pro kovovou
             └────────┘                          ochranu / štít kabelů
 ```
 - Žluto-zelený vodič = PE; nikdy nepřerušovat spínačem.
-- **Každý box se zapojuje do 230 V samostatně** (paralelně, ne do série): box A přes 10 m šňůru, boxy B a C každý svou vlastní 2 m šňůrou do zásuvky/odbočky.
+- **Každý box se zapojuje do 230 V samostatně** (paralelně, ne do série): box A i box B každý svou vlastní 5 m šňůrou do zásuvky/odbočky.
 - Délkové rezervy: ≥0,8 m uvnitř boxu (manipulace, dotažení svorek).
 
 ### 2.2 Napájení Pi 4
@@ -50,7 +49,7 @@ Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
   230 V svorkovnice ──► oficiální zdroj RPi 15,3 W (USB-C, 5,1 V / 3 A)
                                  └► USB-C ─► Raspberry Pi 4 (power konektor)
 ```
-- Každý box (A, B i C) má **vlastní** zdroj 15,3 W — 5 V se mezi boxy nerozvádí.
+- Každý box (A i B) má **vlastní** zdroj 15,3 W — 5 V se mezi boxy nerozvádí.
 
 ### 2.3 Periferie (USB / audio)
 
@@ -79,8 +78,6 @@ Synchronizace samplů A↔B↔C: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
 
 ## 3) BOX B — samplerový spouštěč (Pi 4)
 
-Kompletní zapojení jedné jednotky; box C je identický (§4).
-
 ```
                 ┌──────────────────────────────────────────────────┐
                 │              Raspberry Pi 4 (8 GB)                │
@@ -101,7 +98,7 @@ Kompletní zapojení jedné jednotky; box C je identický (§4).
                 │                                                    │
                 │  USB-A ──► USB zvuková karta AXAGON ADA-17             │
                 │  USB-A ──► (volné porty)                           │
-                │  USB-C ──► zdroj 15,3 W (230 V z A, 2 m šňůra)     │
+                │  USB-C ──► zdroj 15,3 W (230 V samostatnou 5 m šňůrou)  │
                 └───────────────┬────────────────────────────────────┘
                                 │ 3,5 mm stereo OUT (USB zvukovka)
                                 ▼
@@ -126,16 +123,9 @@ Kompletní zapojení jedné jednotky; box C je identický (§4).
 
 ---
 
-## 4) BOX C — identický s boxem B
+## 4) RF 433 MHz — tlačítka a přijímač
 
-Veškeré zapojení §3 platí beze změny (stejný seznam součástek, stejný Raspberry Pi 4).
-Pouze **mapa tlačítek a nastavený obor vzorků je jiná** (C = sekce vzorků č. 11–20).
-
----
-
-## 5) RF 433 MHz — tlačítka a přijímač
-
-### 5.1 Zásilkový modul: Solight 1L67T (bezdrátové tlačítko)
+### 4.1 Zásilkový modul: Solight 1L67T (bezdrátové tlačítko)
 
 ```
   ┌────────────────────┐
@@ -145,9 +135,9 @@ Pouze **mapa tlačítek a nastavený obor vzorků je jiná** (C = sekce vzorků 
   └────────────────────┘   dosah: uvnitř 30–60 m, výrobně 200 m
 ```
 - **Žádné pájení, žádný firmware.** Ukončení = stisk → krátký RF burst s unikátním kódem.
-- Každé tlačítko označit jmenovkou (B01…B10 / C01…C10) a pořadí vzorku.
+- Každé tlačítko označit jmenovkou (B01…B10) a pořadí vzorku.
 
-### 5.2 Zásilkový modul: SRX882S (přijímač na Pi)
+### 4.2 Zásilkový modul: SRX882S (přijímač na Pi)
 
 ```
   SRX882S (433,92 MHz, ASK/OOK)
@@ -158,7 +148,7 @@ Pouze **mapa tlačítek a nastavený obor vzorků je jiná** (C = sekce vzorků 
    │ [GND] ───► GND (pin 6)
    └──────────┘    (pokud napájíte 5 V, DATA = 5 V logika → převodník!)
 ```
-- Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 22. Mapa `kód → sample` (10 → B, 10 → C). Hlásit dosah se zavřeným víkem.
+- Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 22. Mapa `kód → sample` (10 ks → B). Hlásit dosah se zavřeným víkem.
 - **První nastavení**: každým tlačítkem stisknout a zapsat kód → soubor `mapa.csv`:
 
   ```
@@ -171,21 +161,21 @@ Pouze **mapa tlačítek a nastavený obor vzorků je jiná** (C = sekce vzorků 
 
 ---
 
-## 6) Napájení — každý box samostatně
+## 5) Napájení — každý box samostatně
 
-Všechny tři boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý box se zapojuje do 230 V **samostatně** (paralelně), vlastní 5 m šňůrou JT003 do zásuvky/odbočky:
+Oba boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý box se zapojuje do 230 V **samostatně** (paralelně), vlastní 5 m šňůrou JT003 do zásuvky/odbočky:
 
 ```
                     230 V zásuvka / odbočka
                             │
-         ┌──────────────────┼──────────────────┐
-         5 m JT003          5 m JT003          5 m JT003
-         ▼                  ▼                  ▼
-   ┌──────────┐       ┌──────────┐       ┌──────────┐
-   │ BOX A    │       │ BOX B    │       │ BOX C    │
-   │ vlastní  │       │ vlastní  │       │ vlastní  │
-   │ PSU 15,3W│       │ PSU 15,3W│       │ PSU 15,3W│
-   └──────────┘       └──────────┘       └──────────┘
+         ┌──────────────────┴──────────────────┐
+         5 m JT003                             5 m JT003
+         ▼                                     ▼
+   ┌──────────┐                          ┌──────────┐
+   │ BOX A    │                          │ BOX B    │
+   │ vlastní  │                          │ vlastní  │
+   │ PSU 15,3W│                          │ PSU 15,3W│
+   └──────────┘                          └──────────┘
 ```
 - Žádný rozvod 5 V mezi boxy — Pi 4 (až 3 A) má vždy svůj zdroj.
 - **Boxy nejsou zapojeny do série** — každý má vlastní přípojku 230 V (vhodné jištění ≤10 A dle kabeláže).
@@ -193,25 +183,25 @@ Všechny tři boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý
 
 ---
 
-## 7) Souhrn použitých GPIO pinů (Raspberry Pi 4 8 GB — stejné pro všechny boxy)
+## 6) Souhrn použitých GPIO pinů (Raspberry Pi 4 8 GB)
 
 | Funkce         | GPIO (BCM) | Pin | Zapojeno s |
 |----------------|-----------|-----|------------|
-| I2C SDA        | 2         | 3   | LCD 1602 (PCF8574) — jen B/C |
-| I2C SCL        | 3         | 5   | LCD 1602 (PCF8574) — jen B/C |
-| RF RX DATA     | 22        | 15  | SRX882S DATA — jen B/C |
+| I2C SDA        | 2         | 3   | LCD 1602 (PCF8574) — jen B |
+| I2C SCL        | 3         | 5   | LCD 1602 (PCF8574) — jen B |
+| RF RX DATA     | 22        | 15  | SRX882S DATA — jen B |
 | Reset tlačítko | 17        | 11  | tlačítko NO → GND, pull-up 10 kΩ |
 | Indikace chodu | 26        | 37  | 330 Ω → LED → GND |
 | 3V3            | —         | 1   | SRX882S VCC, LCD VCC (3,3 V varianta), pull-upy |
 | GND            | —         | 6   | SRX882S, LCD, tlačítko, LED, zesilovač (společná zem) |
 
 Pi 4 8 GB sdílé 40pin GPIO rozvržení a BCM číslování → schémata jsou přenositelná.
-Box A: BCM **17** (reset) a **26** (LED) — stejná schémata jako §3/§7.
+Box A: BCM **17** (reset) a **26** (LED) — stejná schémata jako §3/§6.
 Webkamera, HDMI, audio (USB zvukovka AXAGON ADA-17 + panelový jack) — bez GPIO (USB báze).
 
 ---
 
-## 8) Zvukové výstupy — panelové stereo jacky (všechny boxy)
+## 7) Zvukové výstupy — panelové stereo jacky (oba boxy)
 
 ```
   USB zvuková karta AXAGON ADA-17 (každý box) ──► 3,5 mm stereo OUT
@@ -226,11 +216,11 @@ Webkamera, HDMI, audio (USB zvukovka AXAGON ADA-17 + panelový jack) — bez GPI
         └─► stereo kabel → mixážní pult / pódiový zesilovač / DL
 ```
 - Montáž: vyvrtat otvor Ø6 mm do čelní stěny krabice, jack přitáhnout maticí (motýlek).
-- Boxy B/C: paralelně z Y-rozdvojky jde signál i do CA-3110S (interní reproduktor).
+- Box B: paralelně z Y-rozdvojky jde signál i do CA-3110S (interní reproduktor).
 
 ---
 
-## 9) Montážní poznámky
+## 8) Montážní poznámky
 
 1. FM rozvodem a lanky vedenými po prostoru boxu bez ostrých hran (bužírka, průchodky).
 2. Svorkovnice utahovat momentem; doporučené barvy: L=černá/hnědá, N=modrá, PE=žluto-zelená, V+=červená, V−=černá.

@@ -1,26 +1,26 @@
-Nákupní seznam — HW požadavky Tracker (3 boxy)
-Verze: 10. 9. 2026 — JEDNOTNÁ platforma: 3× Raspberry Pi 4 + USB zvukovky + panelové jacky.
+Nákupní seznam — HW požadavky Tracker (2 boxy: A tracker + B sampler)
+Verze: 23. 9. 2026 — JEDNOTNÁ platforma: 2× Raspberry Pi 4 + USB zvukovky + panelové jacky. ZBOŽÍ DORUČENO.
 Ceny: Alza.cz, GM Electronic (gme.cz). „≈" = orientační cena.
 
 Nákup elektroniky Alza:
 
-3x Raspberry Pi 4 Model B
+2x Raspberry Pi 4 Model B
 
 https://www.alza.cz/raspberry-pi-4-model-b-8gb-ram-d5863776.htm?o=1
 
-3x Hliníková krabičkaInter-Tech ODS-721
+2x Hliníková krabičkaInter-Tech ODS-721
 
 https://www.alza.cz/inter-tech-ods-721-pro-raspberry-pi-4-b-blue-d7993874.htm?o=1
 
-3x Napájecí adaptér RPiOficiální 15,3 W (5,1 V / 3 A) USB-C
+2x Napájecí adaptér RPiOficiální 15,3 W (5,1 V / 3 A) USB-C
 
 https://www.alza.cz/raspberry-pi-4-5v-3a-bily-d5662378.htm?o=1
 
-3x USB zvuková kartaAXAGON ADA-17 AUDIGO (USB-A → 3,5 mm jack)
+2x USB zvuková kartaAXAGON ADA-17 AUDIGO (USB-A → 3,5 mm jack)
 
 https://www.alza.cz/axagon-ada-ha-hi-res-dac-audio-adapter-384khz-32bit-stereo-usb-a-to-3-5mm-jack-d13390081.htm?o=1
 
-3x microSD karta32 GB SanDisk Ultra Class 10 A1 UHS-I3 ks
+2x microSD karta32 GB SanDisk Ultra Class 10 A1 UHS-I
 
 https://www.alza.cz/sandisk-microsdhc-32gb-ultra-sd-adapter-d6250713.htm?o=2
 
@@ -35,15 +35,15 @@ https://www.alza.cz/tactical-fast-rope-aramid-2-0-cable-usb-a-usb-c-2m-d13228246
 
 Nákup elektra v GM:
 
-3x Plastová krabiceMASZCZYK KM-85 ABS (180 × 160 × 84 mm)
+2x Plastová krabiceMASZCZYK KM-85 ABS (180 × 160 × 84 mm)
 
 https://www.gme.cz/v/1508143/maszczyk-km-85-abs-black-krabicka-plastova
 
-3x Napájecí kabelFlexo kabel JT003 3×1,5 mm² s vidlicí (5 m)
+2x Napájecí kabelFlexo kabel JT003 3×1,5 mm² s vidlicí (5 m)
 
 https://www.gme.cz/v/1509985/jt003-h05vv-f-3x15-cerna-5m-napajeci-sitovy-kabel-flexo
 
-3x 3m jiné barvy Montážní vodičLanko CYA 1×0,5 mm²
+2x 3m jiné barvy Montážní vodičLanko CYA 1×0,5 mm²
 
 https://www.gme.cz/v/1512384/elektrokabel-cya-1x05-hnedy-h05v-k-izolovany-vodic-lanko
 
@@ -51,11 +51,11 @@ https://www.gme.cz/v/1512208/elektrokabel-cya-1x05-modry-h05v-k-izolovany-vodic-
 
 https://www.gme.cz/v/1511550/elektrokabel-cya-1x05-zluty-h05v-k-izolovany-vodic-lanko
 
-3x SvorkovniceKLS 301-5.00-02P (2pólová do DPS/panelu)
+2x SvorkovniceKLS 301-5.00-02P (2pólová do DPS/panelu)
 
 https://www.gme.cz/v/1497538/kls-301-500-02p-2-sc-svorkovnice-2pol-roztec-5mm-16a-250v-vstup-90-sroub
 
-12x Distanční sloupkyM2,5 × 10 mm (mosaz/plast, šroub + matka)
+8x Distanční sloupkyM2,5 × 10 mm (mosaz/plast, šroub + matka)
 
 https://www.gme.cz/v/1482591/da5m25x10-nikl-distancni-sloupek-10mm-m25-matka-sroub
 
@@ -67,40 +67,40 @@ https://www.gme.cz/v/1483738/kss-vs-100bk-sada-smrstovacich-buzirek
 
 https://www.gme.cz/v/1517598/proskit-gk-390nf-tavna-lepici-pistole-11mm-100w
 
-3x Panelový jackEY-512C 3,5 mm stereo zásuvka do panelu
+2x Panelový jackEY-512C 3,5 mm stereo zásuvka do panelu
 
 https://www.gme.cz/v/1496892/ey-512c-jack-35-stereo
 
-3x koncovky Jack 3.5
+2x koncovky Jack 3.5
 
 https://www.gme.cz/v/1501905/np-107-en-jack-35-stereo
 
-3x ZesilovačCA-3110S (TPA3110, třída D, stereo)
+2x ZesilovačCA-3110S (TPA3110, třída D, stereo)
 
 https://www.gme.cz/v/1518915/creatall-ca-3110s-digitalni-zesilovac-tridy-d-s-cipem-tp3110-napajeni-826v-3a
 
-6x ReproduktorLS40N-27-R8 (průměr 40 mm, 8 Ω)
+4x ReproduktorLS40N-27-R8 (průměr 40 mm, 8 Ω)
 
 https://www.gme.cz/v/1497252/ls40n-27-r8-reproduktor
 
-2x RF PřijímačSRX882S 433 MHz ASK/FSK
+1x RF PřijímačSRX882S 433 MHz ASK/FSK
 
 https://www.gme.cz/v/1514654/srx882s-prijimac-433mhz-ask
-20x Tlačítko bezdrátové Solight 1L67T (433 MHz, samostatné tlačítko)
+10x Tlačítko bezdrátové Solight 1L67T (433 MHz, samostatné tlačítko)
 
 https://www.gme.cz/v/1503395/solight-1l67t-bezdratove-tlacitko-pro-1l67
-6x BaterieCamelion CR2032 (blistr 5 ks)
+3x BaterieCamelion CR2032 (blistr 5 ks)
 
 https://www.gme.cz/v/1519272/camelion-cr2032-bp5-lithiova-knoflikova-baterie-blistr-5ks
-3x Tlačítko do panelu
+2x Tlačítko do panelu
 
 https://www.gme.cz/v/1497195/pbs-12b-r-tlacitko-do-panelu-1-pol-offon
 
-10x LED dioda5 mm červená
+6x LED dioda5 mm červená
 
 https://www.gme.cz/v/1492965/bright-led-bl-b5141-l-led-3mm-cervena
 
-10x Rezistory 10 kΩ 0,25 W (3 ks) + 330 Ω 0,25 W
+6x Rezistory 10 kΩ 0,25 W (2 ks) + 330 Ω 0,25 W (4 ks)
 
 https://www.gme.cz/v/1494150/gym-cym-rm-10k-06w-1-0207-metalizovany-rezistor
 

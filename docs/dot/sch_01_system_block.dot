@@ -9,23 +9,20 @@ net230v [label="230 V / 50 Hz\nzásuvka / odbočka" shape=oval fillcolor="#fff9c
 
 // Boxes
 boxA [label="BOX A (Pi 4)\n─────────────\nVlastní PSU 15,3 W\nUSB zvukovka → jack 3,5\nGPIO: reset / LED" shape=box style="filled,rounded" fillcolor="#bbdefb"];
-boxB [label="BOX B (Pi 4)\n─────────────\nVlastní PSU 15,3 W\nSRX882S 433 MHz\nLCD 16×2\nAmp + repro LS40N\nUSB zvukovka → Y-rozdvojka\n→ jack 3,5 + CA-3110S" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
-boxC [label="BOX C (Pi 4)\n─────────────\nidentický s B\n(vlastní PSU 15,3 W)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
+boxB [label="BOX B (Pi 4)\n─────────────\nVlastní PSU 15,3 W\nSRX882S 433 MHz\nLCD 16×2 (volitelný)\nAmp + repro LS40N\nUSB zvukovka → Y-rozdvojka\n→ jack 3,5 + CA-3110S" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
 
 // Peripherals
 webkamera [label="Webkamera (USB)\n+ stativ" shape=component fillcolor="#e1bee7"];
 tlačítka [label="10× tlačítko\nSolight 1L67T\n(433 MHz, baterie)" shape=octagon fillcolor="#ffccbc"];
 
 // Edges — každý box jde do zásuvky 230 V samostatně (paralelně)
-net230v -> boxA [label="  230 V  \n  10 m JT003  " color="#d32f2f" penwidth=1.5];
-net230v -> boxB [label="  230 V  \n  2 m JT003  " color="#d32f2f" penwidth=1.2];
-net230v -> boxC [label="  230 V  \n  2 m JT003  " color="#d32f2f" penwidth=1.2];
+net230v -> boxA [label="  230 V  \n  5 m JT003  " color="#d32f2f" penwidth=1.5];
+net230v -> boxB [label="  230 V  \n  5 m JT003  " color="#d32f2f" penwidth=1.2];
 webkamera -> boxA [label="  USB  " style=dashed];
 boxB -> tlačítka [label="  RF 433 MHz (ASK)  " color="#ff6f00" penwidth=1.5 style=bold];
-boxC -> tlačítka [label="  RF 433 MHz (ASK)  " color="#ff6f00" penwidth=1.5 style=bold];
 
 // Notes
-sync [label="Synchronizace A↔B↔C:\nWiFi 2,4 GHz (rsync)\nmimo pásmo RF 433 MHz" shape=note fillcolor="#f5f5f5" fontsize=10];
+sync [label="Synchronizace A↔B:\nWiFi 2,4 GHz (rsync)\nmimo pásmo RF 433 MHz" shape=note fillcolor="#f5f5f5" fontsize=10];
 boxA -> sync [style=dotted color="#666666"];
 napajeni [label="Napájení: každý box má\nvlastní zdroj 15,3 W\n(5 V se mezi boxy nerozvádí)" shape=note fillcolor="#f5f5f5" fontsize=10];
 boxA -> napajeni [style=dotted color="#666666"];

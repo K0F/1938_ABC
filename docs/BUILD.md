@@ -1,6 +1,6 @@
-# Postup stavby — Tracker (3 boxy)
+# Postup stavby — Tracker (2 boxy: A + B)
 
-Kompletní návod k sestavení třídílného hudebního nástroje Tracker.
+Kompletní návod k sestavení dvoudílného hudebního nástroje Tracker.
 Text navazuje na [`HW.md`](../HW.md) (soupis součástek) a [`docs/SCH.md`](SCH.md) (schémata zapojení).
 
 ---
@@ -31,15 +31,14 @@ sudo pacman -S graphviz python python-markdown python-pikepdf python-cairo pytho
 
 ### 1.3 Přehled systému
 
-Sestava se skládá ze tří krabiček (všechny Pi 4 Model B 4 GB):
+Sestava se skládá ze dvou krabiček (všechny Pi 4 Model B 8 GB):
 
 - **Box A** — Hlavní jednotka, běží tracker (webkamera snímá koule). Webkamera + stativ, HDMI, USB zvukovka → jack. Napájení: vlastní zdroj 15,3 W
-- **Box B** — Sampler, 10 tlačítek, LCD displej, interní reproduktor. SRX882S, LCD 16×2, CA-3110S + LS40N, Y-rozdvojka. Napájení: vlastní zdroj 15,3 W
-- **Box C** — Identický s B (dalších 10 tlačítek). Stejné zapojení jako B. Napájení: vlastní zdroj 15,3 W
+- **Box B** — Sampler, 10 tlačítek, LCD displej (volitelný), interní reproduktor. SRX882S, LCD 16×2, CA-3110S + LS40N, Y-rozdvojka. Napájení: vlastní zdroj 15,3 W
 
-Komunikace: tlačítka → RF 433 MHz → SRX882S v B/C → GPIO → SDL Mixer.
-Synchronizace A↔B↔C: WiFi 2,4 GHz (rsync).
-Napájení: každý box má **vlastní zdroj 15,3 W** (5 V se mezi boxy nerozvádí). Každý box se zapojuje do 230 V **samostatně** (paralelně) — box A 10 m šňůrou, B a C svými 2 m šňůrami do zásuvky/odbočky.
+Komunikace: tlačítka → RF 433 MHz → SRX882S v B → GPIO → SDL Mixer.
+Synchronizace A↔B: WiFi 2,4 GHz (rsync).
+Napájení: každý box má **vlastní zdroj 15,3 W** (5 V se mezi boxy nerozvádí). Každý box se zapojuje do 230 V **samostatně** (paralelně) — každý svou 5 m šňůrou JT003 do zásuvky/odbočky.
 
 ---
 
@@ -51,35 +50,36 @@ Kompletní seznamy s odkazy na e-shopy viz [`HW.md`](../HW.md) §2–3 a [`nakup
 
 | Položka | Kusy | ≈ Cena |
 |---------|-----:|-------:|
-| Raspberry Pi 4 Model B 4 GB | 3 | 9 087 Kč |
-| Inter-Tech ODS-721 (krabička) | 3 | 777 Kč |
-| Zdroj RPi 15,3 W USB-C | 3 | od 753 Kč |
-| USB zvuková karta (Gembird) | 3 | ≈450 Kč |
-| microSD 64 GB (A) + 32 GB (B/C) | 3 | ≈1 550 Kč |
+| Raspberry Pi 4 Model B 8 GB | 2 | 9 258 Kč |
+| Inter-Tech ODS-721 (krabička) | 2 | 518 Kč |
+| Zdroj RPi 15,3 W USB-C | 2 | od 502 Kč |
+| USB zvuková karta AXAGON ADA-17 | 2 | ≈300 Kč |
+| microSD 32 GB | 2 | ≈700 Kč |
 | Webkamera Logitech C920 | 1 | 1 599 Kč |
 | micro-HDMI → HDMI kabel 1,8 m | 1 | 109 Kč |
 | Stativ Apexel Mini Tripod | 1 | 189 Kč |
-| **Alza mezisoučet** | | **≈14 600 Kč** |
+| **Alza mezisoučet** | | **≈13 200 Kč** |
 
 ### 2.2 GME (gme.cz)
 
 | Položka | Kusy | ≈ Cena |
 |---------|-----:|-------:|
-| MASZCZYK KM-85 (krabička) | 3 | 627 Kč |
-| Flexo JT003 5 m + 2 m | 4 | 528 Kč |
-| Lanko CYA, svorkovnice, bužírky, sloupky | — | ≈940 Kč |
-| Jack EY-512C + rozdvojky | 5 | 95 Kč |
-| LCD 16×2 + I2C adapter | 2 | ≈308 Kč |
-| CA-3110S + LS40N | 2 | ≈222 Kč |
-| SRX882S | 2 | 158 Kč |
-| Solight 1L67T tlačítka | 20 | 1 452 Kč |
-| **GME mezisoučet** | | **≈4 330 Kč** |
+| MASZCZYK KM-85 (krabička) | 2 | 418 Kč |
+| Flexo JT003 5 m | 2 | 350 Kč |
+| Lanko CYA, svorkovnice, bužírky, sloupky, tavicí pistole | — | ≈410 Kč |
+| Jack EY-512C + koncovky NP-107 | 4 | 50 Kč |
+| CA-3110S (2×) + LS40N (4×) | 6 | 346 Kč |
+| SRX882S | 1 | 79 Kč |
+| Solight 1L67T tlačítka | 10 | 726 Kč |
+| Baterie CR2032 (3 blistry) | 3 | 57 Kč |
+| **GME mezisoučet** | | **≈2 450 Kč** |
+| LCD 16×2 + I2C adapter (volitelně, B) | 1 | ≈154 Kč |
 
 ### 2.3 Celkový odhad
 
 | | HW | Doprava | Práce (80 h) | Rezerva | **Celkem** |
 |---|---:|---:|---:|---:|---:|
-| Doporučená varianta | ≈18 500 | ≈400 | 28 000 | ≈1 900 | **≈48 800 Kč** |
+| Doporučená varianta | ≈15 700 | ≈500 | 28 000 | ≈4 400 | **≈48 600 Kč** |
 
 ---
 
@@ -106,7 +106,7 @@ sh docs/build-docs.sh
 ```
 
 Skript provede:
-1. Všech 16 `.dot` souborů v `docs/dot/` → jednotlivé PDF přes `dot -Tpdf`
+1. Všech 15 `.dot` souborů v `docs/dot/` → jednotlivé PDF přes `dot -Tpdf`
 2. Sloučení `sch_*.pdf` → `docs/SCH.pdf` (schémata zapojení)
 3. Sloučení `hw_*.pdf` → `docs/HW.pdf` (hardware požadavky)
 4. Převod `SCH.md` → `docs/SCH.pdf` přes `md2pdf.py --pdf` (textová část)
@@ -146,13 +146,13 @@ make docs
 
 Podrobné schéma: [`docs/SCH.md`](SCH.md) §2.1, [`docs/dot/sch_02_terminal_block.dot`](dot/sch_02_terminal_block.dot)
 
-1. Přiveďte 10 m šňůru JT003 přes kabelovou průchodku do boxu A.
-2. Připojte na **svorkovnici KLS 3pól**:
-   - **L** (černý/hnědý) → svorka L
+1. Přiveďte 5 m šňůru JT003 přes kabelovou průchodku do boxu A.
+2. Připojte na **svorkovnici KLS 2pól** (L/N) + samostatné PE:
+   - **L** (hnědý) → svorka L
    - **N** (modrý) → svorka N
    - **PE** (žluto-zelený) → svorka PE — **nikdy nepřerušovat spínačem!**
 3. Zbývající vývod → kabel oficiálního zdroje RPi 15,3 W (každý box má svůj vlastní zdroj — 5 V se mezi boxy nerozvádí).
-4. **Boxy B a C se zapojují do 230 V samostatně** — každý svou vlastní 2 m šňůrou do zásuvky/odbočky (paralelně, ne do série z boxu A).
+4. **Box B se zapojuje do 230 V samostatně** — každý svou vlastní 5 m šňůrou do zásuvky/odbočky (paralelně, ne do série z boxu A).
 
 ### 4.4 Zapojení GPIO — reset + LED
 
@@ -172,13 +172,13 @@ Schéma: [`docs/SCH.md`](SCH.md) §2.4, [`docs/dot/sch_05_gpio_a.dot`](dot/sch_0
 Schéma: [`docs/SCH.md`](SCH.md) §2.3
 
 1. **Webkamera** (Logitech C920) → USB-A port Pi 4 → na stativ nad hrací plochu.
-2. **USB zvuková karta** (Gembird) → USB-A port Pi 4.
+2. **USB zvuková karta** (AXAGON ADA-17) → USB-A port Pi 4.
 3. **micro-HDMI** → HDMI kabel 1,8 m → monitor (pro setup/konzoli).
 4. **Interní 3,5 mm jack Pi 4 se NEPOUŽÍVÁ** — audio vždy přes USB zvukovku.
 
 ### 4.6 Montáž panelového jacku
 
-Schéma: [`docs/SCH.md`](SCH.md) §8, [`docs/dot/sch_10_audio_jack.dot`](dot/sch_10_audio_jack.dot)
+Schéma: [`docs/SCH.md`](SCH.md) §7, [`docs/dot/sch_10_audio_jack.dot`](dot/sch_10_audio_jack.dot)
 
 1. Jack EY-512C vložte do otvoru Ø6 mm na čelní stěně.
 2. Přitáhněte maticí (motýlek) zevnitř.
@@ -191,7 +191,7 @@ Schéma: [`docs/SCH.md`](SCH.md) §8, [`docs/dot/sch_10_audio_jack.dot`](dot/sch
 ### 4.7 Instalace OS a softwaru
 
 ```bash
-# 1. Nahrajte Raspberry Pi OS Lite na microSD 64 GB
+# 1. Nahrajte Raspberry Pi OS Lite na microSD 32 GB
 # 2. Po prvním spuštění:
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y git cmake pkg-config libopencv-dev
@@ -215,9 +215,9 @@ make
 
 ---
 
-## 5) Montáž — Box B/C (sampler)
+## 5) Montáž — Box B (sampler)
 
-Postup je pro B i C **identický**. Liší se pouze přiřazení tlačítek a vzorků.
+Zapojení Boxu B jako samostatné bezdrátové spouštěcí jednotky.
 
 ### 5.1 Vrtání krabičky KM-85
 
@@ -232,7 +232,7 @@ Stejný postup jako §4.2 — 4× sloupek M2,5, Pi 4 na sloupky.
 
 ### 5.3 Připojení 230 V
 
-1. Připojte **2 m šňůru JT003** do zásuvky/odbočky 230 V — box se zapojuje samostatně (paralelně), ne přes box A.
+1. Připojte **5 m šňůru JT003** do zásuvky/odbočky 230 V — box se zapojuje samostatně (paralelně), ne přes box A.
 2. Uvnitř boxu připojte na svorkovnici KLS (nebo přímo) → kabel zdroje RPi 15,3 W (box má svůj vlastní zdroj).
 
 ### 5.4 Zapojení GPIO
@@ -287,8 +287,8 @@ Schéma: [`docs/SCH.md`](SCH.md) §3, [`docs/dot/sch_06b_box_b_audio.dot`](dot/s
 
 Stejný postup jako §4.7, ale:
 - microSD **32 GB** (postačí).
-- Navíc nainstalovat `librc-switch` pro dekódování 433 MHz.
-- Nakonfigurovat I2C: `sudo raspi-config` → Interface → I2C → Enable.
+- Sestavit sampler: `sudo apt install -y libgpiod-dev libsdl2-dev libsdl2-mixer-dev && make sampler` — dekódování 433 MHz = interní EV1527 dekodér přes libgpiod (žádné rc-switch).
+- Volitelný LCD: nakonfigurovat I2C `sudo raspi-config` → Interface → I2C → Enable; sampler spustit s `--lcd-addr 0x27` (nebo `off` bez displeje).
 
 ---
 
@@ -296,7 +296,7 @@ Stejný postup jako §4.7, ale:
 
 ### 6.1 Zapsání kódů
 
-1. Spusťte na Pi B/C program, který čte kódy z SRX882S (příklad v `rc-switch`).
+1. Spusťte na Pi B program, který čte kódy z SRX882S (sampler s `--listen`).
 2. Každým tlačítkem Solight 1L67T stiskněte a zapište přijatý kód.
 3. Vytvořte soubor `mapa.csv`:
 
@@ -313,7 +313,6 @@ Stejný postup jako §4.7, ale:
 | Tlačítka | Box | Vzorky |
 |----------|-----|--------|
 | B01–B10 | B | sample_b_01 .. sample_b_10 |
-| C01–C10 | C | sample_c_01 .. sample_c_10 |
 
 ### 6.3 Test dosahu
 
@@ -326,15 +325,14 @@ Stejný postup jako §4.7, ale:
 
 ## 7) Konfigurace a kalibrace
 
-### 7.1 WiFi synchronizace A↔B↔C
+### 7.1 WiFi synchronizace A↔B
 
-1. Všechny 3 Pi připojte na stejnou WiFi síť (2,4 GHz).
+1. Oba Pi připojte na stejnou WiFi síť (2,4 GHz).
 2. Nastavte SSH přístup mezi nimi.
-3. Vzorky nakopírujte z A do B/C:
+3. Vzorky nakopírujte z A do B:
    ```bash
    # Na Pi A:
    rsync -avz samples/ pi@B_IP:/home/pi/tracker/samples/
-   rsync -avz samples/ pi@C_IP:/home/pi/tracker/samples/
    ```
 
 ### 7.2 Kalibrace perspektivy (Box A)
@@ -349,7 +347,7 @@ Podrobnosti v [`README.md`](../README.md) §Perspective correction:
 
 1. Na každém boxu spusťte přehrávání vzorků.
 2. Ověřte zvuk na panelovém jacku (TIP=L, RING=R, SLEEVE=GND).
-3. U B/C ověřte i interní reproduktor přes CA-3110S.
+3. U B ověřte i interní reproduktor přes CA-3110S.
 
 ---
 
@@ -363,7 +361,7 @@ Před finální instalací spusťte 2denní test:
 | Baterie | Nechat tlačítka aktivní 48 h | Žádný výpadek |
 | Teplota | Změřit termokamerou po 4 h běhu | Žádné tepelné stopy na kabeláži |
 | Audio | Přehrávat vzorky 24 h nepřetržitě | Žádné přeslechy, clicky |
-| Synchronizace | Spustit A+B+C současně | Vzorky synchronizované |
+| Synchronizace | Spustit A+B současně | Vzorky synchronizované |
 
 ---
 
@@ -394,4 +392,4 @@ Před finální instalací spusťte 2denní test:
 | [`docs/build-docs.sh`](build-docs.sh) | Skript pro generování PDF |
 | [`nakup.txt`](../nakup.txt) | Ověřený nákupní seznam |
 
-Verze: 9. 9. 2026
+Verze: 23. 9. 2026
