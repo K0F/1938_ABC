@@ -22,8 +22,32 @@ class _HtmlToPango(HTMLParser):
         self._table_rows = []
         self._cur_cells = []
         self._cur_is_header = False
+        self._cell_depth = None
         self._link_href = None
         self._list_depth = 0
+
+    def _push(self, markup):
+        if self._in_table and self._in_cell():
+            self._cur_cells[-1][1].append(markup)
+        else:
+            self._out.append(markup)
+
+    def _in_cell(self):
+        return (
+            self._cell_depth is not None
+            and len(self._tag_stack) > self._cell_depth
+        )
+
+    def _flush_row(self):
+        cells = []
+        for is_hdr, frags in self._cur_cells:
+            txt = "".join(frags).strip()
+            if not txt:
+                cells.append("")
+            else:
+                cells.append(f"<b>{txt}</b>" if is_hdr else txt)
+        self._table_rows.append(cells)
+        self._cur_cells = []
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -35,11 +59,11 @@ class _HtmlToPango(HTMLParser):
         elif tag == "code" and self._in_pre:
             pass  # text handled in data
         elif tag == "code":
-            self._out.append('<span font="DejaVu Sans Mono" size="small">')
+            self._push('<span font="DejaVu Sans Mono" size="small">')
         elif tag in ("strong", "b"):
-            self._out.append("<b>")
+            self._push("<b>")
         elif tag in ("em", "i"):
-            self._out.append("<i>")
+            self._push("<i>")
         elif tag == "a":
             self._link_href = a.get("href", "")
         elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
@@ -47,7 +71,7 @@ class _HtmlToPango(HTMLParser):
         elif tag == "p":
             self._nl(1)
         elif tag == "br":
-            self._out.append("\n")
+            self._push("\n")
         elif tag == "hr":
             self._nl(2)
             self._out.append("─" * 60)
@@ -64,10 +88,9 @@ class _HtmlToPango(HTMLParser):
             self._nl(2)
         elif tag == "tr":
             self._cur_cells = []
-        elif tag == "th":
-            self._cur_is_header = True
-        elif tag == "td":
-            self._cur_is_header = False
+        elif tag in ("th", "td"):
+            self._cur_cells.append((tag == "th", []))
+            self._cell_depth = len(self._tag_stack) - 1
         elif tag == "blockquote":
             self._nl(2)
 
@@ -79,14 +102,14 @@ class _HtmlToPango(HTMLParser):
             self._in_pre = False
             self._nl(2)
         elif tag == "code" and not self._in_pre:
-            self._out.append("</span>")
+            self._push("</span>")
         elif tag in ("strong", "b"):
-            self._out.append("</b>")
+            self._push("</b>")
         elif tag in ("em", "i"):
-            self._out.append("</i>")
+            self._push("</i>")
         elif tag == "a":
             if self._link_href:
-                self._out.append(f" ({self._link_href})")
+                self._push(f" ({self._link_href})")
             self._link_href = None
         elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
             self._nl(2)
@@ -95,8 +118,10 @@ class _HtmlToPango(HTMLParser):
         elif tag in ("ul", "ol"):
             self._list_depth = max(0, self._list_depth - 1)
             self._nl(1)
+        elif tag in ("th", "td"):
+            self._cell_depth = None
         elif tag == "tr":
-            self._table_rows.append((self._cur_is_header, list(self._cur_cells)))
+            self._flush_row()
         elif tag == "table":
             self._flush_table()
             self._in_table = False
@@ -116,18 +141,13 @@ class _HtmlToPango(HTMLParser):
 
         text = html.unescape(data)
 
-        if self._in_table and self._tag_stack:
-            top = self._tag_stack[-1]
-            if top in ("th", "td"):
-                text = text.strip()
-                text = (
-                    text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                )
-                if self._cur_is_header:
-                    self._cur_cells.append(f"<b>{text}</b>")
-                else:
-                    self._cur_cells.append(text)
-                return
+        if self._in_table and self._cur_cells and self._in_cell():
+            text = (
+                text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            )
+            if text.strip():
+                self._cur_cells[-1][1].append(text)
+            return
 
         escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         self._out.append(escaped)
@@ -138,10 +158,10 @@ class _HtmlToPango(HTMLParser):
     def _flush_table(self):
         if not self._table_rows:
             return
-        for idx, (is_hdr, cells) in enumerate(self._table_rows):
-            row = " │ ".join(cells)
-            self._out.append(row)
-            self._nl(1)
+        for idx, cells in enumerate(self._table_rows):
+            if any(cells):
+                self._out.append(" │ ".join(cells))
+                self._nl(1)
             if idx == 0:
                 self._out.append("─" * 60)
                 self._nl(1)
@@ -224,6 +244,7 @@ def convert_pdf(md_path, out_path=None):
         text,
         extensions=["tables", "fenced_code", "sane_lists"],
     )
+    body = re.sub(r"\A\s*<h1>.*?</h1>", "", body, count=1, flags=re.S)
 
     pdf_path = out_path or (root + ".pdf")
     page_w, page_h = 595.28, 841.89
