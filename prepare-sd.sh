@@ -3,7 +3,7 @@
 #
 #   usage:  sudo ./prepare-sd.sh [DEVICE] [A|B]
 #
-#   A -> Tracker (webcam GUI): autologin + X + tracker app
+#   A -> Tracker (webcam, headless): tracker.service, no X autostart
 #   B -> Sampler (headless RF sample player) via systemd service
 #
 # Box C was removed (2-box system: A + B).
@@ -96,43 +96,13 @@ rm -f "$ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service" \
       "$ROOT/etc/systemd/system/multi-user.target.wants/boxa-firstboot.service"
 rm -f "$ROOT/usr/local/sbin/box-provision.sh" "$ROOT/usr/local/sbin/boxa-provision.sh"
 rm -f "$ROOT/etc/systemd/system/sampler.service" "$ROOT/usr/local/bin/sampler"
+rm -f "$ROOT/etc/systemd/system/tracker.service" \
+      "$ROOT/etc/systemd/system/multi-user.target.wants/tracker.service"
 rm -f "$ROOT/var/lib/box-provisioned" "$ROOT/var/lib/boxa-provisioned"
-echo "  removed stale autostart/provision/sampler files"
+echo "  removed stale autostart/provision/sampler/tracker files"
 
 provision_box_a() {
-    step "Console auto-login on tty1 ($USER)"
-    mkdir -p "$ROOT/etc/systemd/system/getty@tty1.service.d"
-    cat > "$ROOT/etc/systemd/system/getty@tty1.service.d/autologin.conf" <<EOF
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin $USER --noclear tty1 38400 linux
-EOF
-    step "Autostart X + tracker on login"
-    cat > "$ROOT/home/$USER/.bash_profile" <<'EOF'
-#!/bin/bash
-if [ "$(tty)" = "/dev/tty1" ] && [ -z "$DISPLAY" ]; then
-    echo "Box A: waiting for first-boot provisioning..."
-    for _ in $(seq 1 540); do
-        [ -f /var/lib/box-provisioned ] && break
-        sleep 5
-    done
-    if [ -f /var/lib/box-provisioned ]; then
-        exec startx
-    else
-        echo "Box A: provisioning did not finish in time."
-        echo "  Check: journalctl -u box-firstboot.service"
-    fi
-fi
-EOF
-    cat > "$ROOT/home/$USER/.xinitrc" <<'EOF'
-#!/bin/bash
-exec /home/pi/tracker/tracker 1 >> /home/pi/.tracker.log 2>&1
-EOF
-    chown 1000:1000 "$ROOT/home/$USER/.bash_profile" "$ROOT/home/$USER/.xinitrc"
-    chmod 755 "$ROOT/home/$USER/.bash_profile" "$ROOT/home/$USER/.xinitrc"
-    echo "  .bash_profile/.xinitrc -> startx + tracker"
-
-    step "First-boot provisioning (deps + raylib + tracker build)"
+    step "Headless autostart (tracker --headless, systemd)"
     cat > "$ROOT/usr/local/sbin/box-provision.sh" <<'EOF'
 #!/bin/bash
 set -e
@@ -140,13 +110,22 @@ echo "[boxa] == first-boot provisioning =="
 logger "boxa provisioning start"
 cd /home/pi/tracker
 bash install-deps.sh
+# X + mesa stay installed so calibration can still be run over HDMI by hand
+# (startx on tty1, then ./tracker with a window and the S key). Nothing starts
+# the GUI automatically any more.
 apt-get install -y --no-install-recommends \
     xinit xserver-xorg xserver-xorg-video-fbdev x11-xserver-utils libgl1-mesa-dri >/dev/null
+usermod -aG audio,video $USER
+# ALSA default must be in place before the service opens the sound card
 CARD=$(grep -i usb /proc/asound/cards | head -1 | awk '{print $1}')
 if [ -n "$CARD" ]; then
     printf 'pcm.!default { type hw; card %s }\nctl.!default { type hw; card %s }\n' "$CARD" "$CARD" > /etc/asound.conf
     echo "ALSA default -> USB card $CARD"
 fi
+install -m 0644 tracker.service /etc/systemd/system/tracker.service
+systemctl daemon-reload
+systemctl enable tracker.service
+systemctl start tracker.service
 touch /var/lib/box-provisioned
 systemctl disable box-firstboot.service
 logger "boxa provisioning complete"
@@ -170,6 +149,7 @@ EOF
         ln -s /etc/systemd/system/box-firstboot.service \
              "$ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service"
     echo "  box-firstboot.service -> enabled (runs once on first boot)"
+    echo "  tracker.service -> installed + enabled (headless, no X autostart)"
 }
 
 provision_box_sampler() {
@@ -231,7 +211,8 @@ esac
 echo
 echo "=== Done. Safely eject:  sudo eject /dev/mmcblk0  (or  sync && unmount) ==="
 case "$BOX" in
-    A) echo "  First boot: ~10-40 min auto-install, then tracker opens on the screen (needs HDMI)." ;;
+    A) echo "  First boot: ~10-40 min auto-install, then tracker.service runs headless (no HDMI needed)." ;;
     B) echo "  First boot: ~5-15 min auto-install, then sampler --box B runs headless." ;;
 esac
+echo "  Box A: calibrate once over HDMI before playing — startx on tty1, drag corners, press S, then power-cycle."
 echo "  Requires: network (ether/wifi) for apt, USB sound card."

@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
     pkg-config \
     libopencv-dev \
+    libopencv-contrib-dev \
     libsdl2-dev \
     libsdl2-mixer-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -20,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && git clone --depth 1 --branch 5.5 https://github.com/raysan5/raylib.git /tmp/raylib \
     && cd /tmp/raylib/src \
     && make PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=SHARED \
-    && make install RAYLIB_INSTALL_PATH=/usr/lib \
+    && make install PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=SHARED RAYLIB_INSTALL_PATH=/usr/lib \
     && rm -rf /tmp/raylib \
     && apt-get purge -y git cmake \
     && apt-get autoremove -y \

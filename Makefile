@@ -22,28 +22,32 @@ else
 endif
 
 # ── OpenCV (auto-detect pkg-config name) ──
-ifeq ($(PLATFORM),termux)
-    ifneq ($(shell pkg-config --exists opencv4 2>/dev/null && echo yes),)
-        OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4)
-        OPENCV_LIBS   := $(shell pkg-config --libs opencv4)
-    else ifneq ($(shell pkg-config --exists opencv 2>/dev/null && echo yes),)
-        OPENCV_CFLAGS := $(shell pkg-config --cflags opencv)
-        OPENCV_LIBS   := $(shell pkg-config --libs opencv)
-    else
-        # OpenCV 4.x (Termux ships 4.14)
-        OPENCV_CFLAGS := -I$(PREFIX)/include/opencv4
-        OPENCV_LIBS   := -lopencv_core -lopencv_videoio -lopencv_video -lopencv_imgproc -lopencv_calib3d -lopencv_geometry -lopencv_tracking
-    endif
-else
-    # Desktop: avoid full opencv5 pkg-config (pulls VTK viz module)
+# Include dirs come from pkg-config so Debian / Raspberry Pi OS
+# (opencv4.pc -> /usr/include/opencv4) work out of the box. The library list is
+# kept explicit: it is the minimal set main.c needs, and it avoids pulling in
+# the viz/VTK module that the full opencv4 --libs drags along.
+# Debian ships the CSRT tracker in libopencv-contrib-dev -> -lopencv_tracking.
+# libopencv_geometry exists only in OpenCV 5.x, hence the two variants.
+ifneq ($(wildcard /usr/lib/libopencv_calib.so),)
+    # OpenCV 5.x (dev laptop)
     OPENCV_CFLAGS := -I/usr/include/opencv5
-    ifneq ($(wildcard /usr/lib/libopencv_calib.so),)
-        # OpenCV 5.x
-        OPENCV_LIBS := -lopencv_core -lopencv_videoio -lopencv_video -lopencv_imgproc -lopencv_calib -lopencv_geometry -lopencv_tracking
-    else
-        # OpenCV 4.x
-        OPENCV_LIBS := -lopencv_core -lopencv_videoio -lopencv_video -lopencv_imgproc -lopencv_calib3d -lopencv_geometry -lopencv_tracking
-    endif
+    OPENCV_LIBS   := -lopencv_core -lopencv_videoio -lopencv_video -lopencv_imgproc -lopencv_calib -lopencv_geometry -lopencv_tracking
+else ifneq ($(shell pkg-config --exists opencv4 2>/dev/null && echo yes),)
+    # OpenCV 4.x via pkg-config (Raspberry Pi OS, Debian, desktop)
+    OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4)
+    OPENCV_LIBS   := -lopencv_core -lopencv_imgproc -lopencv_videoio -lopencv_video -lopencv_calib3d -lopencv_tracking
+else ifneq ($(shell pkg-config --exists opencv 2>/dev/null && echo yes),)
+    # OpenCV 4.x via pkg-config, unversioned .pc
+    OPENCV_CFLAGS := $(shell pkg-config --cflags opencv)
+    OPENCV_LIBS   := -lopencv_core -lopencv_imgproc -lopencv_videoio -lopencv_video -lopencv_calib3d -lopencv_tracking
+else ifeq ($(PLATFORM),termux)
+    # OpenCV 4.x (Termux ships 4.14)
+    OPENCV_CFLAGS := -I$(PREFIX)/include/opencv4
+    OPENCV_LIBS   := -lopencv_core -lopencv_videoio -lopencv_video -lopencv_imgproc -lopencv_calib3d -lopencv_tracking
+else
+    # OpenCV 4.x, manual paths
+    OPENCV_CFLAGS := -I/usr/include/opencv4
+    OPENCV_LIBS   := -lopencv_core -lopencv_imgproc -lopencv_videoio -lopencv_video -lopencv_calib3d -lopencv_tracking
 endif
 
 # ── SDL2 ──

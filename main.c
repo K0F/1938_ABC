@@ -19,12 +19,17 @@
 #include <string>
 #include <cstdlib>
 #include <cstring>
+#include <csignal>
 
 #define CALIB_FILE "calib.txt"
 #define MAX_BALLS 16
 #define HANDLE_RADIUS 20.0f
 #define GRID_DIV 8
 #define BLOB_MIN_AREA 500
+
+static volatile sig_atomic_t g_quit = 0;
+
+static void onSignal(int) { g_quit = 1; }
 
 static cv::Scalar HSV_RED_LO(0, 100, 100);
 static cv::Scalar HSV_RED_HI(10, 255, 255);
@@ -119,18 +124,34 @@ static int detectBallCount(const cv::Mat& frame) {
 }
 
 int main(int argc, char* argv[]) {
+    bool headless = false;
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             std::cout << "tracker " << VERSION_STRING << std::endl;
             return 0;
         }
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            std::cout << "tracker " << VERSION_STRING << std::endl;
+            std::cout << "usage: tracker [options] [balls 1-" << MAX_BALLS << "]" << std::endl;
+            std::cout << "  --headless, -H  run without a window (systemd / Box A)" << std::endl;
+            std::cout << "  --version, -v   print version" << std::endl;
+            return 0;
+        }
+        if (strcmp(argv[i], "--headless") == 0 || strcmp(argv[i], "-H") == 0) {
+            headless = true;
+        }
     }
 
     int numBalls = 1;
     for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') continue;
         int n = std::atoi(argv[i]);
         if (n >= 1 && n <= MAX_BALLS) { numBalls = n; break; }
     }
+
+    std::signal(SIGINT, onSignal);
+    std::signal(SIGTERM, onSignal);
 
     cv::VideoCapture cap(0);
     if (!cap.isOpened()) {
@@ -148,12 +169,15 @@ int main(int argc, char* argv[]) {
     int frameWidth = frame.cols;
     int frameHeight = frame.rows;
 
-    InitWindow(frameWidth, frameHeight, "Tracker " VERSION_STRING);
-    SetTargetFPS(60);
+    Font font = {0};
+    if (!headless) {
+        InitWindow(frameWidth, frameHeight, "Tracker " VERSION_STRING);
+        SetTargetFPS(60);
 
-    Font font = LoadFontEx("terminus.ttf", 20, NULL, 0);
-    if (font.texture.id <= 0) font = GetFontDefault();
-    else SetTextureFilter(font.texture, TEXTURE_FILTER_POINT);
+        font = LoadFontEx("terminus.ttf", 20, NULL, 0);
+        if (font.texture.id <= 0) font = GetFontDefault();
+        else SetTextureFilter(font.texture, TEXTURE_FILTER_POINT);
+    }
 
     SDL_Init(SDL_INIT_AUDIO);
     Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
@@ -169,6 +193,12 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < mixCh; i++) Mix_Volume(i, 0);
 
     loadCalib(frameWidth, frameHeight);
+
+    std::cerr << "tracker " VERSION_STRING << " start: "
+              << (headless ? "headless" : "window") << ", "
+              << frameWidth << "x" << frameHeight << ", "
+              << numBalls << " ball(s), " << mixCh << " audio channel(s)"
+              << std::endl;
 
     std::vector<cv::Rect> bboxes(numBalls, cv::Rect(100, 100, 80, 80));
     std::vector<cv::Ptr<cv::TrackerCSRT>> trackers(numBalls);
@@ -193,7 +223,7 @@ int main(int argc, char* argv[]) {
     bool dragging = false;
     int dragIdx = -1;
 
-    while (!WindowShouldClose()) {
+    while (headless ? !g_quit : (!WindowShouldClose() && !g_quit)) {
         cap >> frame;
         if (frame.empty()) break;
 
@@ -228,101 +258,108 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        if (IsKeyPressed(KEY_S)) saveCalib();
-        if (IsKeyPressed(KEY_R)) loadCalib(frameWidth, frameHeight);
+        if (!headless) {
+            if (IsKeyPressed(KEY_S)) saveCalib();
+            if (IsKeyPressed(KEY_R)) loadCalib(frameWidth, frameHeight);
 
-        if (IsKeyPressed(KEY_C)) {
-            int detected = detectBallCount(frame);
-            if (detected != numBalls) {
-                numBalls = detected;
-                mixCh = 4 * numBalls;
-                if (mixCh > 8) mixCh = 8;
-                Mix_AllocateChannels(mixCh);
-                bboxes.resize(numBalls, cv::Rect(100, 100, 80, 80));
-                trackers.resize(numBalls);
-                ok.resize(numBalls, false);
-                for (int i = 0; i < numBalls; i++) {
-                    bboxes[i].x = 100 + (i * 90) % (frameWidth - 200);
-                    bboxes[i].y = 100 + (i * 70) % (frameHeight - 200);
-                    trackers[i] = cv::TrackerCSRT::create();
-                    trackers[i]->init(frame, bboxes[i]);
-                    ok[i] = true;
+            if (IsKeyPressed(KEY_C)) {
+                int detected = detectBallCount(frame);
+                if (detected != numBalls) {
+                    numBalls = detected;
+                    mixCh = 4 * numBalls;
+                    if (mixCh > 8) mixCh = 8;
+                    Mix_AllocateChannels(mixCh);
+                    bboxes.resize(numBalls, cv::Rect(100, 100, 80, 80));
+                    trackers.resize(numBalls);
+                    ok.resize(numBalls, false);
+                    for (int i = 0; i < numBalls; i++) {
+                        bboxes[i].x = 100 + (i * 90) % (frameWidth - 200);
+                        bboxes[i].y = 100 + (i * 70) % (frameHeight - 200);
+                        trackers[i] = cv::TrackerCSRT::create();
+                        trackers[i]->init(frame, bboxes[i]);
+                        ok[i] = true;
+                    }
+                    for (int i = 0; i < mixCh; i++) Mix_Volume(i, 0);
                 }
-                for (int i = 0; i < mixCh; i++) Mix_Volume(i, 0);
             }
-        }
 
-        Vector2 mouse = GetMousePosition();
-        cv::Point2f mp((float)mouse.x, (float)mouse.y);
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            dragIdx = nearestCorner(mp);
-            dragging = dragIdx >= 0;
-        } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-            dragging = false;
-            dragIdx = -1;
-        }
-        if (dragging && dragIdx >= 0) corners[dragIdx] = mp;
-
-        cv::cvtColor(frame, rgbFrame, cv::COLOR_BGR2RGB);
-        gridLines(rgbFrame, Hinv);
-        raylibImage.data = rgbFrame.data;
-
-        Texture2D texture = LoadTextureFromImage(raylibImage);
-
-        BeginDrawing();
-        ClearBackground(RAYWHITE);
-        DrawTexture(texture, 0, 0, WHITE);
-
-        for (int i = 0; i < 4; i++) {
-            Color c = (i < 2) ? (Color){255, 80, 80, 255} : (Color){80, 80, 255, 255};
-            DrawCircle((int)corners[i].x, (int)corners[i].y, 8, c);
-        }
-
-        for (int i = 0; i < numBalls; i++) {
-            Color c = (i % 2 == 0) ? RED : GREEN;
-            if (ok[i]) {
-                DrawRectangleLinesEx(
-                    (Rectangle){(float)bboxes[i].x, (float)bboxes[i].y, (float)bboxes[i].width, (float)bboxes[i].height},
-                    3.0f, c
-                );
-                DrawTextEx(font, TextFormat("B%d", i + 1),
-                    {(float)bboxes[i].x, (float)bboxes[i].y - 20}, 18, 0.0f, c);
-            } else {
-                DrawTextEx(font, TextFormat("B%d Lost", i + 1),
-                    {20, 20 + i * 30.0f}, 18, 0.0f, c);
+            Vector2 mouse = GetMousePosition();
+            cv::Point2f mp((float)mouse.x, (float)mouse.y);
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                dragIdx = nearestCorner(mp);
+                dragging = dragIdx >= 0;
+            } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                dragging = false;
+                dragIdx = -1;
             }
+            if (dragging && dragIdx >= 0) corners[dragIdx] = mp;
         }
 
-        int barH = 60;
-        int barW = frameWidth / mixCh;
-        int barY = frameHeight - barH - 10;
-        for (int i = 0; i < mixCh; i++) {
-            int vol = Mix_Volume(i, -1);
-            float fill = (float)vol / 128.0f;
-            int bx = i * barW + 5;
-            int bw = barW - 10;
-            Color c = ((i / 4) % 2 == 0) ? RED : GREEN;
-            DrawRectangle(bx, barY, bw, barH, (Color){c.r, c.g, c.b, 40});
-            DrawRectangle(bx, barY + barH - (int)(fill * barH), bw, (int)(fill * barH), c);
-            DrawRectangleLines(bx, barY, bw, barH, WHITE);
-            DrawTextEx(font, TextFormat("T%d", i + 1),
-                {(float)(bx + 4), (float)(barY + 2)}, 14, 0.0f, WHITE);
+        if (!headless) {
+            cv::cvtColor(frame, rgbFrame, cv::COLOR_BGR2RGB);
+            gridLines(rgbFrame, Hinv);
+            raylibImage.data = rgbFrame.data;
+
+            Texture2D texture = LoadTextureFromImage(raylibImage);
+
+            BeginDrawing();
+            ClearBackground(RAYWHITE);
+            DrawTexture(texture, 0, 0, WHITE);
+
+            for (int i = 0; i < 4; i++) {
+                Color c = (i < 2) ? (Color){255, 80, 80, 255} : (Color){80, 80, 255, 255};
+                DrawCircle((int)corners[i].x, (int)corners[i].y, 8, c);
+            }
+
+            for (int i = 0; i < numBalls; i++) {
+                Color c = (i % 2 == 0) ? RED : GREEN;
+                if (ok[i]) {
+                    DrawRectangleLinesEx(
+                        (Rectangle){(float)bboxes[i].x, (float)bboxes[i].y, (float)bboxes[i].width, (float)bboxes[i].height},
+                        3.0f, c
+                    );
+                    DrawTextEx(font, TextFormat("B%d", i + 1),
+                        {(float)bboxes[i].x, (float)bboxes[i].y - 20}, 18, 0.0f, c);
+                } else {
+                    DrawTextEx(font, TextFormat("B%d Lost", i + 1),
+                        {20, 20 + i * 30.0f}, 18, 0.0f, c);
+                }
+            }
+
+            int barH = 60;
+            int barW = frameWidth / mixCh;
+            int barY = frameHeight - barH - 10;
+            for (int i = 0; i < mixCh; i++) {
+                int vol = Mix_Volume(i, -1);
+                float fill = (float)vol / 128.0f;
+                int bx = i * barW + 5;
+                int bw = barW - 10;
+                Color c = ((i / 4) % 2 == 0) ? RED : GREEN;
+                DrawRectangle(bx, barY, bw, barH, (Color){c.r, c.g, c.b, 40});
+                DrawRectangle(bx, barY + barH - (int)(fill * barH), bw, (int)(fill * barH), c);
+                DrawRectangleLines(bx, barY, bw, barH, WHITE);
+                DrawTextEx(font, TextFormat("T%d", i + 1),
+                    {(float)(bx + 4), (float)(barY + 2)}, 14, 0.0f, WHITE);
+            }
+
+            DrawTextEx(font, "Drag corners | S save | R reset | C calibrate",
+                {10, 10}, 16, 0.0f, RAYWHITE);
+            DrawTextEx(font, TextFormat("Balls: %d", numBalls),
+                {10, (float)(frameHeight - 80)}, 16, 0.0f, RAYWHITE);
+
+            EndDrawing();
+            UnloadTexture(texture);
         }
-
-        DrawTextEx(font, "Drag corners | S save | R reset | C calibrate",
-            {10, 10}, 16, 0.0f, RAYWHITE);
-        DrawTextEx(font, TextFormat("Balls: %d", numBalls),
-            {10, (float)(frameHeight - 80)}, 16, 0.0f, RAYWHITE);
-
-        EndDrawing();
-        UnloadTexture(texture);
     }
 
-    UnloadFont(font);
+    std::cerr << "tracker " VERSION_STRING << " stop" << std::endl;
+    if (!headless) {
+        UnloadFont(font);
+        CloseWindow();
+    }
     for (int i = 0; i < 8; i++) if (tracks[i]) Mix_FreeChunk(tracks[i]);
     Mix_CloseAudio();
     SDL_Quit();
     cap.release();
-    CloseWindow();
     return 0;
 }

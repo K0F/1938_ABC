@@ -1,0 +1,21 @@
+[Unit]
+Description=Tracker Box A (headless: camera tracking + audio)
+After=sound.target
+Wants=sound.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/tracker
+ExecStart=/home/pi/tracker/tracker --headless 1
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tracker
+
+[Install]
+WantedBy=multi-user.target

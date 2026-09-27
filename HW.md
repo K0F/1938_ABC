@@ -13,7 +13,7 @@ Kompletní schémata všech propojení: [`docs/SCH.md`](docs/SCH.md).
 
 ## 1) Architektura a role boxů
 
-- **Box A** — Hlavní jednotka, běží stávající software tracker (webkamera snímá stůl, koule ovládají hlasitost loopů přes SDL2_mixer). Raspberry Pi 4 + webkamera + USB zvukovka + jack 3,5 na panelu + zesilovač + reproduktor. Napájení: vlastní zdroj 15,3 W (5 m šňůra)
+- **Box A** — Hlavní jednotka, běží stávající software tracker (webkamera snímá stůl, koule ovládají hlasitost loopů přes SDL2_mixer). Raspberry Pi 4 + webkamera + USB zvukovka + jack 3,5 na panelu + zesilovač + reproduktor. Napájení: vlastní zdroj 15,3 W (5 m šňůra). Běží **headless** jako `tracker.service` (uživatel `pi`), žádný X ani monitor; HDMI se používá jen jednou při kalibraci perspektivy
 - **Box B** — Spouštěč samplerů, **10 bezdrátových tlačítek**, SDL Mixer přehrává X samplů, reproduktor přímo v krabici, volitelný LCD 16×2 se stavem mixu, indikace chodu + reset. Raspberry Pi 4 + audio + LCD (volitelný) + RF přijímač 433 MHz + jack 3,5 na panelu + zesilovač + reproduktor. Napájení: vlastní zdroj 15,3 W (5 m šňůra)
 - **10× tlačítko** — Hotové bezdrátové tlačítko Solight 1L67T (433 MHz, EV1527/learning-code, baterie uvnitř). Všechna spárována s boxem B
 

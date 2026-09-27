@@ -56,6 +56,18 @@ Umístěte své WAV soubory jako `samples/track1.wav` až `samples/track8.wav` d
 ./tracker 2  # Sleduje 2 míčky, ovládá stopy 1-8
 ```
 
+### Headless režim (Box A v produkci)
+Box A běží bez okna a bez X — grafiku nepotřebuje, jen kameru a zvuk. Služba běží jako uživatel `pi`:
+```bash
+./tracker --headless 1  # bez okna, 1 míček; vstup přes systemd
+```
+```bash
+sudo cp tracker.service /etc/systemd/system/
+sudo systemctl enable --now tracker
+journalctl -t tracker -f   # logy do journalu
+```
+Okenný režim zůstává pro kalibraci (přetáhnutí rohů, klávesa `S`). Bez `calib.txt` tracker používá celý snímek, takže první kalibraci udělejte ještě s monitorem přes HDMI.
+
 ### Ovládání (Tracker)
 | Vstup | Akce |
 |-------|--------|
@@ -155,6 +167,15 @@ export DISPLAY=:0
 ### Chybějící knihovny (Linux)
 - **-lraylib**: `pkg install -y x11-repo && pkg install -y raylib`
 - **-lGL**: `pkg install -y mesa`
+
+### "Could not open video capture device" na Box A
+Webkamera (V4L2) má single-open: `/dev/video0` drží právě jeden proces. Běží-li
+služba, ruční spuštění trackeru selže. Před ručním během službu zastavte:
+```bash
+sudo systemctl stop tracker
+./tracker            # nebo ./tracker --headless 1
+sudo systemctl start tracker
+```
 
 ---
 

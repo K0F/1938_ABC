@@ -337,11 +337,17 @@ Stejný postup jako §4.7, ale:
 
 ### 7.2 Kalibrace perspektivy (Box A)
 
-Podrobnosti v [`README.md`](../README.md) §Perspective correction:
+Box A běží v produkci headless (`tracker.service`, bez X). Kalibrace se proto dělá
+jednou ručně přes HDMI. Podrobnosti v [`README.md`](../README.md) §Perspective correction:
 
-1. Spusťte `./tracker 1` na Pi A s připojeným monitorem (HDMI).
+1. Na Pi A spusťte `./tracker 1` s připojeným monitorem (HDMI).
 2. Přetáhněte 4 rohy (červené = X, modré = Y) kolem hrací plochy.
-3. Stiskněte **S** pro uložení kalibrace do `calib.txt`.
+3. Stiskněte **S** pro uložení kalibrace do `calib.txt` v `/home/pi/tracker`.
+4. Ukončete tracker a spusťte produkční službu: `sudo systemctl start tracker`.
+5. Po přesunu kamery nebo stolu kalibraci zopakujte.
+
+Bez `calib.txt` běží tracker s výchozí mapou přes celý snímek, takže koule se
+budou mapovat do celého obrazu místo herní plochy.
 
 ### 7.3 Test audio výstupů
 
