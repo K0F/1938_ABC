@@ -154,6 +154,8 @@ USB zvuková karta AXAGON ADA-17 (USB-A na Pi)   (oba boxy, stejně):
 ```
 - Použít **vždy USB zvukovku AXAGON ADA-17**, ne interní jack Pi (interní jack se nezapojuje).
 - Y-rozdvojka umožní paralelně: panelový výstup (na mix/pódiový zesilovač) **a** interní reproduktor.
+- **Přechod 3,5 mm → 6,3 mm**: z výstupu AXAGONu vede 3,5 mm do redukce na **6,3 mm stereo** (příp. přes cinch redukci 3,5 mm ↔ 2× RCA), teprve ta jde do vstupu CA-3110S. Bez této redukce se vstup zesilovače nezapojí.
+- Zvuk v ALSA je řízen jmény podle typu (`usb` = AXAGON, `builtin` = vestavěný jack, `default` = `usb`), které generuje `box-alsa-setup.sh` při prvním bootu. Test: `speaker-test -D usb -c 2 -t sine -f 440 -l 1`.
 
 ### 5.4 RF přijímač 433 MHz (SRX882S) na GPIO Pi 4 (jen B)
 

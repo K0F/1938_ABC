@@ -5,7 +5,9 @@ Feature ideas and planned work for the tracker.
 ## Hardware — Box A / Box B
 
 - [ ] **Dokončit zesilovač v Boxu A** — CA-3110S + interní reproduktor LS40N 40 mm,
-      panelový jack 3,5 mm (TIP=L, RING=R, SLEEPE=GND) paralelně přes Y-rozdvojku.
+      panelový jack 3,5 mm (TIP=L, RING=R, SLEEVE=GND) paralelně přes Y-rozdvojku.
+      Z výstupu AXAGONu 3,5 mm do vstupu CA-3110S je potřeba **redukce 3,5 → 6,3 mm**
+      (příp. 3,5 mm ↔ 2× RCA), viz `HW.md` §5.3.
 - [ ] **Dokončit zesilovač v Boxu B** — CA-3110S + interní reproduktor, stejné
       zapojení jako Box A.
 - [ ] **Zapojit přijímač v Boxu B** — SRX882S 433 MHz na GPIO (viz `docs/SCH.md`),

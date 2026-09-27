@@ -94,7 +94,8 @@ rm -f "$ROOT/etc/systemd/system/box-firstboot.service" "$ROOT/etc/systemd/system
 rm -f "$ROOT/etc/systemd/system/box@firstboot.service"
 rm -f "$ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service" \
       "$ROOT/etc/systemd/system/multi-user.target.wants/boxa-firstboot.service"
-rm -f "$ROOT/usr/local/sbin/box-provision.sh" "$ROOT/usr/local/sbin/boxa-provision.sh"
+rm -f "$ROOT/usr/local/sbin/box-provision.sh" "$ROOT/usr/local/sbin/boxa-provision.sh" \
+      "$ROOT/usr/local/sbin/box-alsa-setup.sh"
 rm -f "$ROOT/etc/systemd/system/sampler.service" "$ROOT/usr/local/bin/sampler"
 rm -f "$ROOT/etc/systemd/system/tracker.service" \
       "$ROOT/etc/systemd/system/multi-user.target.wants/tracker.service"
@@ -116,12 +117,9 @@ bash install-deps.sh
 apt-get install -y --no-install-recommends \
     xinit xserver-xorg xserver-xorg-video-fbdev x11-xserver-utils libgl1-mesa-dri >/dev/null
 usermod -aG audio,video $USER
-# ALSA default must be in place before the service opens the sound card
-CARD=$(grep -i usb /proc/asound/cards | head -1 | awk '{print $1}')
-if [ -n "$CARD" ]; then
-    printf 'pcm.!default { type hw; card %s }\nctl.!default { type hw; card %s }\n' "$CARD" "$CARD" > /etc/asound.conf
-    echo "ALSA default -> USB card $CARD"
-fi
+# ALSA devices must be named and the default set before the service opens the card
+install -m 0755 box-alsa-setup.sh /usr/local/sbin/box-alsa-setup.sh
+/usr/local/sbin/box-alsa-setup.sh
 install -m 0644 tracker.service /etc/systemd/system/tracker.service
 systemctl daemon-reload
 systemctl enable tracker.service
@@ -171,13 +169,11 @@ install -m 0755 sampler /usr/local/bin/sampler
 install -m 0644 sampler.service /etc/systemd/system/sampler.service
 sed -i 's/--box .*/--box $BOX/' /etc/systemd/system/sampler.service
 systemctl daemon-reload
+# ALSA devices must be named and the default set before the service opens the card
+install -m 0755 box-alsa-setup.sh /usr/local/sbin/box-alsa-setup.sh
+/usr/local/sbin/box-alsa-setup.sh
 systemctl enable sampler.service
 systemctl start sampler.service
-CARD=\$(grep -i usb /proc/asound/cards | head -1 | awk '{print \$1}')
-if [ -n "\$CARD" ]; then
-    printf 'pcm.!default { type hw; card %s }\nctl.!default { type hw; card %s }\n' "\$CARD" "\$CARD" > /etc/asound.conf
-    echo "ALSA default -> USB card \$CARD"
-fi
 touch /var/lib/box-provisioned
 systemctl disable box-firstboot.service
 logger "box$BOX provisioning complete"

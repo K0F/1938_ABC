@@ -68,6 +68,27 @@ journalctl -t tracker -f   # logy do journalu
 ```
 Okenný režim zůstává pro kalibraci (přetáhnutí rohů, klávesa `S`). Bez `calib.txt` tracker používá celý snímek, takže první kalibraci udělejte ještě s monitorem přes HDMI.
 
+### Ověření zvuku (Box A / Box B)
+Box má USB zvukovou kartu i vestavěný jack Pi. `/etc/asound.conf` generuje skript `box-alsa-setup.sh`, který zařízení pojmenuje **podle typu**:
+```bash
+sudo ./box-alsa-setup.sh   # vygeneruje /etc/asound.conf
+aplay -L | grep -E '^(usb|builtin|default)$'
+```
+| Zařízení | Typ | Popis |
+|----------|-----|-------|
+| `usb` | USB zvuková karta | AXAGON ADA-17 — hraje se do ní, živí zesilovač |
+| `builtin` | vestavěný jack | bcm2835 Headphones (v krabici se nezapojuje) |
+| `default` | = `usb` | tracker i sampler hrají sem, nemusí nic přepínat |
+
+Test zvuku — služba drží kartu, proto nejdřív zastavit:
+```bash
+sudo systemctl stop tracker
+speaker-test -D usb -c 2 -t sine -f 440 -l 1   # střídá levý/pravý kanál
+aplay -D usb samples/track1.wav                # vlastní samply
+sudo systemctl start tracker
+```
+`speaker-test` střídá kanály — tím ověříš `TIP = L, RING = R`. Obě zařízení jsou `type plug`, ne `type hw`: `hw` má pevně 2 kanály a mono samply by skončily chybou `Channels count non available`.
+
 ### Ovládání (Tracker)
 | Vstup | Akce |
 |-------|--------|
