@@ -3,6 +3,7 @@
 
 import argparse
 import html
+import math
 import os
 import re
 from html.parser import HTMLParser
@@ -230,7 +231,7 @@ def convert_html(md_path):
     print("html:", html_path)
 
 
-def convert_pdf(md_path, out_path=None):
+def convert_pdf(md_path, out_path=None, watermark=None):
     import gi
 
     gi.require_version("Pango", "1.0")
@@ -274,6 +275,35 @@ def convert_pdf(md_path, out_path=None):
         lay.set_markup(txt, -1)
         return lay.get_pixel_size()[1]
 
+    wm_layout = None
+    if watermark:
+        wm_fd = Pango.FontDescription("DejaVu Sans")
+        wm_fd.set_size(80 * Pango.SCALE)
+        wm_fd.set_weight(Pango.Weight.BOLD)
+        wm_text = html.escape(watermark)
+        wm_layout = (wm_fd, wm_text)
+
+    def draw_watermark(ctx):
+        if not wm_layout:
+            return
+        fd_, txt_ = wm_layout
+        lay = PangoCairo.create_layout(ctx)
+        lay.set_font_description(fd_)
+        lay.set_markup(f"<b>{txt_}</b>", -1)
+        w, h = lay.get_pixel_size()
+        ctx.save()
+        ctx.set_source_rgba(0.15, 0.15, 0.15, 0.13)
+        ctx.translate(page_w / 2, page_h / 2)
+        ctx.rotate(math.radians(-35))
+        ctx.move_to(-w / 2, -h / 2)
+        PangoCairo.show_layout(ctx, lay)
+        ctx.restore()
+
+    def end_page(ctx):
+        draw_watermark(ctx)
+        surface.show_page()
+        return make_ctx()
+
     ctx = make_ctx()
 
     # render title
@@ -306,8 +336,7 @@ def convert_pdf(md_path, out_path=None):
         if ph <= usable_h:
             # fits on one page — check if it fits on current page
             if y + ph > page_h - margin:
-                surface.show_page()
-                ctx = make_ctx()
+                ctx = end_page(ctx)
                 y = margin
             lay = make_layout(ctx)
             lay.set_markup(para, -1)
@@ -332,8 +361,7 @@ def convert_pdf(md_path, out_path=None):
                 i += len(chunk_lines)
 
                 if y + text_height(ctx, chunk) > page_h - margin:
-                    surface.show_page()
-                    ctx = make_ctx()
+                    ctx = end_page(ctx)
                     y = margin
 
                 lay = make_layout(ctx)
@@ -342,6 +370,7 @@ def convert_pdf(md_path, out_path=None):
                 PangoCairo.show_layout(ctx, lay)
                 y += lay.get_pixel_size()[1]
 
+    draw_watermark(ctx)
     surface.finish()
     print("pdf:", pdf_path)
 
@@ -353,11 +382,14 @@ def main():
     ap.add_argument(
         "--pdf", action="store_true", help="Output PDF via pango/cairo instead of HTML"
     )
+    ap.add_argument(
+        "--watermark", metavar="TEXT", help="Diagonal light-gray text on every page"
+    )
     args = ap.parse_args()
     use_pdf = args.pdf or args.output
     for fn in args.files:
         if use_pdf:
-            convert_pdf(fn, out_path=args.output)
+            convert_pdf(fn, out_path=args.output, watermark=args.watermark)
         else:
             convert_html(fn)
 
