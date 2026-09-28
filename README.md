@@ -89,6 +89,28 @@ sudo systemctl start tracker
 ```
 `speaker-test` střídá kanály — tím ověříš `TIP = L, RING = R`. Obě zařízení jsou `type plug`, ne `type hw`: `hw` má pevně 2 kanály a mono samply by skončily chybou `Channels count non available`.
 
+#### Automatický test zvuku
+
+`box-audio-test.sh` spustí celý postup výše bez dohledu a výsledek uloží do `audio-test-report.txt`. Kontroluje, že `usb` a `default` jsou v `aplay -L`, že v configu není `device N`, že `pcm.usb` je `type plug`, a hlavně že **monofonní** `samples/track1.wav` skutečně přehraje.
+
+Test logiky detekce běží bez QEMU i bez hardwaru — `box-alsa-setup.sh` čte kořene z proměnných (`ABC38_SOUND_SYSFS`, `ABC38_ASOUND_PROC`, `ABC38_ASOUND_CONF`), takže se dá pustit nad falešným stromem:
+```bash
+./tests/test-box-alsa-setup.sh
+```
+Pokrývá i případy, které se na boxu vyskytnou jen náhodou — hlavně **USB zařízení jen pro záznam (webkamera C920) nesmí být vybráno jako `usb`**, a to i když se vyloží dřív než zvukovka.
+
+V QEMU se pustí celý průchod: QEMU emuluje USB zvukovku (`usb-audio`), test po bootu sám sebe spustí, zapíše report a vypne stroj.
+```bash
+./qemu_raspi4.sh setup          # qemu-system-aarch64 + qemu-user-static
+./qemu_raspi4.sh audiotest      # prepare --audio-test + run --audio
+./qemu_raspi4.sh report         # po skoncení QEMU vypsat výsledek
+```
+`audiotest` připraví image, pustí QEMU a nechá ho vypnout. Report se vypsá až naprázdno — `run` končí `exec`, takže po návratu do shellu ho musíš vypsat zvlášť příkazem `report`.
+
+Hraný zvuk ukládá do `rom/guest-audio.wav`, takže se dá ověřit, že z hostu opravdu něco hrálo, ne že `aplay` jen skončil s 0. Bez binnfmt registrace `prepare` přes chroot doinstaluje `alsa-utils` selze — musí být zapnutý `sudo systemctl enable --now systemd-binfmt`.
+
+QEMU má dvě omezení, která nejsou chyba testu: neemuluje `bcm2835` audio kodec, takže `pcm.builtin` v testu chybí, a jeho USB zvukovka není ADA-17 — ověřuje se detekce, config a cesta pro mono, ne hardware.
+
 ### Ovládání (Tracker)
 | Vstup | Akce |
 |-------|--------|

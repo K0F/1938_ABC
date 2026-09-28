@@ -18,20 +18,31 @@
 #     skončí "Channels count non available".
 #
 #   usage: sudo box-alsa-setup.sh
+#
+# Testovatelnost (viz tests/test-box-alsa-setup.sh): kořeny lze přesměrovat,
+# aby se detekce dala pustit nad falešným stromem bez skutečného hardware.
+# Výchozí hodnoty jsou přesně produkční cesty.
+#   ABC38_SOUND_SYSFS  default /sys/class/sound
+#   ABC38_ASOUND_PROC  default /proc/asound
+#   ABC38_ASOUND_CONF  default /etc/asound.conf
 
 set -e
+
+SYSFS="${ABC38_SOUND_SYSFS:-/sys/class/sound}"
+PROC="${ABC38_ASOUND_PROC:-/proc/asound}"
+OUT="${ABC38_ASOUND_CONF:-/etc/asound.conf}"
 
 USB_CARD=""
 BUILTIN_CARD=""
 
-for dev in /sys/class/sound/card*; do
+for dev in "$SYSFS"/card*; do
     n="${dev##*card}"
     case "$n" in "" | *[!0-9]*) continue ;; esac
     path="$(readlink -f "$dev/device" 2>/dev/null || true)"
     [ -n "$path" ] || continue
     case "$path" in
         */usb*)
-            if [ -z "$USB_CARD" ] && ls /proc/asound/card$n/pcm*p >/dev/null 2>&1; then
+            if [ -z "$USB_CARD" ] && ls "$PROC"/card$n/pcm*p >/dev/null 2>&1; then
                 USB_CARD="$n"
             fi ;;
         */platform/*bcm2835-audio*)
@@ -61,8 +72,8 @@ fi
         echo "pcm.!default { type plug; slave.pcm usb }"
         echo "ctl.!default { type hw; card $USB_CARD }"
     fi
-} > /etc/asound.conf
+} > "$OUT"
 
-echo "ALSA: usb=card$USB_CARD builtin=card$BUILTIN_CARD -> /etc/asound.conf"
-grep -v '^#' /etc/asound.conf | tr '\n' ' ' || true
+echo "ALSA: usb=card$USB_CARD builtin=card$BUILTIN_CARD -> $OUT"
+grep -v '^#' "$OUT" | tr '\n' ' ' || true
 echo
