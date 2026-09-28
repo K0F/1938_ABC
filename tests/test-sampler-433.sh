@@ -47,12 +47,12 @@ runnable() {
 }
 
 build() {
-    local cc="${CXX:-g++}"
+local cc="${CXX:-g++}"
     # SDL2 nemusí být v systému. Když je jen v cross/sysrootu (stažené .deb
     # nebo vlastní build), nasměruj sem ABC38_SYSROOT a test poběží i bez root
     # práv. Jen přidáváme include/lib cestu — --sysroot by schoval systémové
     # hlavičky glibc a překlep by se projevil jako chybějící sys/types.h.
-    local cflags ldflags
+    cflags=""; ldflags=""; SYS_LIBS=""
     if [ -n "${ABC38_SYSROOT:-}" ]; then
         local trip="${ABC38_TRIPLET:-$(gcc -dumpmachine)}"
         # Debian multiarch: část hlaviček (SDL2/_real_SDL_config.h) leží
