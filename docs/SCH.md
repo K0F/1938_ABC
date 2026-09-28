@@ -109,13 +109,19 @@ Synchronizace samplů A↔B: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
               ┌─────────────▼──┐  ┌───▼──────────────┐
               │ panelový jack  │  │ CA-3110S zesilovač│──► LS40N 40 mm, 8 Ω
               │ EY-512C (stereo│  │ (TP3110, tr. D)   │       (interní repro)
-              │ L=špička, R=kroužek, │ napájení 5–26 V  │
-              │ G=plášť)  ──► výstup│                  │
+              │ L=špička, R=kroužek, │ napájení 8–26 V  │
+              │ G=plášť)  ──► výstup│  (VLASTNÍ zdroj!) │
               │   do mixu / ext. zesilovače └──────────────────┘
 ```
 - **Panelový stereo výstup**: kontakt „špička" (TIP) = L, „kroužek" (RING) = R, „plášť" (SLEEVE) = GND.
-- **Zesilovač**: napájet z 5 V rozvodu boxu (výstup USB zvukovky → Y-rozdvojka → CA-3110S);
-  jeden kanál přes stereo-mono rezistory (L/R do jednoho vstupu), klasicky levý kanál stačí.
+- **Zesilovač — signál vs. napájení (dvě různé věci)**:
+  - *Signál* jde z USB zvukovky přes Y-rozdvojku do vstupu CA-3110S; do jednoho
+    vstupu se L/R sečtou přes stereo-mono rezistory, klasicky stačí levý kanál.
+    Y-rozdvojka není zdroj napájení — je to jen rozdvojka dvou audio kanálů.
+  - *Napájení* je vlastní: CA-3110S (TPA3110) potřebuje **8–26 V** (deska je
+    dimenzovaná až na 3 A, ale pro 8 Ω repro stačí 12 V / 1 A — viz §5).
+    **5 V z Pi na to nestačí a nesmí se to zkoušet** — chip má minimum 8 V.
+  - Zesilovač tedy potřebuje vlastní zdroj, kromě dvou Pi zdrojů 15,3 W.
 - **Zvuková karta**: výstup vzorků v ALSA (SDL2_mixer→ALSA→USB zvukovka); interní jack Pi se nepoužívá.
 - **LCD**: adresa I2C 0x27 (průzkum `i2cdetect -y 1`); kontrast na trimru adaptéru;
   případně level shifter 3,3→5 V (napájení 5 V z pinu 2/4).
@@ -149,6 +155,38 @@ Synchronizace samplů A↔B: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
    └──────────┘    (pokud napájíte 5 V, DATA = 5 V logika → převodník!)
 ```
 - Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 22. Mapa `kód → sample` (10 ks → B). Hlásit dosah se zavřeným víkem.
+
+#### 4.2.1 Anténa — nejdřív bez pájení
+
+Vlnová délka na 433,92 MHz: celá 69,1 cm, čtvrtvlnová **17,3 cm**, polovlnová 34,5 cm.
+
+Box je **kovová krabice** a to je největší faktor, ne délka antény — tyč uvnitř
+kovu často nehraje o nic víc. Pořadí, od nejlevnějšího:
+
+1. **Odsadit modul od Pi o ≥2 cm** (stočeno v §3). Zdrojem rušení je CPU, USB
+   zvukovka a zesilovač; to nevyřeší žádná anténa, jen lepší filtrace.
+2. **Svisle** — tlačítka Solight mají anténu svislou, vodorovná přijímací tyč
+   ztrácí na polarizaci.
+3. **Náhradní tyč** — přiletovat ~17,3 cm drátu 1,5–2 mm (single core, ne
+   stočit do těsné cívky — to posune rezonanci dolů).
+4. **Zemina** — čtvrtvlnová tyč chce zemnicovou plochu; plocha PCB Pi je špatná
+   a hlučná, malý samostatný kovový plíšek bývá lepší než lepší tyč.
+
+Chceš-li opravdu dosah, vynést anténu **z krabice**: dipól 75 Ω na koaxu
+(2× 34,5 cm) mimo kov. Jenže pak DATA na GPIO 22 nesmí být dlouhý kabel
+vedený vedle spínacího zdroje — krátký koax nebo malý buffer, jinak si
+line udělá vlastní anténu a bude jen chytit síť.
+
+Pozor, ASK/OOK je modulovaný amplitudově s AGC: delší anténa zesílí všechno
+včetně šumu. Pokud tlačítka začnou cvakat samy od sebe, znamení to je zkrácení
+tyče nebo větší odstup, ne prodloužení.
+
+Měřit na stole, ne odhadovat:
+```bash
+./sampler --box b --listen     # chodí se vzdalovat
+```
+opakovat se zavřenou krabicí. Rozdíl ukáže, jestli je anténa vůbec problém.
+
 - **První nastavení**: každým tlačítkem stisknout a zapsat kód → soubor `mapa.csv`:
 
   ```
@@ -171,14 +209,30 @@ Oba boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý box se za
          ┌──────────────────┴──────────────────┐
          5 m JT003                             5 m JT003
          ▼                                     ▼
-   ┌──────────┐                          ┌──────────┐
-   │ BOX A    │                          │ BOX B    │
-   │ vlastní  │                          │ vlastní  │
-   │ PSU 15,3W│                          │ PSU 15,3W│
-   └──────────┘                          └──────────┘
+    ┌──────────┐                          ┌──────────┐
+    │ BOX A    │                          │ BOX B    │
+    │ vlastní  │                          │ vlastní  │
+    │ PSU 15,3W│                          │ PSU 15,3W│
+    └──────────┘                          └──────────┘
 ```
 - Žádný rozvod 5 V mezi boxy — Pi 4 (až 3 A) má vždy svůj zdroj.
 - **Boxy nejsou zapojeny do série** — každý má vlastní přípojku 230 V (vhodné jištění ≤10 A dle kabeláže).
+- **Zesilovač potřebuje ještě třetí zdroj.** CA-3110S běží na 8–26 V, takže ho
+  nelze napájet z 5 V Pi ani z 5 V USB zvukovky. Na 230 V se připojuje
+  samostatným adaptérem dovnitř krabice, sdílenou zem se zemí Pi (aby nevznikla
+  smyčka). Chybí v `nakup.txt` — doplnit.
+- **Jak velký ten zdroj má být** (8 Ω repro, 12 V):
+
+  | Proud zdroje | Výkon do 8 Ω | Poznámka |
+  |---|---|---|
+  | 250 mA | ~2,7 W | **nestací** — tlaci na peakách, chrčí |
+  | 1 A | ~10 W | správně |
+  | 2 A | ~21 W | rezerva, ale 12 V už je limit |
+
+  12 V do 8 Ω dá ideálně max **~9 W** (omezení napětím, ne proudem), takže 1 A
+  je správná volba a 2 A pro klid. Na 30 W z inzerátu se dostaneš až s 24 V.
+  Trída D má vysoký crest faktor (peaky 3–10× RMS), proto poddimenzovaný zdroj
+  chrčí na transienty, ne že by byl „tišší".
 - Odběr boxu < 1,5 A u Pi 4 běžně; 3A zdroj dává rezervu pro USB zvukovku + kameru (A).
 
 ---
@@ -193,7 +247,7 @@ Oba boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý box se za
 | Reset tlačítko | 17        | 11  | tlačítko NO → GND, pull-up 10 kΩ |
 | Indikace chodu | 26        | 37  | 330 Ω → LED → GND |
 | 3V3            | —         | 1   | SRX882S VCC, LCD VCC (3,3 V varianta), pull-upy |
-| GND            | —         | 6   | SRX882S, LCD, tlačítko, LED, zesilovač (společná zem) |
+| GND            | —         | 6   | SRX882S, LCD, tlačítko, LED (zesilovač má vlastní zdroj, zem společná) |
 
 Pi 4 8 GB sdílé 40pin GPIO rozvržení a BCM číslování → schémata jsou přenositelná.
 Box A: BCM **17** (reset) a **26** (LED) — stejná schémata jako §3/§6.

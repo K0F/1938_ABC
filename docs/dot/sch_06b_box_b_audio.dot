@@ -13,7 +13,7 @@ y [label="Y-rozdvojka\nPremiumCord\nJACK 3,5 M → 2× JACK 3,5 F" shape=box sty
 // Outputs
 panel [label="Panelový jack\nEY-512C (stereo)\n─────────────\nTIP (špička) = L\nRING (kroužek) = R\nSLEEVE (plášť) = GND\n─────────────\n→ výstup do mixu /\next. zesilovače" shape=box style="filled,rounded" fillcolor="#bbdefb" width=2.5];
 
-amp [label="CA-3110S zesilovač\n(TP3110, třída D)\nnapájení 5–26 V" shape=box style="filled,rounded" fillcolor="#ffccbc" width=2];
+amp [label="CA-3110S zesilovač\n(TP3110, třída D)\nnapájení 8–26 V\nVLASTNÍ zdroj 12 V / 1 A\n(nelze napájet z Pi!)" shape=box style="filled,rounded" fillcolor="#ffccbc" width=2];
 repro [label="LS40N\n40 mm, 8 Ω\n(interní repro)" shape=box style="filled,rounded" fillcolor="#e1bee7"];
 
 // Edges

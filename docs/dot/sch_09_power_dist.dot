@@ -10,12 +10,17 @@ siet [label="230 V zásuvka\n/ odbočka" shape=oval fillcolor="#fff9c4"];
 // Boxes
 boxA [label="BOX A\n─────────\nVlastní zdroj\n15,3 W" shape=box style="filled,rounded" fillcolor="#bbdefb" width=1.8];
 boxB [label="BOX B\n─────────\nVlastní zdroj\n15,3 W (Pi 4)" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=1.8];
+amp [label="Zesilovač CA-3110S\n(TP3110)\n8–26 V\n12 V / 1 A stačí (8 Ω)" shape=box style="filled,rounded" fillcolor="#ffccbc" width=1.8];
 
 // Cables — každý box jde do zásuvky samostatně, jen 230 V, 5 V se nerozvádí
 siet -> boxA [label="  230 V\n  5 m JT003  " color="#d32f2f" penwidth=1.5];
 siet -> boxB [label="  230 V\n  5 m JT003  " color="#d32f2f" penwidth=1.2];
+siet -> amp [label="  230 V\n  vlastní adaptér  " color="#d32f2f" penwidth=1.2];
 
 // Notes
 note [label="Žádný rozvod 5 V mezi boxy —\nkaždý box má vlastní zdroj 15,3 W.\nBoxy nejsou zapojeny do série." shape=note fillcolor="#f5f5f5" fontsize=10];
 siet -> note [style=dotted color="#666666"];
+
+note2 [label="Zesilovač = TŘETÍ zdroj v krabici.\n5 V z Pi ani z USB zvukovky ho nerozchodí\n(minimum 8 V). Zem společná s Pi." shape=note fillcolor="#fff9c4" fontsize=10];
+amp -> note2 [style=dotted color="#666666"];
 }

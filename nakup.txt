@@ -75,9 +75,15 @@ https://www.gme.cz/v/1496892/ey-512c-jack-35-stereo
 
 https://www.gme.cz/v/1501905/np-107-en-jack-35-stereo
 
-2x ZesilovačCA-3110S (TPA3110, třída D, stereo)
+2x ZesilovačCA-3110S (TPA3110, třída D, stereo) — potřebuje VLASTNÍ zdroj 8–26 V (pro 8 Ω repro stačí 12 V / 1 A), ne 5 V z Pi
 
 https://www.gme.cz/v/1518915/creatall-ca-3110s-digitalni-zesilovac-tridy-d-s-cipem-tp3110-napajeni-826v-3a
+
+2x Napájecí adaptér pro zesilovač 12 V / 1 A (DC) — CHYBÍ V SEZNAMU, nutno dokoupit.
+    CA-3110S má minimum 8 V, z 5 V (Pi, USB zvukovka) ho nerozchodíš.
+    250 mA NESTAČÍ: jen ~2,7 W do 8 Ω a tlaci na peakách (chrčení).
+    1 A = správně (8 Ω z 12 V dá max ~9 W, 1 A to pokryje s rezervou),
+    2 A pro klid. Nad to zbytečné, leda by byl repro 4 Ω.
 
 4x ReproduktorLS40N-27-R8 (průměr 40 mm, 8 Ω)
 

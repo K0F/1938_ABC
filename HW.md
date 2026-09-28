@@ -165,6 +165,9 @@ Pi GND (pin 6)     ◄────── GND ── SRX882S [ANT ── integrov
 ```
 - SRX882S (ASK/OOK, 433,92 MHz): DATA = 3,3 V logika, napájet **3V3**.
 - Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 22. Mapa `kód → sample` (10 ks → B). Hlásit dosah se zavřeným víkem.
+- **Anténa**: modul má vlastní (PCB stopa nebo cívka). Krabice je hliníková, takže
+  nejdřív odstup od Pi ≥2 cm a svislá orientace, pak teprve ~17,3 cm tyč
+  (čtvrt vlny na 433,92 MHz). Podrobně `docs/SCH.md` §4.2.1.
 
 ---
 

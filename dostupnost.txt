@@ -26,6 +26,10 @@ GME (gme.cz) — produktové stránky:
 [DODÁNO]  EY-512C stereo jack 3,5 do panelu   15 Kč   e-shop 1942 ks      potřeba 2×
 [DODÁNO]  NP-107 koncovka jack 3,5 stereo    ~10 Kč   e-shop              potřeba 2×
 [DODÁNO]  CREATALL CA-3110S zesilovač (D)     49 Kč   e-shop 965 ks       potřeba 2×
+[CHYBÍ]   Napájecí adaptér 12 V / 1 A DC      ~40 Kč  —                 potřeba 2×
+          → CA-3110S (TPA3110) má minimum 8 V. Nenapojí se na 5 V z Pi ani
+            z USB zvukovky. Seznam tohle původně neobsahoval.
+          → 250 mA nestačí (jen ~2,7 W do 8 Ω, tlaci na peakách). 1 A stačí.
 [DODÁNO]  LS40N reproduktor 40mm 8Ω           62 Kč   e-shop 84 ks        potřeba 4×
 [DODÁNO]  SRX882S přijímač 433 MHz ASK       79 Kč   Skladem (2 prodejny) potřeba 1×
 [DODÁNO]  Solight 1L67T bezdr. tlačítko   72,60 Kč   ⚠ VÝPRODEJ / DODÁNO  potřeba 10×

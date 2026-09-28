@@ -38,6 +38,9 @@ done
 
 echo ""
 echo "=== merge dot + md ==="
+# dot diagrams go first, then the rendered markdown. pikepdf if available,
+# otherwise pdfunite (same concatenation, no extra dependency).
+if python3 -c "import pikepdf" 2>/dev/null; then
 python3 - "$DIR" <<'PYEOF'
 import sys, os
 import pikepdf
@@ -62,6 +65,21 @@ for prefix in ("SCH", "HW"):
     elif os.path.exists(tmp):
         os.rename(tmp, out)
 PYEOF
+else
+    echo "  pikepdf chybí — skládám přes pdfunite"
+    for prefix in SCH HW; do
+        tmp="$DIR/${prefix}_dot_tmp.pdf"
+        md="$DIR/${prefix}.pdf"
+        if [ -f "$tmp" ] && [ -f "$md" ]; then
+            pdfunite "$tmp" "$md" "$md.new"
+            mv "$md.new" "$md"
+            rm -f "$tmp"
+            echo "  $prefix.pdf ($(( $(wc -c < "$md") / 1024 ))K) -- dot diagrams + text"
+        elif [ -f "$tmp" ]; then
+            mv "$tmp" "$md"
+        fi
+    done
+fi
 
 echo ""
 echo "done."
