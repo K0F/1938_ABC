@@ -1,0 +1,11 @@
+[Unit]
+Description=Zvuková karta se (re)objevila — přenastavit ALSA a restartovat službu
+# Spouštěno udev pravidlem 99-box-sound.rules (ENV{SYSTEMD_WANTS}), ne ručně.
+After=sound.target
+
+[Service]
+Type=oneshot
+Environment=RESTART_UNITS=tracker.service
+ExecStart=/usr/local/sbin/box-sound-restart.sh
+SyslogIdentifier=box-sound-restart
+# Bez [Install] — chce se jen udev událost, ne boot.

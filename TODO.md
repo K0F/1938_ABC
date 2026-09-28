@@ -45,6 +45,16 @@ Feature ideas and planned work for the tracker.
 
 ## Done
 
+- [x] v0.5.1 — autostart po restartu odolný proti pomalé kameře: `StartLimitIntervalSec=0`
+      v `tracker.service` (jinak systemd po 5 restartech za 2 s shodí jednotku do
+      `failed`), tracker bez zvukové karty končí nenulově a čeká na ni v restartu
+- [x] v0.5.1 — přehození USB zvukové karty už nezabije zvuk napámo: `box-sound-restart.sh`
+      + `.service` + udev pravidlo `99-box-sound.rules` přenastaví ALSA a restartují
+      službu, karty v `/etc/asound.conf` podle jména (`hw:CARD=Adapter,DEV=0`).
+      Ověřeno na boxu unbind/bind USB zařízení i po bootu; pravidlo musí dělat
+      `TAG+="systemd"`, jinak systemd-udevd `SYSTEMD_WANTS` neřeší
+- [x] v0.5.1 — `box-audio-test.sh` bez `sudo` řekne proč, a tracker po testu
+      vždy pustí zpět (test už nezanechá box tichý)
 - [x] v0.5.1 — Box A headless: `tracker --headless` + `tracker.service` (User=pi),
       SIGTERM/SIGINT graceful stop, journal logging; okno zůstává jen pro kalibraci
 - [x] v0.5.1 — build opraven pro Raspberry Pi OS / Debian: `Makefile` detekce OpenCV

@@ -7,6 +7,8 @@
 #   * dvě USB karty s playbackem — vyhrává první v pořadí
 #   * chybějící USB karta / chybějící vestavěný jack — nesmí to spadnout
 #   * v configu nesmí být nikdy "device 0" a pcm.usb musí být vždy type plug
+#   * karta se odvolává JMENEM, takže přehození USB portu (změna čísla) nesmí
+#     změnit, kam config ukazuje
 #
 #   usage: ./tests/test-box-alsa-setup.sh
 
@@ -52,10 +54,22 @@ add_card() {
     mkdir -p "$target" "$SYS/card$n"
     ln -sfn "$target" "$SYS/card$n/device"
     mkdir -p "$PROC/card$n"
+    # id = jméno karty, podle kterého se config odvolává (hw:CARD=<id>,DEV=0)
+    printf '%s\n' "$(card_id_name "$n")" > "$PROC/card$n/id"
     local p
     for p in "$@"; do : > "$PROC/card$n/$p"; done
 }
 
+# Jména jako na skutečném Boxu A. Karta, která má v /proc jméno "Adapter",
+# dostane stejné jméno i pod jiným číslem — to je případ 7).
+card_id_name() {
+    case "$1" in
+        0) echo "Headphones" ;;
+        3|5) echo "Adapter" ;;
+        4|6) echo "C920" ;;
+        *) echo "card$1" ;;
+    esac
+}
 run_script() {
     ABC38_SOUND_SYSFS="$SYS" \
     ABC38_ASOUND_PROC="$PROC" \
@@ -86,21 +100,21 @@ add_card 3 usb      pcm3p pcm3c      # AXAGON ADA-17
 run_script
 assert_rc0       "skript skončí 0"
 assert_log       'usb=card3 builtin=card0' "vybráno usb=card3, builtin=card0"
-assert_cfg       '^pcm\.builtin \{ type plug; slave\.pcm "hw:0,0" \}' "pcm.builtin -> hw:0,0"
-assert_cfg       '^pcm\.usb \{ type plug; slave\.pcm "hw:3,0" \}'     "pcm.usb -> hw:3,0"
-assert_cfg       '^pcm\.!default \{ type plug; slave\.pcm usb \}'      "pcm.!default -> usb"
-assert_cfg       '^ctl\.!default \{ type hw; card 3 \}'                "ctl.!default -> card 3"
+assert_cfg       '^pcm\.builtin \{ type plug; slave\.pcm "hw:CARD=Headphones,DEV=0" \}' "pcm.builtin -> jméno karty"
+assert_cfg       '^pcm\.usb \{ type plug; slave\.pcm "hw:CARD=Adapter,DEV=0" \}'     "pcm.usb -> jméno karty"
+assert_cfg       '^pcm\.!default \{ type plug; slave\.pcm usb \}'                     "pcm.!default -> usb"
+assert_cfg       '^ctl\.!default \{ type hw; card 3 \}'                               "ctl.!default -> číslo karty (ctl jméno neumí)"
 assert_invariants
 
 echo "== 2a) C920 (jen capture) vyložená PŘED zvukovkou — musí být přeskočena =="
 case_dir c2a
-add_card 0 usb pcm0c                 # C920 — capture only, nižší číslo než zvukovka
+add_card 2 usb pcm2c                 # C920 — capture only, nižší číslo než zvukovka
 add_card 3 usb pcm3p pcm3c           # AXAGON ADA-17
 run_script
 assert_rc0     "skript skončí 0"
-assert_log     'usb=card3' "capture-only card0 přeskočena, vybrán card3"
-assert_cfg     'hw:3,0'    "pcm.usb míří na card3"
-assert_no_cfg  'hw:0,0'    "card0 se v configu nevyskytuje"
+assert_log     'usb=card3' "capture-only card2 přeskočena, vybrán card3"
+assert_cfg     'hw:CARD=Adapter' "pcm.usb míří na zvukovku"
+assert_no_cfg  'CARD=card2'   "webkamera se v configu nevyskytuje"
 assert_invariants
 
 echo "== 2b) zvukovka vyložená před C920 =="
@@ -110,7 +124,7 @@ add_card 4 usb pcm4c                 # C920 — capture only
 run_script
 assert_rc0     "skript skončí 0"
 assert_log     'usb=card3' "vybrán card3"
-assert_no_cfg  'hw:4,0'    "card4 se v configu nevyskytuje"
+assert_no_cfg  'CARD=C920'  "capture-only C920 se v configu nevyskytuje"
 assert_invariants
 
 echo "== 3) dvě USB karty s playbackem =="
@@ -150,6 +164,28 @@ assert_rc0     "skript skončí 0 (nepadá)"
 assert_log     'USB zvuková karta nenalezena'   "varuje chybějící USB kartu"
 assert_log     'vestavěný jack Raspberry Pi nenalezen' "varuje chybějící vestavěný jack"
 assert_no_cfg  '^pcm\.' "žádný pcm nevznikne"
+assert_invariants
+
+echo "== 7) zvukovka se přehodila na jiný USB port (změna čísla karty) =="
+case_dir c7
+add_card 0 platform pcm0p pcm0c      # Headphones
+add_card 5 usb      pcm5p pcm5c      # tatáž AXAGON, ale vyložená jako card5
+add_card 6 usb      pcm6c             # C920
+run_script
+assert_rc0     "skript skončí 0"
+assert_log     'usb=card5' "nové číslo karty poznané"
+assert_cfg     'hw:CARD=Adapter,DEV=0' "pcm.ukazuje na AXAGON pořád, ne na číslo"
+assert_cfg     '^ctl\.!default \{ type hw; card 5 \}'  "ctl sleduje nové číslo"
+assert_invariants
+
+echo "== 8) karta bez /proc/asound/cardN/id (fallback na číslo) =="
+case_dir c8
+add_card 0 platform pcm0p pcm0c
+add_card 3 usb      pcm3p pcm3c
+rm -f "$PROC/card3/id" "$PROC/card0/id"
+run_script
+assert_rc0     "skript skončí 0"
+assert_cfg     '^pcm\.usb \{ type plug; slave\.pcm "hw:3,0" \}' "bez id se použije číslo"
 assert_invariants
 
 echo

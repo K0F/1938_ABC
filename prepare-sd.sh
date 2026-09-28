@@ -95,10 +95,12 @@ rm -f "$ROOT/etc/systemd/system/box@firstboot.service"
 rm -f "$ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service" \
       "$ROOT/etc/systemd/system/multi-user.target.wants/boxa-firstboot.service"
 rm -f "$ROOT/usr/local/sbin/box-provision.sh" "$ROOT/usr/local/sbin/boxa-provision.sh" \
-      "$ROOT/usr/local/sbin/box-alsa-setup.sh"
+      "$ROOT/usr/local/sbin/box-alsa-setup.sh" "$ROOT/usr/local/sbin/box-sound-restart.sh"
 rm -f "$ROOT/etc/systemd/system/sampler.service" "$ROOT/usr/local/bin/sampler"
 rm -f "$ROOT/etc/systemd/system/tracker.service" \
       "$ROOT/etc/systemd/system/multi-user.target.wants/tracker.service"
+rm -f "$ROOT/etc/systemd/system/box-sound-restart.service" \
+      "$ROOT/etc/udev/rules.d/99-box-sound.rules"
 rm -f "$ROOT/var/lib/box-provisioned" "$ROOT/var/lib/boxa-provisioned"
 echo "  removed stale autostart/provision/sampler/tracker files"
 
@@ -120,6 +122,12 @@ usermod -aG audio,video $USER
 # ALSA devices must be named and the default set before the service opens the card
 install -m 0755 box-alsa-setup.sh /usr/local/sbin/box-alsa-setup.sh
 /usr/local/sbin/box-alsa-setup.sh
+# Přehodí / připojení USB zvukové karty: starý PCM v trackeru umře, a služba
+# by pak běžela v tichu. udev pravidlo to pozná a službu restartuje.
+install -m 0755 box-sound-restart.sh /usr/local/sbin/box-sound-restart.sh
+install -m 0644 box-sound-restart.service /etc/systemd/system/box-sound-restart.service
+install -m 0644 99-box-sound.rules /etc/udev/rules.d/99-box-sound.rules
+udevadm control --reload-rules
 install -m 0644 tracker.service /etc/systemd/system/tracker.service
 systemctl daemon-reload
 systemctl enable tracker.service
@@ -168,10 +176,18 @@ install -m 0755 sampler /usr/local/bin/sampler
 [ -f mapa.csv ] || cp -n mapa.csv.example mapa.csv
 install -m 0644 sampler.service /etc/systemd/system/sampler.service
 sed -i 's/--box .*/--box $BOX/' /etc/systemd/system/sampler.service
-systemctl daemon-reload
 # ALSA devices must be named and the default set before the service opens the card
 install -m 0755 box-alsa-setup.sh /usr/local/sbin/box-alsa-setup.sh
 /usr/local/sbin/box-alsa-setup.sh
+# USB zvuková karta se přehodí nebo připojí: sampler drží starý PCM, který už
+# SDL znovu neotevře. udev pravidlo to pozná a sampler restartuje.
+install -m 0755 box-sound-restart.sh /usr/local/sbin/box-sound-restart.sh
+install -m 0644 box-sound-restart.service /etc/systemd/system/box-sound-restart.service
+sed -i 's/^Environment=RESTART_UNITS=.*/Environment=RESTART_UNITS=sampler.service/' \
+    /etc/systemd/system/box-sound-restart.service
+install -m 0644 99-box-sound.rules /etc/udev/rules.d/99-box-sound.rules
+udevadm control --reload-rules
+systemctl daemon-reload
 systemctl enable sampler.service
 systemctl start sampler.service
 touch /var/lib/box-provisioned

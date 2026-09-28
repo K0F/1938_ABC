@@ -1,0 +1,8 @@
+# Zvuková karta se objevila (USB přehodí, připojení po restartu, boot) —
+# přenastavit ALSA a restartovat službu, která drží starý PCM.
+# Filter na card[0-9]*: necháme pcm a mixer události, o které nestojíme.
+#
+# TAG+="systemd" je povinný — systemd-udevd se o zařízení nezajímá (a nezačne
+# jednotku ze SYSTEMD_WANTS), pokud není takto otagované. Stejně to dělají
+# vlastní pravidla systemd v 99-systemd.rules.
+ACTION=="add", SUBSYSTEM=="sound", KERNEL=="card[0-9]*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="box-sound-restart.service"

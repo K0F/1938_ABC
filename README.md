@@ -68,6 +68,34 @@ journalctl -t tracker -f   # logy do journalu
 ```
 Okenný režim zůstává pro kalibraci (přetáhnutí rohů, klávesa `S`). Bez `calib.txt` tracker používá celý snímek, takže první kalibraci udělejte ještě s monitorem přes HDMI.
 
+#### Autostart po restartu
+`tracker.service` je `enabled` — po každém restartu boxu se tracker rozjede sám, bez monitoru a bez přihlášení. Když při startu ještě není kamera, služba zkusí znovu po 2 s; limit restartu je vypnutý (`StartLimitIntervalSec=0`), jinak by ji po pěti rychlých pokusech systemd zabil a tracker by zůstal tichý do ručního zásahu.
+```bash
+systemctl is-enabled tracker              # enabled
+systemctl status tracker
+journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, 640x480, ..."
+```
+
+#### Přehodí USB zvukové karty
+Zvuková karta v boxu sedí za hubem a občas se přehodí. Starý PCM v trackeru přitom umře (`ALSA write failed (unrecoverable): No such device`) a SDL ho už znovu neotevře — služba by běžela dál potichá, hodiny bez zvuku. Proto tu běží `box-sound-restart.service`: udev pravidlo `99-box-sound.rules` ho probudí, jakmile se objeví nová zvuková karta, přenastaví `/etc/asound.conf` a restartuje tracker.
+```bash
+journalctl -u box-sound-restart -b       # "restartováno: tracker.service"
+```
+Karty se v configu odvolávají **jménem** (`hw:CARD=Adapter,DEV=0`), ne číslem — přehození USB portu tak nesmí přesměrovat zvuk jinam. `box-audio-test.sh` i `tests/test-box-alsa-setup.sh` obojí prověří. Box B má stejnou jednotku s `RESTART_UNITS=sampler.service`; když se restart při přehodení nechce, stačí `RESTART_UNITS=` prázdné.
+
+Dvě věci, které tu neuhodl popis, ale jinak to nefunguje:
+
+- Pravidlo musí zařízení otagovat `TAG+="systemd"`. Bez tagu systemd-udevd zařízení přehlížne a `SYSTEMD_WANTS` neřeší — jednotka se nespustí, aniž by to v logu bylo nějak vidět. Stejně postupují vlastní pravidla systemd v `99-systemd.rules`.
+- Restart má záměrnou prodlevu (`SETTLE_SEC`, default 3 s), aby se karta stihla usadit. Při bootu to znamená, že se tracker startuje dvakrát (systemd, pak udev) a nahrává až druhý běh; bez prodlevy by se občas chytil ještě ne úplně připravenou kartu.
+
+Ověření na skutečném boxu (bez fyzického přehazování — jde o unbind/bind USB zařízení, události jsou stejné jako po přepojení):
+```bash
+echo 1-1.1 | sudo tee /sys/bus/usb/drivers/usb/unbind   # karta zmizí
+sleep 4
+echo 1-1.1 | sudo tee /sys/bus/usb/drivers/usb/bind     # a zase se objeví
+journalctl -u box-sound-restart -b -n 5   # "restartováno: tracker.service"
+```
+
 ### Ověření zvuku (Box A / Box B)
 Box má USB zvukovou kartu i vestavěný jack Pi. `/etc/asound.conf` generuje skript `box-alsa-setup.sh`, který zařízení pojmenuje **podle typu**:
 ```bash
@@ -91,7 +119,7 @@ sudo systemctl start tracker
 
 #### Automatický test zvuku
 
-`box-audio-test.sh` spustí celý postup výše bez dohledu a výsledek uloží do `audio-test-report.txt`. Kontroluje, že `usb` a `default` jsou v `aplay -L`, že v configu není `device N`, že `pcm.usb` je `type plug`, a hlavně že **monofonní** `samples/track1.wav` skutečně přehraje.
+`box-audio-test.sh` spustí celý postup výše bez dohledu a výsledek uloží do `audio-test-report.txt`. Kontroluje, že `usb` a `default` jsou v `aplay -L`, že v configu není `device N`, že `pcm.usb` je `type plug`, a hlavně že **monofonní** `samples/track1.wav` skutečně přehraje. Bez `sudo` skript odmítne běžet — píše do `/etc/asound.conf` a staví služby. Test kartu drží zamčenou, proto tracker na začátku zastaví a na konci ho vždy pustí zpět, i když selhal; box tak nezůstane tichý.
 
 Test logiky detekce běží bez QEMU i bez hardwaru — `box-alsa-setup.sh` čte kořene z proměnných (`ABC38_SOUND_SYSFS`, `ABC38_ASOUND_PROC`, `ABC38_ASOUND_CONF`), takže se dá pustit nad falešným stromem:
 ```bash

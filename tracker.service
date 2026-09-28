@@ -2,6 +2,10 @@
 Description=Tracker Box A (headless: camera tracking + audio)
 After=sound.target
 Wants=sound.target
+# Webkamera se po bootu objeví až za pár sekund. Bez vypnutého limitu by 5 rychlých
+# restartů (RestartSec=2) překročilo systemd limit 5 startů/10 s, služba by skončila
+# ve stavu failed a tracker by zůstal tichý až do ručního zásahu.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

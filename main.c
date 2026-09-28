@@ -180,7 +180,12 @@ int main(int argc, char* argv[]) {
     }
 
     SDL_Init(SDL_INIT_AUDIO);
-    Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024) != 0) {
+        // Bez zvukové karty raději nepuštit dál — otevřený PCM by stejně zemřel.
+        // Exit -> Restart=always v tracker.service to zkusí znovu, až karta dorazí.
+        std::cerr << "Error: audio open failed: " << Mix_GetError() << std::endl;
+        return -1;
+    }
     int mixCh = 4 * numBalls;
     if (mixCh > 8) mixCh = 8;
     Mix_AllocateChannels(mixCh);
@@ -193,6 +198,19 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < mixCh; i++) Mix_Volume(i, 0);
 
     loadCalib(frameWidth, frameHeight);
+
+    {
+        // Spec, který SDL2_mixer opravdu otevřelo, a přes který driver. Který
+        // to je zařízení, ví box-alsa-setup.sh (pcm.!default) a box-audio-test.sh
+        // — SDL2 jméno otevřeného zařízení neposkytuje.
+        int freq = 0, chans = 0;
+        Uint16 fmt = 0;
+        Mix_QuerySpec(&freq, &fmt, &chans);
+
+        const char* drv = SDL_GetCurrentAudioDriver();
+        std::cerr << "audio: " << (drv ? drv : "?") << " " << freq << " Hz, "
+                  << chans << " channel(s)" << std::endl;
+    }
 
     std::cerr << "tracker " VERSION_STRING << " start: "
               << (headless ? "headless" : "window") << ", "

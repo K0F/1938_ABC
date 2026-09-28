@@ -36,11 +36,26 @@ log "   skript: $SCRIPT_DIR"
 log "   report: $REPORT"
 log ""
 
-# ── 0. Služba drží kartu → EBUSY. Zastavíme ji, pokud běží ─────────────
+# ── 0. Root (píšeme /etc/asound.conf, stavíme služby) a zastavení služby ─
+# Služba drží kartu → EBUSY, takže ji na dobu testu utlumíme. Na konci ji
+# pustíme zpět — ať test (selhání, Ctrl-C, ...) nenechá box tichý.
+if [ "$(id -u)" -ne 0 ]; then
+    log "  FAIL  potřebuješ root: sudo ./$(basename "$0")"
+    exit 1
+fi
+
 if command -v systemctl >/dev/null && systemctl is-active --quiet tracker.service; then
     systemctl stop tracker.service
     info "tracker.service zastaven (jinak karta vrací EBUSY)"
 fi
+
+restore_tracker() {
+    command -v systemctl >/dev/null || return 0
+    systemctl is-active --quiet tracker.service && return 0
+    info "tracker.service spouštím zpět"
+    systemctl start tracker.service || bad "tracker.service se nepodařilo spustit"
+}
+trap restore_tracker EXIT
 
 # ── 1. Předpoklady ────────────────────────────────────────────────────
 for tool in aplay speaker-test; do
@@ -144,5 +159,7 @@ fi
 log ""
 
 log "passed $PASS, failed $FAIL"
+trap - EXIT          # souhrn má být poslední řádek reportu
+restore_tracker
 [ "$FAIL" -eq 0 ] || exit 1
 exit 0
