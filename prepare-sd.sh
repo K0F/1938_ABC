@@ -60,6 +60,19 @@ HASH=$(openssl passwd -6 -stdin <<< "$PASS")
 printf '%s:%s\n' "$USER" "$HASH" > "$BOOT/userconf.txt"
 echo "  ssh + userconf.txt ready"
 
+# Box B only: the sampler drives a 16x2 PCF8574 LCD over I2C on GPIO2/3 (/dev/i2c-1).
+# Bookworm enables this by default, but state it so the LCD cannot be lost to a
+# future image default change.
+if [ "$BOX" = "B" ]; then
+    step "Enabling I2C (LCD on GPIO2/3 -> /dev/i2c-1)"
+    if grep -q '^dtparam=i2c_arm=on' "$BOOT/config.txt" 2>/dev/null; then
+        echo "  dtparam=i2c_arm=on already present"
+    else
+        printf '\n# Box B: I2C LCD (PCF8574) on GPIO2/3\ndtparam=i2c_arm=on\n' >> "$BOOT/config.txt"
+        echo "  dtparam=i2c_arm=on appended to config.txt"
+    fi
+fi
+
 # ── Common: root partition ──────────────────────────────────────────
 step "Mounting root partition"
 mount "$ROOTP" "$ROOT"
@@ -84,8 +97,17 @@ echo "  hostname -> $HOSTNAME"
 step "Copying tracker source into image"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$ROOT/home/$USER/tracker"
-rsync -a --delete --exclude=rom/ --exclude=.git/ "$SCRIPT_DIR"/ "$ROOT/home/$USER/tracker/"
+# NOTE: host-built binaries MUST NOT be copied. `sampler`/`tracker` are gitignored
+# but present in the working tree; rsync -a preserves their mtimes, so `make sampler`
+# on the Pi would report "up to date" and install the x86-64 host binary.
+rsync -a --delete \
+      --exclude=rom/ --exclude=.git/ \
+      --exclude=/sampler --exclude=/tracker \
+      "$SCRIPT_DIR"/ "$ROOT/home/$USER/tracker/"
 chown -R 1000:1000 "$ROOT/home/$USER/tracker"
+if [ -e "$ROOT/home/$USER/tracker/sampler" ] || [ -e "$ROOT/home/$USER/tracker/tracker" ]; then
+    die "host binary leaked into the image (rsync exclude broken)"
+fi
 echo "  source -> /home/$USER/tracker"
 
 step "Cleaning previous box artifacts"
@@ -173,7 +195,11 @@ apt-get install -y --no-install-recommends \
     g++ make pkg-config git ca-certificates \
     libsdl2-dev libsdl2-mixer-dev libgpiod-dev
 cd /home/pi/tracker
+make clean
 make sampler
+# If a wrong-architecture binary ever slipped in, exec fails here and the whole
+# provisioning aborts (set -e) instead of installing a binary systemd cannot run.
+./sampler --version
 install -m 0755 sampler /usr/local/bin/sampler
 [ -f mapa.csv ] || cp -n mapa.csv.example mapa.csv
 install -m 0644 sampler.service /etc/systemd/system/sampler.service
