@@ -145,8 +145,12 @@ echo "== 5b) jeden stisk = jeden řádek, i když sampl chybí =="
 # Bez debounce by jeden stisk naplnil journal desítkami řádků a #N by
 # počítalo i zahozžené opakování — pak nelze poznat, kolikrát se
 # skutečně stisklo.
-OUT="$(smp --box b --lcd-addr off --debounce 300 --map "$TMP/mapa.csv" \
-        --samples-dir "$TMP/samples" --simulate-rf 12200123 12200123 2>&1)"
+# Kódy jdou přes --simulate, ne --simulate-rf: každý syntetický rámec
+# začíná v čase now+1000 µs, takže dva za sebou v --simulate-rf mají
+# překryté časovky a druhý rámec spadne ještě v dekodéru. Tady se tím
+# nechceme klamat — testuje se debounce, ne časování rámců.
+OUT="$(printf '12200123\n12200123\n' | smp --box b --lcd-addr off --debounce 300 \
+        --map "$TMP/mapa.csv" --samples-dir "$TMP/samples" --simulate 2>&1)"
 N="$(printf '%s\n' "$OUT" | grep -c 'code=12200123 ->')"
 [ "$N" = 1 ] && ok "dva rámce po sobě = jeden řádek" || bad "vypsalo se to $N× místo jednou"
 printf '%s\n' "$OUT" | grep -q '#1)' && ok "počet stisků je 1" || bad "počet stisků je jiný: $(printf '%s' "$OUT" | tr '\n' '|')"
@@ -172,6 +176,93 @@ if smp --box b --listen --simulate-rf 2>/dev/null; then
     bad "prázdné --simulate-rf prošlo bez chyby"
 else
     ok "chybí kód = nenulový návrat"
+fi
+
+echo "== 8) --learn zapíše kód, který stiskneš, rovnou do mapy =="
+# Právě tohle je cesta, jak se na boxu B registrují tlačítka. Kód přijde
+# z rádia, název odpoví člověk z klávesnice — obojí musí skončit v mapě,
+# jinak je registrace na bezhlavém boxu ruční práce s textovým editorem.
+printf '' > "$TMP/learn.csv"
+OUT="$(printf '\ntrack9.wav\n\n' | smp --box b --learn --lcd-addr off \
+        --map "$TMP/learn.csv" --samples-dir "$TMP/samples" \
+        --simulate-rf 12200123 12200124 12200125 2>"$TMP/err8.log")"
+if grep -q '^12200123, sample_b_01.wav$' "$TMP/learn.csv"; then
+    ok "Enter = výchozí název podle čísla slotu"
+else
+    bad "výchozí název nezapsán  [$(tr '\n' '|' <"$TMP/learn.csv")]"
+fi
+if grep -q '^12200124, track9.wav$' "$TMP/learn.csv"; then
+    ok "vlastní název zapsán"
+else
+    bad "vlastní název nezapsán  [$(tr '\n' '|' <"$TMP/learn.csv")]"
+fi
+# Třetí stisk zase prázdný řádek — musí dostat třetí slot, ne znovu první
+if grep -q '^12200125, sample_b_03.wav$' "$TMP/learn.csv"; then
+    ok "třetí tlačítko dostalo S03"
+else
+    bad "počítání slotů nesouhlasí  [$(tr '\n' '|' <"$TMP/learn.csv")]"
+fi
+if [ "$(grep -c . "$TMP/learn.csv")" = 3 ]; then
+    ok "v mapě jsou přesně tři řádky"
+else
+    bad "v mapě je $(grep -c . "$TMP/learn.csv") řádků místo 3"
+fi
+
+echo "== 8b) --learn neregistruje stejné tlačítko dvakrát =="
+# Opakování téhož tlačítka (dvě kola registrace, člověk stiskne omylem
+# dvakrát) musí projít jako "už známé", ne jako nový slot — jinak mapa
+# naroste duplicitami a stejné tlačítko by hrálo dvakrát.
+# Kód je předem v mapě, takže se stiskem nespotřebuje řádek na název.
+printf '12200123, sample_b_01.wav\n' > "$TMP/learn2.csv"
+OUT="$(smp --box b --learn --lcd-addr off \
+        --map "$TMP/learn2.csv" --samples-dir "$TMP/samples" \
+        --simulate-rf 12200123 2>"$TMP/err8b.log")"
+if printf '%s\n' "$OUT" | grep -q 'uz znameno'; then
+    ok "opakovaný kód oznámen jako známý"
+else
+    bad "duplicita prošla tiše  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+fi
+if [ "$(grep -c . "$TMP/learn2.csv")" = 1 ]; then
+    ok "duplicitní stisk nepřidal řádek"
+else
+    bad "mapa má $(grep -c . "$TMP/learn2.csv") řádků místo 1"
+fi
+
+echo "== 8c) --learn navazuje na existující mapu, nepřepíše ji =="
+# Registrace se dělí na dvě kola (třeba kvůli výměně baterií v tlačítkách).
+# Druhé kolo musí navázat, ne začít od S01 a přepsat staré záznamy.
+printf '999, stary.wav\n' > "$TMP/learn3.csv"
+printf '\n' | smp --box b --learn --lcd-addr off \
+    --map "$TMP/learn3.csv" --samples-dir "$TMP/samples" \
+    --simulate-rf 12200123 >/dev/null 2>&1
+if grep -q '^999, stary.wav$' "$TMP/learn3.csv" && \
+   grep -q '^12200123, sample_b_02.wav$' "$TMP/learn3.csv"; then
+    ok "starý záznam zůstal, nový pokračoval od S02"
+else
+    bad "navázání na mapu nesouhlasí  [$(tr '\n' '|' <"$TMP/learn3.csv")]"
+fi
+
+echo "== 8d) --learn nepotřebuje zvukovou kartu =="
+# Na boxu B není v době registrace zesilovač zapojený; registrace se nesmí
+# kroutit na chybějícím SDL audio zařízení.
+printf '' > "$TMP/learn4.csv"
+if printf '\n' | smp --box b --learn --lcd-addr off \
+        --map "$TMP/learn4.csv" --samples-dir "$TMP/samples" \
+        --simulate-rf 12200123 >/dev/null 2>&1; then
+    ok "--learn běží i bez zvukové karty"
+else
+    bad "--learn bez zvukové karty spadl"
+fi
+
+echo "== 8e) 'q' ukončí registraci =="
+printf '' > "$TMP/learn5.csv"
+printf 'q\n' | smp --box b --learn --lcd-addr off \
+    --map "$TMP/learn5.csv" --samples-dir "$TMP/samples" \
+    --simulate-rf 12200123 >/dev/null 2>&1
+if [ ! -s "$TMP/learn5.csv" ]; then
+    ok "q nechá mapu prázdnou"
+else
+    bad "q přesto něco zapsal  [$(tr '\n' '|' <"$TMP/learn5.csv")]"
 fi
 
 echo

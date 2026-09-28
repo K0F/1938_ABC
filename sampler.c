@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <poll.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -49,8 +50,13 @@ struct Decoder {
 
 static char boxLetter = 'B';
 static int listenMode = 0;
+static int learnMode = 0;
 static int simulateMode = 0;
 static int simulateRf = 0;
+static int audioOk = 0;
+static const char* mapPath = "mapa.csv";
+static const char* samplesDir = "samples";
+static int learnQuit = 0;
 static std::vector<uint32_t> simCodes;
 static int lcdAddr = 0x27;
 static int lcdEnabled = 1;
@@ -62,6 +68,8 @@ static Slot slots[MAX_BUTTONS];
 static int lcdFd = -1;
 static uint32_t lastListenCode = 0;
 static uint64_t lastListenUs = 0;
+static uint32_t lastLearnCode = 0;
+static uint64_t lastLearnUs = 0;
 static volatile sig_atomic_t running = 1;
 
 static void onSignal(int) { running = 0; }
@@ -223,7 +231,94 @@ static int classifyBit(int us) {
     return -1;
 }
 
+// --- learn režim -------------------------------------------------------
+// Interaktivní registrace tlačítek: po stisku se zeptá na název samplu a
+// rovnou ho zapíše do mapy. Zápis jde na disk hned po každém tlačítku —
+// když se v polovině registrace odpojí napájení, zůstane v mapě vše, co už
+// bylo stisknuto, a zbytek stačí doplnit.
+static int learnDefaultName(int idx, char* out, size_t n) {
+    snprintf(out, n, "sample_%c_%02d.wav", (char)(boxLetter | 0x20), idx);
+    return 0;
+}
+
+static int learnReadLine(char* out, size_t n) {
+    if (!fgets(out, (int)n, stdin)) return -1;
+    size_t k = strlen(out);
+    while (k > 0 && (out[k - 1] == '\n' || out[k - 1] == '\r')) out[--k] = '\0';
+    return 0;
+}
+
+static int learnAppendMap(uint32_t code, const char* name) {
+    FILE* f = fopen(mapPath, "a");
+    if (!f) {
+        fprintf(stderr, "Error: cannot append to map '%s': %s\n",
+                mapPath, strerror(errno));
+        return -1;
+    }
+    fprintf(f, "%u, %s\n", code, name);
+    fclose(f);
+    return 0;
+}
+
+static void learnCode(uint32_t code) {
+    uint64_t t = nowUs();
+    if (code == lastLearnCode && lastLearnUs && t - lastLearnUs < debounceUs)
+        return;
+    lastLearnCode = code;
+    lastLearnUs = t;
+    pressCount++;
+
+    for (int i = 0; i < numSlots; i++) {
+        if (slots[i].code == code) {
+            fprintf(stdout, "code=%u (id=%u, key=%u) -> S%02d %s  [uz znameno]\n",
+                    code, code >> 4, code & 0x0f, i + 1, slots[i].file.c_str());
+            fflush(stdout);
+            return;
+        }
+    }
+    if (numSlots >= MAX_BUTTONS) {
+        fprintf(stderr, "code=%u — mapa je plna (%d tlačítek)\n", code, MAX_BUTTONS);
+        return;
+    }
+
+    char def[64];
+    learnDefaultName(numSlots + 1, def, sizeof(def));
+    fprintf(stdout, "code=%u (id=%u, key=%u) -> S%02d [%s]: ",
+            code, code >> 4, code & 0x0f, numSlots + 1, def);
+    fflush(stdout);
+
+    char line[256];
+    if (learnReadLine(line, sizeof(line)) < 0) {
+        running = 0;
+        return;
+    }
+    if (strcmp(line, "q") == 0 || strcmp(line, "Q") == 0) {
+        learnQuit = 1;
+        running = 0;
+        return;
+    }
+    const char* name = line[0] ? line : def;
+
+    if (learnAppendMap(code, name) < 0) return;
+    slots[numSlots].code = code;
+    slots[numSlots].file = name;
+    slots[numSlots].lastUs = 0;
+    numSlots++;
+    fprintf(stdout, "  zapsáno do %s (%d/%d)\n", mapPath, numSlots, MAX_BUTTONS);
+    fflush(stdout);
+    if (lcdEnabled) {
+        char l2[LCD_COLS + 1];
+        snprintf(l2, sizeof(l2), "S%02d ok", numSlots);
+        lcdLine(0, "BOX %c LEARN");
+        lcdLine(1, l2);
+    }
+}
+
 static void onCode(uint32_t code) {
+    if (learnMode) {
+        learnCode(code);
+        return;
+    }
     if (listenMode) {
         uint64_t t = nowUs();
         if (code == lastListenCode && lastListenUs &&
@@ -394,6 +489,7 @@ static void usage(const char* prog) {
         "  --te-us N           EV1527 base timing in microseconds (default: 320)\n"
         "  --debounce-ms N     per-button debounce window (default: 300)\n"
         "  --listen            decode-only: print received codes (build mapa.csv)\n"
+        "  --learn             register buttons interactively, writes map on disk\n"
         "  --simulate          read codes from stdin instead of the RF receiver\n"
         "  --simulate-rf C...  self-test: synthesize EV1527 frames for the given codes\n"
         "  --version, -v       print version and exit\n",
@@ -401,8 +497,8 @@ static void usage(const char* prog) {
 }
 
 int main(int argc, char* argv[]) {
-    const char* map = "mapa.csv";
-    const char* samplesDir = "samples";
+    const char* map = mapPath;
+    const char* samples = samplesDir;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             std::printf("sampler %s\n", VERSION_STRING);
@@ -417,9 +513,9 @@ int main(int argc, char* argv[]) {
             else if (b == 'c' || b == 'C') boxLetter = 'C';
             else { fprintf(stderr, "Error: --box expects b or c\n"); return -1; }
         } else if (strcmp(argv[i], "--map") == 0 && i + 1 < argc) {
-            map = argv[++i];
+            map = mapPath = argv[++i];
         } else if (strcmp(argv[i], "--samples-dir") == 0 && i + 1 < argc) {
-            samplesDir = argv[++i];
+            samples = samplesDir = argv[++i];
         } else if (strcmp(argv[i], "--lcd-addr") == 0 && i + 1 < argc) {
             const char* a = argv[++i];
             if (strcmp(a, "off") == 0 || strcmp(a, "none") == 0) lcdEnabled = 0;
@@ -433,6 +529,8 @@ int main(int argc, char* argv[]) {
             debounceUs = (uint64_t)ms * 1000ull;
         } else if (strcmp(argv[i], "--listen") == 0) {
             listenMode = 1;
+        } else if (strcmp(argv[i], "--learn") == 0) {
+            learnMode = 1;
         } else if (strcmp(argv[i], "--simulate") == 0) {
             simulateMode = 1;
         } else if (strcmp(argv[i], "--simulate-rf") == 0) {
@@ -455,7 +553,9 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, onSignal);
     signal(SIGHUP, onSignal);
 
-    if (!listenMode) {
+    // learn jako listen zvuk nepotřebuje — na boxu bez zesilovače nemá být
+    // hlasitý a bez zvukové karty se vůbec nesmí omezovat v registraci
+    if (!listenMode && !learnMode) {
         if (SDL_Init(SDL_INIT_AUDIO) < 0) {
             fprintf(stderr, "Error: SDL audio init failed: %s\n", SDL_GetError());
             return -1;
@@ -465,11 +565,12 @@ int main(int argc, char* argv[]) {
             return -1;
         }
         Mix_AllocateChannels(MAX_BUTTONS);
+        audioOk = 1;
     }
 
     if (!listenMode)
         loadMap(map);
-    if (!listenMode) {
+    if (!listenMode && !learnMode) {
         int loaded = 0;
         for (int i = 0; i < numSlots; i++) {
             std::string path = std::string(samplesDir) + "/" + slots[i].file;
@@ -482,7 +583,8 @@ int main(int argc, char* argv[]) {
 
     if (lcdEnabled) {
         if (lcdOpen() == 0) {
-            if (listenMode) lcdLine(0, "BOX %c LISTEN");
+            if (learnMode) lcdLine(0, "BOX %c LEARN");
+            else if (listenMode) lcdLine(0, "BOX %c LISTEN");
             else lcdStatusReady();
         } else {
             lcdEnabled = 0;
@@ -492,9 +594,17 @@ int main(int argc, char* argv[]) {
     fprintf(stdout,
             "sampler %s (box %c, %s, te=%dus, debounce=%llums)\n",
             VERSION_STRING, boxLetter,
-            listenMode ? "listen" : "play",
+            learnMode ? "learn" : (listenMode ? "listen" : "play"),
             teUs, (unsigned long long)(debounceUs / 1000ull));
     fflush(stdout);
+
+    if (learnMode) {
+        fprintf(stdout,
+                "learn: %d tlačítek v %s. Stiskni tlačítko, Enter = "
+                "výchozí název, nebo text. 'q' = konec.\n",
+                numSlots, mapPath);
+        fflush(stdout);
+    }
 
     int haveRf = 0;
     if (!simulateMode && !simulateRf) {
@@ -536,6 +646,22 @@ int main(int argc, char* argv[]) {
             int r[32];
             int n = rfDrain(t, r, 32);
             if (n == 0) {
+                // v learn režimu čekáme i na 'q' z klávesnice — bez toho by se
+                // dalo ukončit jen Ctrl-C, což na bezhlavém boxu nepohodlí
+                if (learnMode) {
+                    struct pollfd pfd;
+                    pfd.fd = STDIN_FILENO;
+                    pfd.events = POLLIN;
+                    int pr = poll(&pfd, 1, 0);
+                    if (pr > 0) {
+                        char line[256];
+                        if (learnReadLine(line, sizeof(line)) < 0) break;
+                        if (strcmp(line, "q") == 0 || strcmp(line, "Q") == 0) {
+                            learnQuit = 1;
+                            break;
+                        }
+                    }
+                }
                 usleep(2000);
                 continue;
             }
@@ -543,12 +669,18 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    if (learnMode) {
+        fprintf(stdout, "learn: %d tlačítek zapsáno do %s%s\n",
+                numSlots, mapPath, learnQuit ? " (konec)" : "");
+        fflush(stdout);
+    }
+
 #if HAVE_GPIOD
     if (rfLine) gpiod_line_release(rfLine);
     if (rfChip) gpiod_chip_close(rfChip);
 #endif
     if (lcdFd >= 0) close(lcdFd);
-    if (!listenMode) {
+    if (audioOk) {
         for (int i = 0; i < numSlots; i++)
             if (slots[i].chunk) Mix_FreeChunk(slots[i].chunk);
         Mix_CloseAudio();

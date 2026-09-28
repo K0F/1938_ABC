@@ -227,10 +227,28 @@ make sampler
 | `--te-us N` | `320` | Základní časování EV1527 v µs (nutno doladit pro každé tlačítko) |
 | `--debounce-ms N` | `300` | Časové okno pro debounce každého tlačítka |
 | `--listen` | — | Režim pouhého poslechu: vypíše každý detekovaný kód |
+| `--learn` | — | Interaktivní registrace tlačítek, zapisuje rovnou do mapy |
 | `--simulate` | — | Načítá kódy ze standardního vstupu (stdin) místo RF přijímače |
 
 ### Mapování a nahrávání tlačítek
-Použijte přepínač `--listen` ke zjištění desítkového RF kódu každého fyzického tlačítka:
+
+Na boxu B použijte `--learn` — kód se po stisku zapíše do `mapa.csv` sám:
+```bash
+sudo systemctl stop sampler
+./sampler --box b --learn --lcd-addr off
+```
+Postup: stiskněte tlačítko, sampler vypíše kód a zeptá se na název samplu.
+Prázdný Enter vezme výchozí název (`sample_b_01.wav`, `sample_b_02.wav`, …),
+cokoliv jiného se zapíše doslova. `q` ukončí. Každý záznam jde na disk
+okamžitě, takže když se v polovině odpojí napájení, zůstane v mapě vše, co
+už bylo stisknuto — a další kolo registrace na ni naváže. Tlačítko, které už
+v mapě je, se znovu neregistruje, takže se dá pokračovat po výměně baterií.
+
+`--learn` nepotřebuje zesilovač ani zvukovou kartu, takže funguje dřív než
+se do krabice něco zapojí. K registrování tlačítek stačí přijímač na GPIO22.
+
+Starší způsob, když `--learn` nepotřebujete (chcete jen kódy, zapisujete
+ručně), je `--listen`:
 ```bash
 ./sampler --box b --listen
 ```
