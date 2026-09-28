@@ -9,6 +9,11 @@ WorkingDirectory=/home/pi/tracker
 ExecStart=/usr/local/bin/sampler --box b
 Restart=always
 RestartSec=2
+# 433 MHz readout do journalu: každý stisk tlačítka jako
+# "code=12200123 -> sample_b_01.wav (S01, #7)"
+SyslogIdentifier=sampler
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

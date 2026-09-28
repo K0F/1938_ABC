@@ -3,13 +3,24 @@
 #
 # Usage:
 #   ./qemu_raspi4.sh setup              Install prerequisites + download assets
-#   ./qemu_raspi4.sh prepare [image]    Configure image (SSH, user, tracker source)
+#   ./qemu_raspi4.sh prepare [image]    Configure image (SSH, user, box setup)
 #   ./qemu_raspi4.sh run    [image]     Boot image in QEMU
 #   ./qemu_raspi4.sh burn   <device>    Write prepared image to SD card
 #
+# Box identity (what the box is when it boots):
+#   prepare --box A     tracker: tracker.service, camera, no X autostart
+#   prepare --box B     sampler: sampler.service + 433 MHz EV1527 readout
+#                       (bez --box se naprosto nic boxového neinstaluje —
+#                        jen SSH, uživatel, zdrojáky a alsa-utils)
+#
+# Statická adresa boxu (jde i do QEMU testu):
+#   prepare --box B --ip 192.168.8.103
+#   prepare --box B --wifi SSID --wifi-pass HESLO --wifi-hidden
+#   (bez --ip se adresa nechá DHCP; výchozí pro box B je 192.168.8.103)
+#
 # Test zvukové karty:
 #   ./qemu_raspi4.sh audiotest          prepare --audio-test + run --audio
-#   ./qemu_raspi4.sh report  [image]    Vypsat report z posledniho běhu
+#   ./qemu_raspi4.sh report  [image]    Vypsat report z posledního běhu
 #                                         (samostatný krok — run() končí exec)
 #
 # Flags:
@@ -182,8 +193,100 @@ setup() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# 1b. BOX — identita boxu: hostname, first-boot provisioning, statická adresa
+# ─────────────────────────────────────────────────────────────
+# Box A = tracker (webkamera, headless), Box B = sampler (433 MHz tlačítka).
+# Provisioning se do image instaluje jako oneshot (box-firstboot.service) a
+# pustí se až na skutečném boxu — QEMU nemá síť, takže by apt/build stejně
+# selhal. Image je tím připravený stejně jako u prepare-sd.sh, jen ho QEMU
+# pustí naprázdno.
+prepare_box() {
+    if [ -z "$BOX" ]; then
+        step "Box identity: žádná (jen SSH, uživatel, zdrojáky, alsa-utils)"
+        echo "  pro box A/B použij:  $0 prepare --box A|B"
+        return 0
+    fi
+
+    step "Box $BOX ($([ "$BOX" = A ] && echo tracker || echo sampler, 433 MHz))"
+
+    # hostname = písmeno boxu, ať se na routeru pozná
+    echo "$BOX" > "$MOUNT_ROOT/etc/hostname"
+    if grep -q '^127\.0\.1\.1' "$MOUNT_ROOT/etc/hosts"; then
+        sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$BOX/" "$MOUNT_ROOT/etc/hosts"
+    else
+        printf '127.0.1.1\t%s\n' "$BOX" >> "$MOUNT_ROOT/etc/hosts"
+    fi
+    echo "  hostname -> $BOX"
+
+    # pi heslo rovnou v /etc/shadow (první boot wizard tím nemusí řešit)
+    local HASH2
+    HASH2=$(openssl passwd -6 -stdin <<< "$RPI_PASS")
+    if grep -q "^$RPI_USER:" "$MOUNT_ROOT/etc/shadow"; then
+        sed -i "s|^$RPI_USER:[^:]*:|$RPI_USER:$HASH2:|" "$MOUNT_ROOT/etc/shadow"
+        echo "  /etc/shadow: heslo $RPI_USER nastaveno"
+    fi
+
+    # staré boxové artefakty z jiného použití image
+    rm -f "$MOUNT_ROOT/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+    rm -f "$MOUNT_ROOT/home/$RPI_USER/.bash_profile" "$MOUNT_ROOT/home/$RPI_USER/.xinitrc"
+    rm -f "$MOUNT_ROOT/home/$RPI_USER/.tracker.log"
+    rm -f "$MOUNT_ROOT/usr/local/sbin/box-provision.sh"
+    rm -f "$MOUNT_ROOT/etc/systemd/system/box-firstboot.service"
+    rm -f "$MOUNT_ROOT/etc/systemd/system/boxa-firstboot.service"
+    rm -f "$MOUNT_ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service"
+    rm -f "$MOUNT_ROOT/etc/systemd/system/multi-user.target.wants/boxa-firstboot.service"
+    rm -f "$MOUNT_ROOT/etc/systemd/system/sampler.service" "$MOUNT_ROOT/usr/local/bin/sampler"
+    rm -f "$MOUNT_ROOT/etc/systemd/system/tracker.service" \
+          "$MOUNT_ROOT/etc/systemd/system/multi-user.target.wants/tracker.service"
+    rm -f "$MOUNT_ROOT/etc/systemd/system/box-sound-restart.service" \
+          "$MOUNT_ROOT/etc/udev/rules.d/99-box-sound.rules"
+    rm -f "$MOUNT_ROOT/usr/local/sbin/box-alsa-setup.sh" \
+          "$MOUNT_ROOT/usr/local/sbin/box-sound-restart.sh"
+    rm -f "$MOUNT_ROOT/var/lib/box-provisioned" "$MOUNT_ROOT/var/lib/boxa-provisioned"
+    # WiFi profil jiného boxu by držel box na staré síti / staré adrese
+    rm -f "$MOUNT_ROOT"/etc/NetworkManager/system-connections/box-*.nmconnection
+    echo "  staré boxové artefakty odstraněny"
+
+    install -d "$MOUNT_ROOT/usr/local/sbin"
+    install -m 0755 "$SCRIPT_DIR/box-provision.sh" "$MOUNT_ROOT/usr/local/sbin/box-provision.sh"
+
+    cat > "$MOUNT_ROOT/etc/systemd/system/box-firstboot.service" <<EOF
+[Unit]
+Description=Box $BOX first-boot provisioning
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=BOX=$BOX
+ExecStart=/usr/local/sbin/box-provision.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl --root "$MOUNT_ROOT" enable box-firstboot.service >/dev/null 2>&1 || \
+        ln -sf /etc/systemd/system/box-firstboot.service \
+               "$MOUNT_ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service"
+    echo "  box-firstboot.service -> enabled (BOX=$BOX)"
+
+    if [ -n "$BOXIP" ] || [ -n "$WIFI_SSID" ]; then
+        step "Statická adresa boxu"
+        ABC38_NET_ROOT="$MOUNT_ROOT" \
+        BOX_IP="$BOXIP" \
+        BOX_WIFI_SSID="$WIFI_SSID" \
+        BOX_WIFI_PSK="$WIFI_PASS" \
+        BOX_WIFI_HIDDEN="$WIFI_HIDDEN" \
+            "$SCRIPT_DIR/box-network.sh" "$BOX"
+        echo "  QEMU síť nesimuluje, takže to ověříš až na skutečném boxu:"
+        echo "    ip -4 addr show $([ -n "$WIFI_SSID" ] && echo wlan0 || echo eth0)"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────
 # 2. PREPARE — enable SSH, create user, copy tracker source
 # ─────────────────────────────────────────────────────────────
+# shellcheck disable=SC2154   # BOX/BOXIP/... se nastavují v dispatchi na konci
 prepare() {
     need_root
     img_mount "$1"
@@ -199,19 +302,43 @@ prepare() {
     HASH=$(openssl passwd -6 -stdin <<< "$RPI_PASS")
     printf '%s:%s\n' "$RPI_USER" "$HASH" > "$MOUNT_BOOT/userconf.txt"
     echo "  User created: $RPI_USER / $RPI_PASS"
+
+    # Box B only: sampler jede na 16x2 LCD přes PCF8574 (I2C, GPIO2/3 ->
+    # /dev/i2c-1). Bookworm to má zapnuté default, ale ať to nespadne kvůli
+    # změně defaultu v nějakém budoucím image.
+    if [ "$BOX" = "B" ]; then
+        if grep -q '^dtparam=i2c_arm=on' "$MOUNT_BOOT/config.txt" 2>/dev/null; then
+            echo "  I2C: dtparam=i2c_arm=on already in config.txt"
+        else
+            printf '\n# Box B: I2C LCD (PCF8574) on GPIO2/3\ndtparam=i2c_arm=on\n' \
+                >> "$MOUNT_BOOT/config.txt"
+            echo "  I2C: dtparam=i2c_arm=on appended to config.txt (LCD readout)"
+        fi
+    fi
     umount "$MOUNT_BOOT"
 
     step "Copying tracker source into image"
     mount "${IMG_LOOP}p2" "$MOUNT_ROOT"
     mkdir -p "$MOUNT_ROOT/home/$RPI_USER/tracker"
-    rsync -a --exclude=rom/ "$SCRIPT_DIR"/ "$MOUNT_ROOT/home/$RPI_USER/tracker/"
+    # hostem sestavené binárky se do image nesmějí dostat: rsync -a jim nechá
+    # mtime, takže "make sampler" na Pi by hlásil "up to date" a nainstaloval
+    # x86-64 binárku, kterou systemd nespustí.
+    rsync -a --exclude=rom/ --exclude=.git/ \
+          --exclude=/sampler --exclude=/tracker \
+          "$SCRIPT_DIR"/ "$MOUNT_ROOT/home/$RPI_USER/tracker/"
     chown -R 1000:1000 "$MOUNT_ROOT/home/$RPI_USER/tracker"
     chmod +x "$MOUNT_ROOT/home/$RPI_USER/tracker"/*.sh
+    if [ -e "$MOUNT_ROOT/home/$RPI_USER/tracker/sampler" ] || \
+       [ -e "$MOUNT_ROOT/home/$RPI_USER/tracker/tracker" ]; then
+        die "host binary leaked into the image (rsync exclude broken)"
+    fi
     echo "  Source synced to /home/$RPI_USER/tracker"
 
     step "Installing alsa-utils (aplay, speaker-test)"
     echo "  (guest v QEMU nemá síť, instalujeme přes chroot z hostu — chvíli to trvá)"
     chroot_apt "$MOUNT_ROOT" alsa-utils
+
+    prepare_box
 
     if [ "$AUDIO_TEST" -eq 1 ]; then
         step "Enabling audio test oneshot"
@@ -373,30 +500,59 @@ usage() {
     echo "  setup                Install qemu + download kernel/DTB/RPi OS image into rom/"
     echo "  prepare   [image]    Enable SSH, create user, sync source, install alsa-utils"
     echo "  run       [image]    Boot image in QEMU (SSH on port $SSH_PORT)"
-    echo "  burn      <device>   Write prepared image to SD card (e.g. /dev/sdX)"
+    echo "  burn      <device>   Write prepared image to SD card (e.g. /dev/mmcblk0)"
     echo "  report    [image]    Print audio-test-report.txt from a booted image"
     echo "  audiotest [image]    prepare --audio-test + run --audio, pak rucne 'report'"
     echo
-    echo "Flags:"
-    echo "  --audio              run: emulate a USB sound card (usb-audio), record to"
-    echo "                       rom/guest-audio.wav"
-    echo "  --audio-test         prepare: install + enable the oneshot that runs"
+    echo "Flags (prepare):"
+    echo "  --box A|B            box identity — A = tracker, B = sampler + 433 MHz."
+    echo "                       Bez toho se do image nedostane nic boxoveho."
+    echo "  --ip A.B.C.D         staticka adresa boxu (B defaultne 192.168.8.103)"
+    echo "  --wifi SSID          WiFi profil v NetworkManageru (wlan0)"
+    echo "  --wifi-pass HESLO    WPA2 heslo; bez nej otevrena sit"
+    echo "  --wifi-hidden        skryta WiFi sit"
+    echo "  --audio-test         install + enable the oneshot that runs"
     echo "                       box-audio-test.sh and powers the machine off"
+    echo
+    echo "Flags (run):"
+    echo "  --audio              emulate a USB sound card (usb-audio), record to"
+    echo "                       rom/guest-audio.wav"
+    echo
+    echo "Priklad — box B na 192.168.8.103, pak burn na kartu:"
+    echo "  sudo $0 prepare --box B --ip 192.168.8.103 --wifi MOJE_SIT --wifi-pass HESLO"
+    echo "  sudo $0 burn /dev/mmcblk0"
 }
 
 CMD="${1:-}"
 shift 2>/dev/null || true
 
-# flagy projdeme pred zbytkem, zbytek je pozicni argument (cesta k image)
+# flagy projdeme pred zbytkem, zbytek je pozicni argument (cesta k image / zarizeni)
 AUDIO=0
 AUDIO_TEST=0
+BOX=""
+BOXIP=""
+WIFI_SSID=""
+WIFI_PASS=""
+WIFI_HIDDEN=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --audio)      AUDIO=1; shift ;;
         --audio-test) AUDIO_TEST=1; shift ;;
+        --box)        BOX="${2:-}"; shift 2 ;;
+        --ip)         BOXIP="${2:-}"; shift 2 ;;
+        --wifi)       WIFI_SSID="${2:-}"; shift 2 ;;
+        --wifi-pass)  WIFI_PASS="${2:-}"; shift 2 ;;
+        --wifi-hidden) WIFI_HIDDEN=1; shift ;;
         *) break ;;
     esac
 done
+
+if [ -n "$BOX" ]; then
+    case "$BOX" in
+        A|B) ;;
+        *) die "--box must be A or B, got '$BOX'" ;;
+    esac
+fi
 
 case "$CMD" in
     setup)     setup ;;

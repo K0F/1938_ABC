@@ -5,13 +5,22 @@
 #
 #   A -> Tracker (webcam, headless): tracker.service, no X autostart
 #        (pro obraz na připojené TV až na boxu: sudo ./box-console.sh on)
-#   B -> Sampler (headless RF sample player) via systemd service
+#   B -> Sampler (headless RF sample player, 433 MHz) via systemd service
 #
 # Box C was removed (2-box system: A + B).
 #
 # For every box: hostname = box letter, SSH enabled, user pi/raspberry,
 # first-boot provisioning auto-installs deps and self-disables.
 # Requires: sudo. Run on the same laptop after dd-burning the base image.
+#
+# Statická adresa a WiFi se zapisují rovnou do image (box-network.sh), ať na
+# boxu netřeba hledat DHCP:
+#   BOX_WIFI_SSID=... BOX_WIFI_PSK=... sudo ./prepare-sd.sh /dev/mmcblk0 B
+# Výchozí IP je 192.168.8.103 (B) / 192.168.8.104 (A), gateway 192.168.8.1.
+# POZOR: .102 nedávat — to je bazina, notebook, ze kterého tohle připravuješ.
+#
+# Chceš-li stejný image pustit napřed v QEMU, použij místo toho
+# ./qemu_raspi4.sh prepare --box B --wifi ... a pak burn.
 
 set -euo pipefail
 
@@ -119,6 +128,8 @@ rm -f "$ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service" \
       "$ROOT/etc/systemd/system/multi-user.target.wants/boxa-firstboot.service"
 rm -f "$ROOT/usr/local/sbin/box-provision.sh" "$ROOT/usr/local/sbin/boxa-provision.sh" \
       "$ROOT/usr/local/sbin/box-alsa-setup.sh" "$ROOT/usr/local/sbin/box-sound-restart.sh"
+# WiFi profil z předchozího boxu by box držel na cizí síti / cizí adrese
+rm -f "$ROOT"/etc/NetworkManager/system-connections/box-*.nmconnection
 rm -f "$ROOT/etc/systemd/system/sampler.service" "$ROOT/usr/local/bin/sampler"
 rm -f "$ROOT/etc/systemd/system/tracker.service" \
       "$ROOT/etc/systemd/system/multi-user.target.wants/tracker.service"
@@ -127,132 +138,47 @@ rm -f "$ROOT/etc/systemd/system/box-sound-restart.service" \
 rm -f "$ROOT/var/lib/box-provisioned" "$ROOT/var/lib/boxa-provisioned"
 echo "  removed stale autostart/provision/sampler/tracker files"
 
-provision_box_a() {
-    step "Headless autostart (tracker --headless, systemd)"
-    cat > "$ROOT/usr/local/sbin/box-provision.sh" <<'EOF'
-#!/bin/bash
-set -e
-echo "[boxa] == first-boot provisioning =="
-logger "boxa provisioning start"
-cd /home/pi/tracker
-bash install-deps.sh
-# X + mesa stay installed for two reasons: calibration over HDMI by hand
-# (startx on tty1, then ./tracker with a window and the S key) and the optional
-# HDMI console (box-console.sh on), which autologins on tty1 and fills the TV
-# with the tracker window. Nothing starts the GUI automatically by default.
-apt-get install -y --no-install-recommends \
-    xinit xserver-xorg xserver-xorg-video-fbdev x11-xserver-utils libgl1-mesa-dri >/dev/null
-usermod -aG audio,video $USER
-# ALSA devices must be named and the default set before the service opens the card
-install -m 0755 box-alsa-setup.sh /usr/local/sbin/box-alsa-setup.sh
-/usr/local/sbin/box-alsa-setup.sh
-# Přehodí / připojení USB zvukové karty: starý PCM v trackeru umře, a služba
-# by pak běžela v tichu. udev pravidlo to pozná a službu restartuje.
-install -m 0755 box-sound-restart.sh /usr/local/sbin/box-sound-restart.sh
-install -m 0644 box-sound-restart.service /etc/systemd/system/box-sound-restart.service
-install -m 0644 99-box-sound.rules /etc/udev/rules.d/99-box-sound.rules
-udevadm control --reload-rules
-install -m 0644 tracker.service /etc/systemd/system/tracker.service
-systemctl daemon-reload
-systemctl enable tracker.service
-systemctl start tracker.service
-touch /var/lib/box-provisioned
-systemctl disable box-firstboot.service
-logger "boxa provisioning complete"
-EOF
-    chmod 755 "$ROOT/usr/local/sbin/box-provision.sh"
-    cat > "$ROOT/etc/systemd/system/box-firstboot.service" <<'EOF'
+step "Static IP + WiFi (NetworkManager keyfile)"
+ABC38_NET_ROOT="$ROOT" ABC38_NET_ROOT="$ROOT" ./box-network.sh "$BOX"
+
+step "Headless autostart ($([ "$BOX" = A ] && echo 'tracker --headless' || echo "sampler --box $BOX"), systemd)"
+
+# Provisioning je jeden skript pro oba boxy (box-provision.sh) — tady se jen
+# kopíruje do image a zapíná se jako oneshot. Testy: tests/test-box-provision.sh
+install -m 0755 box-provision.sh "$ROOT/usr/local/sbin/box-provision.sh"
+cat > "$ROOT/etc/systemd/system/box-firstboot.service" <<EOF
 [Unit]
-Description=Box A first-boot provisioning
+Description=Box $BOX first-boot provisioning
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+Environment=BOX=$BOX
 ExecStart=/usr/local/sbin/box-provision.sh
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    systemctl --root "$ROOT" enable box-firstboot.service >/dev/null 2>&1 || \
-        ln -s /etc/systemd/system/box-firstboot.service \
-             "$ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service"
-    echo "  box-firstboot.service -> enabled (runs once on first boot)"
-    echo "  tracker.service -> installed + enabled (headless, no X autostart)"
-}
-
-provision_box_sampler() {
-    step "Headless autostart (sampler --box $BOX, systemd)"
-    cat > "$ROOT/usr/local/sbin/box-provision.sh" <<EOF
-#!/bin/bash
-set -e
-echo "[box$BOX] == first-boot provisioning (sampler) =="
-logger "box$BOX provisioning start"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y --no-install-recommends \
-    g++ make pkg-config git ca-certificates \
-    libsdl2-dev libsdl2-mixer-dev libgpiod-dev
-cd /home/pi/tracker
-make clean
-make sampler
-# If a wrong-architecture binary ever slipped in, exec fails here and the whole
-# provisioning aborts (set -e) instead of installing a binary systemd cannot run.
-./sampler --version
-install -m 0755 sampler /usr/local/bin/sampler
-[ -f mapa.csv ] || cp -n mapa.csv.example mapa.csv
-install -m 0644 sampler.service /etc/systemd/system/sampler.service
-sed -i 's/--box .*/--box $BOX/' /etc/systemd/system/sampler.service
-# ALSA devices must be named and the default set before the service opens the card
-install -m 0755 box-alsa-setup.sh /usr/local/sbin/box-alsa-setup.sh
-/usr/local/sbin/box-alsa-setup.sh
-# USB zvuková karta se přehodí nebo připojí: sampler drží starý PCM, který už
-# SDL znovu neotevře. udev pravidlo to pozná a sampler restartuje.
-install -m 0755 box-sound-restart.sh /usr/local/sbin/box-sound-restart.sh
-install -m 0644 box-sound-restart.service /etc/systemd/system/box-sound-restart.service
-sed -i 's/^Environment=RESTART_UNITS=.*/Environment=RESTART_UNITS=sampler.service/' \
-    /etc/systemd/system/box-sound-restart.service
-install -m 0644 99-box-sound.rules /etc/udev/rules.d/99-box-sound.rules
-udevadm control --reload-rules
-systemctl daemon-reload
-systemctl enable sampler.service
-systemctl start sampler.service
-touch /var/lib/box-provisioned
-systemctl disable box-firstboot.service
-logger "box$BOX provisioning complete"
-EOF
-    chmod 755 "$ROOT/usr/local/sbin/box-provision.sh"
-    cat > "$ROOT/etc/systemd/system/box-firstboot.service" <<'EOF'
-[Unit]
-Description=Box first-boot provisioning (sampler build)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/sbin/box-provision.sh
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl --root "$ROOT" enable box-firstboot.service >/dev/null 2>&1 || \
-        ln -s /etc/systemd/system/box-firstboot.service \
-             "$ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service"
-    echo "  box-firstboot.service -> enabled (builds + starts sampler on first boot)"
-}
-
+systemctl --root "$ROOT" enable box-firstboot.service >/dev/null 2>&1 || \
+    ln -s /etc/systemd/system/box-firstboot.service \
+         "$ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service"
+echo "  box-firstboot.service -> enabled (runs once on first boot, BOX=$BOX)"
 case "$BOX" in
-    A) provision_box_a ;;
-    B) provision_box_sampler ;;
+    A) echo "  tracker.service -> installed + enabled on first boot (headless, no X autostart)" ;;
+    B) echo "  sampler.service -> installed + enabled on first boot (headless, 433 MHz)" ;;
 esac
 
 echo
 echo "=== Done. Safely eject:  sudo eject /dev/mmcblk0  (or  sync && unmount) ==="
 case "$BOX" in
     A) echo "  First boot: ~10-40 min auto-install, then tracker.service runs headless (no HDMI needed)." ;;
-    B) echo "  First boot: ~5-15 min auto-install, then sampler --box B runs headless." ;;
+    B) echo "  First boot: ~5-15 min auto-install, then sampler --box b runs headless." ;;
 esac
-echo "  Box A: calibrate once over HDMI before playing — startx on tty1, drag corners, press S, then power-cycle."
+case "$BOX" in
+    A) echo "  Box A: calibrate once over HDMI before playing — startx on tty1, drag corners, press S, then power-cycle." ;;
+    B) echo "  Box B: 433 MHz codes -> journal:  journalctl -u sampler -f"
+       echo "  Box B: naplánovat samply:          sudo ./sampler --box b --listen" ;;
+esac
 echo "  Requires: network (ether/wifi) for apt, USB sound card."

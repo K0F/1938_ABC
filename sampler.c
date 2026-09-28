@@ -224,7 +224,6 @@ static int classifyBit(int us) {
 }
 
 static void onCode(uint32_t code) {
-    pressCount++;
     if (listenMode) {
         uint64_t t = nowUs();
         if (code == lastListenCode && lastListenUs &&
@@ -232,6 +231,7 @@ static void onCode(uint32_t code) {
             return;
         lastListenCode = code;
         lastListenUs = t;
+        pressCount++;
         fprintf(stdout, "code=%u, id=%u, key=%u\n",
                 code, code >> 4, code & 0x0f);
         fflush(stdout);
@@ -247,10 +247,25 @@ static void onCode(uint32_t code) {
         if (slots[i].code == code) {
             uint64_t t = nowUs();
             if (slots[i].lastUs && t - slots[i].lastUs < debounceUs) return;
-            if (!slots[i].chunk) return;
+            // Čas se zapíše i bez samplu: bez debounce by jediný stisk
+            // vypisoval do journalu desítky řádků.
             slots[i].lastUs = t;
+            pressCount++;
+            // Každý stisk jde do journalu, i když nehraje — na bezhlavém boxu
+            // je to jediné, podle čeho se pozná, že 433 MHz tlačítko funguje.
+            if (!slots[i].chunk) {
+                fprintf(stdout, "code=%u -> %s (S%02d, #%llu) VZOREK NENACHRANY\n",
+                        code, slots[i].file.c_str(), i + 1,
+                        (unsigned long long)pressCount);
+                fflush(stdout);
+                return;
+            }
             Mix_HaltChannel(slots[i].channel);
             Mix_PlayChannel(slots[i].channel, slots[i].chunk, 0);
+            fprintf(stdout, "code=%u -> %s (S%02d, #%llu)\n", code,
+                    slots[i].file.c_str(), i + 1,
+                    (unsigned long long)pressCount);
+            fflush(stdout);
             if (lcdEnabled) lcdStatusHit(i);
             return;
         }

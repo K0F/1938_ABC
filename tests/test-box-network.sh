@@ -1,0 +1,134 @@
+#!/bin/bash
+# tests/test-box-network.sh — statická adresa boxu v NetworkManageru.
+#
+# Klíčový problém, který tu jde chytit: RPi OS vede síť přes NetworkManager,
+# takže adresa musí být keyfile v /etc/NetworkManager/system-connections/ se
+# správnými právy (0600) a method=manual. Špatná práva znamenají, že NetworkManager
+# profil tiše odmákne a box skončí na DHCP — nebo vůbec bez adresy.
+#
+#   usage: ./tests/test-box-network.sh
+
+set -u
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT="$ROOT/box-network.sh"
+[ -x "$SCRIPT" ] || { echo "chybi $SCRIPT" >&2; exit 1; }
+
+PASS=0
+FAIL=0
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+ok()  { PASS=$((PASS + 1)); printf '    ok   %s\n' "$1"; }
+bad() { FAIL=$((FAIL + 1)); printf '    FAIL %s\n' "$1"; }
+
+gen() {
+    local r="$TMP/$1"; shift
+    rm -rf "$r"
+    ABC38_NET_ROOT="$r" "$@" bash "$SCRIPT" "$@" >/dev/null 2>&1 || true
+    echo "$r"
+}
+
+# gen N BOX [BOX_* ...] — vygeneruje profil do TMP/N a vrátí cestu k souboru
+gen() {
+    local name="$1" box="$2"; shift 2
+    local r="$TMP/$name"
+    rm -rf "$r"
+    env ABC38_NET_ROOT="$r" "$@" bash "$SCRIPT" "$box" >"$TMP/$name.log" 2>&1
+    echo "$r/etc/NetworkManager/system-connections/box-$box.nmconnection"
+}
+
+conf() { grep -E "$1" "$2" || true; }
+
+echo "== 1) WiFi profil: 192.168.8.103 na wlan0, WPA2, otevřená cesta k NM =="
+F="$(gen wifi B BOX_WIFI_SSID=pece BOX_WIFI_PSK=heslo123)"
+[ -f "$F" ] && ok "keyfile vznikl" || bad "keyfile chybí"
+grep -q '^type=wifi$'      "$F" && ok "type=wifi"          || bad "type=wifi chybí"
+grep -q '^interface-name=wlan0$' "$F" && ok "interface-name=wlan0" || bad "interface-name chybí"
+grep -q '^ssid=pece$'      "$F" && ok "ssid zapsán"        || bad "ssid chybí"
+grep -q '^psk=heslo123$'   "$F" && ok "WPA2 heslo zapsáno" || bad "psk chybí"
+grep -q '^key-mgmt=wpa-psk$' "$F" && ok "key-mgmt=wpa-psk" || bad "key-mgmt chybí"
+grep -q '^method=manual$'  "$F" && ok "ipv4 method=manual (DHCP adresu nepřepíše)" \
+                               || bad "method != manual — DHCP by adresu přepsalo"
+grep -q '^addresses=192\.168\.8\.103/24$' "$F" && ok "adresa 192.168.8.103/24" || bad "adresa chybí"
+grep -q '^gateway=192\.168\.8\.1$' "$F" && ok "gateway 192.168.8.1" || bad "gateway chybí"
+
+echo "== 2) práva 0600 — jinak NM keyfile s heslem odmákne =="
+PERM="$(stat -c '%a' "$F")"
+[ "$PERM" = "600" ] && ok "mode 600" || bad "mode je $PERM, NM profil by odmkl"
+
+echo "== 3) Ethernet bez SSID: profil na eth0, žádná wifi-sekce =="
+F="$(gen eth A)"
+grep -q '^type=ethernet$'      "$F" && ok "type=ethernet"  || bad "type=ethernet chybí"
+grep -q '^interface-name=eth0$' "$F" && ok "interface-name=eth0" || bad "eth0 chybí"
+grep -q '^\[wifi\]'            "$F" && bad "má [wifi] sekci bez SSID" || ok "bez [wifi] sekce"
+grep -q '^\[wifi-security\]'   "$F" && bad "má [wifi-security] bez SSID" || ok "bez [wifi-security]"
+
+echo "== 4) otevřená WiFi (bez PSK) = bez [wifi-security] =="
+F="$(gen open B BOX_WIFI_SSID=hostap)"
+grep -q '^\[wifi-security\]' "$F" && bad "má [wifi-security] bez hesla" || ok "bez [wifi-security]"
+
+echo "== 5) skrytá síť = hidden=1 =="
+F="$(gen hid B BOX_WIFI_SSID=skryta BOX_WIFI_HIDDEN=1)"
+grep -q '^hidden=1$' "$F" && ok "hidden=1" || bad "hidden chybí"
+
+echo "== 6) vlastní IP a maska (192.168.8.0/24 se nemusí vejít) =="
+F="$(gen ip B BOX_IP=10.0.0.77 BOX_PREFIX=16 BOX_GATEWAY=10.0.0.1)"
+grep -q '^addresses=10\.0\.0\.77/16$' "$F" && ok "10.0.0.77/16" || bad "adresa/maska chybí"
+grep -q '^gateway=10\.0\.0\.1$'    "$F" && ok "gateway 10.0.0.1" || bad "gateway chybí"
+
+echo "== 7) prázdný BOX_DNS = žádný dns= řádek (box jen v lokální síti) =="
+F="$(gen nodns B BOX_WIFI_SSID=x BOX_DNS=)"
+grep -q '^dns=' "$F" && bad "má dns= při prázdném BOX_DNS" || ok "bez dns="
+
+echo "== 8) BOX_IP musí být IPv4, jinak ať to řekne =="
+rm -rf "$TMP/bad"
+if ABC38_NET_ROOT="$TMP/bad" BOX_IP=not-an-ip bash "$SCRIPT" B >"$TMP/bad.log" 2>&1; then
+    bad "rozbité BOX_IP prošlo bez chyby"
+else
+    grep -q 'not an IPv4' "$TMP/bad.log" && ok "řekne, že to není IPv4" || bad "chybová hláška nejasná"
+fi
+
+echo "== 9) BOX musí být A nebo B =="
+if bash "$SCRIPT" C >/dev/null 2>&1; then
+    bad "box C prošel (zrušený box)"
+else
+    ok "box C odmítnut"
+fi
+
+echo "== 10) UUID platné a pokaždé jiné (NM odmítne duplicitní) =="
+U1="$(gen u1 A | xargs -I{} grep '^uuid=' {} | cut -d= -f2)"
+U2="$(gen u2 B | xargs -I{} grep '^uuid=' {} | cut -d= -f2)"
+case "$U1" in
+    ????????-????-????-????-????????????) ok "uuid ve tvaru UUID" ;;
+    *) bad "uuid divný: $U1" ;;
+esac
+[ "$U1" != "$U2" ] && ok "uuid se mezi boxy liší" || bad "A a B mají stejné uuid"
+
+echo "== 11) profil jde znovu přegenerovat (idempotence) =="
+R="$TMP/twice"
+ABC38_NET_ROOT="$R" bash "$SCRIPT" B >/dev/null 2>&1
+BEFORE="$(cat "$R/etc/NetworkManager/system-connections/box-B.nmconnection")"
+ABC38_NET_ROOT="$R" bash "$SCRIPT" B >/dev/null 2>&1
+AFTER="$(cat "$R/etc/NetworkManager/system-connections/box-B.nmconnection")"
+[ "$BEFORE" = "$AFTER" ] && ok "druhý běh dá stejný obsah" || bad "přegenerování mění obsah"
+[ "$(stat -c '%a' "$R/etc/NetworkManager/system-connections/box-B.nmconnection")" = "600" ] \
+    && ok "práva se po druhém běhu nezkazila" || bad "práva utekla"
+
+echo "== 12) výchozí adresa boxu B, i když se nic nepředá =="
+rm -rf "$TMP/none"
+ABC38_NET_ROOT="$TMP/none" bash "$SCRIPT" B >/dev/null 2>&1
+F="$TMP/none/etc/NetworkManager/system-connections/box-B.nmconnection"
+grep -q '^addresses=192\.168\.8\.103/24$' "$F" && ok "výchozí IP boxu B je 192.168.8.103" || bad "výchozí IP chybí"
+
+echo "== 13) box A nedostane adresu boxu B =="
+rm -rf "$TMP/boxa"
+ABC38_NET_ROOT="$TMP/boxa" bash "$SCRIPT" A >/dev/null 2>&1
+F="$TMP/boxa/etc/NetworkManager/system-connections/box-A.nmconnection"
+grep -q '^addresses=192\.168\.8\.104/24$' "$F" && ok "výchozí IP boxu A je 192.168.8.104" || bad "A by si vzalo cizí adresu B"
+BOX_IP=192.168.8.103 ABC38_NET_ROOT="$TMP/boxa" bash "$SCRIPT" A >/dev/null 2>&1
+grep -q '^addresses=192\.168\.8\.103/24$' "$F" && ok "BOX_IP má i u A poslední slovo" || bad "BOX_IP se ignoruje"
+
+echo
+printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
+[ "$FAIL" -eq 0 ] || exit 1

@@ -256,6 +256,52 @@ sudo systemctl enable --now sampler
 ```
 *Služba je předkonfigurována pro Box B (`--box b`); vzorový soubor obsahuje `WorkingDirectory=/home/pi/tracker`.*
 
+#### Čtení 433 MHz do journalu
+Na bezhlavém boxu nevidíš obrazovku, takže každý přijatý kód jde do journalu. Podle toho se pozná, jestli tlačítka vůbec něco chytí, i když `mapa.csv` je ještě prázdná:
+```bash
+journalctl -t sampler -f      # code=12200123 -> sample_b_01.wav (S01, #7)
+journalctl -u sampler -b -n 20
+```
+Řádek `code=... not in map` znamená, že tlačítko funguje, ale kód v mapě chybí. `VZOREK NENACHRANY` znamená kód v mapě, ale chybí WAV — stisk se i tak vypíše, aby se nezaměnil za mrtvý přijímač.
+
+### Image pro Box B (a burn na SD kartu)
+Image se staví ze stejného RPi OS Lite jako Box A, jen s jinou identitou boxu. Provisioning jde do image jako oneshot `box-firstboot.service` a pustí se až na skutečném boxu — QEMU nemá síť, takže by `apt` a build stejně selhaly.
+```bash
+./qemu_raspi4.sh setup                                        # jen poprvé
+sudo ./qemu_raspi4.sh prepare --box B --ip 192.168.8.103 \
+     --wifi MOJE_SIT --wifi-pass HESLO
+./qemu_raspi4.sh run                                          # zkouška v QEMU
+sudo ./qemu_raspi4.sh burn /dev/mmcblk0                       # na kartu
+```
+Bez `--box` se do image nedostane nic boxového (jen SSH, uživatel, zdrojáky, alsa-utils) — to je výchozí stav pro obyčejné testování.
+
+`--box B` do image přidá: hostname `B`, `dtparam=i2c_arm=on` (LCD na GPIO2/3), `box-provision.sh`, `sampler.service` s `--box b` a `box-sound-restart.sh` restartující sampler.
+
+Kartu lze připravit i rovnou, bez QEMU, přes `prepare-sd.sh` (po `dd` základního image):
+```bash
+BOX_WIFI_SSID=MOJE_SIT BOX_WIFI_PSK=HESLO sudo ./prepare-sd.sh /dev/mmcblk0 B
+```
+
+#### Statická adresa boxu
+`box-network.sh` zapisuje profil do `/etc/NetworkManager/system-connections/box-B.nmconnection`. RPi OS vede síť přes NetworkManager, takže `/etc/dhcpcd.conf` by box nečetl.
+```bash
+sudo ./box-network.sh B                      # 192.168.8.103, bez WiFi (eth0)
+BOX_WIFI_SSID=pece BOX_WIFI_PSK=heslo sudo ./box-network.sh B
+nmcli con show box-B && ip -4 addr show wlan0
+```
+Výchozí: box B `192.168.8.103/24`, box A `192.168.8.104`, gateway i DNS `192.168.8.1`. Přepnout jde proměnnými `BOX_IP`, `BOX_PREFIX`, `BOX_GATEWAY`, `BOX_DNS`. Adresa `.102` patří notebooku, ze kterého se image připravuje — nedávat ji boxu.
+
+Dvě věci, které se projeví jinak, než čekáš:
+- Keyfile musí mít práva **0600** a vlastníka root — NetworkManager odmítne profil s volně čitelnou WiFi heslem a box skončí bez adresy.
+- `ipv4.method` musí být `manual`, jinak DHCP při prvním připojení nabídne jinou adresu a přepíše tvoji.
+
+Testy běží bez sítě i bez NetworkManageru: `./tests/test-box-network.sh`, provisioning nad falešným stromem: `./tests/test-box-provision.sh`.
+
+`./tests/test-sampler-433.sh` staví sampler z hostu a pustí ho proti EV1527 rámcům, které si vyrobí sám, takže jde spustit i bez GPIO a bez zvukové karty. Chybí-li SDL2, skript přeskočí (exit 77) místo toho, aby hlásil falešné chyby. Když je SDL2 jen v cross/sysrootu, stačí ho přimířit:
+```bash
+ABC38_SYSROOT=/tmp/sdlbuild/sysroot ./tests/test-sampler-433.sh
+```
+
 ---
 
 ## Hardware / BOM (Česky)
