@@ -4,6 +4,7 @@
 #   usage:  sudo ./prepare-sd.sh [DEVICE] [A|B]
 #
 #   A -> Tracker (webcam, headless): tracker.service, no X autostart
+#        (pro obraz na připojené TV až na boxu: sudo ./box-console.sh on)
 #   B -> Sampler (headless RF sample player) via systemd service
 #
 # Box C was removed (2-box system: A + B).
@@ -113,9 +114,10 @@ echo "[boxa] == first-boot provisioning =="
 logger "boxa provisioning start"
 cd /home/pi/tracker
 bash install-deps.sh
-# X + mesa stay installed so calibration can still be run over HDMI by hand
-# (startx on tty1, then ./tracker with a window and the S key). Nothing starts
-# the GUI automatically any more.
+# X + mesa stay installed for two reasons: calibration over HDMI by hand
+# (startx on tty1, then ./tracker with a window and the S key) and the optional
+# HDMI console (box-console.sh on), which autologins on tty1 and fills the TV
+# with the tracker window. Nothing starts the GUI automatically by default.
 apt-get install -y --no-install-recommends \
     xinit xserver-xorg xserver-xorg-video-fbdev x11-xserver-utils libgl1-mesa-dri >/dev/null
 usermod -aG audio,video $USER

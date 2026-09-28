@@ -130,7 +130,9 @@ mv "$PROC/cards.hidden" "$PROC/cards"
 echo "== 6) restart selhne =="
 FAKE_RC=1 run_watch "tracker.service"
 assert_rc0        "skript skončí 0 (selhání restartu neshodí běh)"
-assert_log        'restart tracker.service selhal' "selhání se nahlásí"
+# v hlášce je ten příkaz, kterým se to zkusilo, ať je poznat, co selhalo
+assert_log        'tracker.service selhal' "selhání se nahlásí"
+assert_log        'restart' "a je v něm použitý příkaz"
 
 echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"

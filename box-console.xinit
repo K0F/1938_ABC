@@ -1,0 +1,137 @@
+#!/bin/bash
+# box-console.xinit — X session pro HDMI konzoli boxu: okno trackeru s kamerou.
+#
+# Kdo ho spouští: login shell na tty1 po autologinu (box-console.sh on →
+# /etc/profile.d/box-console.sh → xinit).
+#
+# DŮLEŽITÉ — na tomhle Raspberry Pi (kernel 6.12 rpi, vc4 zabudovaný v jádře)
+# neumí hardwarový GLX vytvořit kontext, který chce GLFW: X server hlásí GLX
+# vizuály (glxinfo vidí 144, OpenGL 3.1 přes V3D), jen GLFW skončí na
+# "GLX: Failed to create context: GLXBadFBConfig" a okno nevznikne. Nepomáhá
+# přepnutí režimu výstupu ani jiný X server. Proto session běží na Mesa
+# softwarovém GL (llvmpipe, LIBGL_ALWAYS_SOFTWARE=1): ten kontext vytvoří vždy
+# a přežije i restarty klienta. Bez toho je na TV jen černá obrazovka.
+# Na boxu s funkčním hardwarovým GL se dá vypnout: BOX_CONSOLE_SOFTGL=0.
+#
+# Režim výstupu: X necháváme v nativním režimu TV (1920x1080) a okno má
+# velikost monitoru. 640x480 nefunguje — v tom režimu server GLX vizuály
+# nevytvoří, ať se k němu dostane přes cokoliv (xrandr --mode, --fb, -screen,
+# konfigurace v xorg.conf). Snímek 640x480 se do okna 16:9 vejde svisle
+# (pillarbox) — řeší to tracker sám, viz main.c.
+#
+# Relace musí běžet, i když tracker spadne: cyklus ho dole zvedá. Když se
+# nedaří (chybějící binárka, X bez GLX), relace skončí a na TV je login prompt,
+# ať u něj člověk může — jinak by TV blikala a nikdo by nevěděl proč.
+#
+# Testy: tests/test-box-console.sh (falešný tracker i /dev/video0 přes
+# BOX_CONSOLE_* proměnné).
+#
+#   BOX_CONSOLE_TRACKER   default /home/pi/tracker/tracker
+#   BOX_CONSOLE_CAMERA    default /dev/video0
+#   BOX_CONSOLE_BALLS     default 1
+#   BOX_CONSOLE_WAIT      default 60      (sekund čekání na kameru)
+#   BOX_CONSOLE_RETRY     default 2       (pauza mezi pokusy)
+#   BOX_CONSOLE_BACKOFF   default 10      (pauza po každém 5. pádu)
+#   BOX_CONSOLE_LIMIT     default 10      (tolik pádů po sobě = konec relace)
+#   BOX_CONSOLE_SOFTGL   default 1       (1 = Mesa softwarový GL, llvmpipe;
+#                                         viz hlavička — bez toho na tomhle
+#                                         boxu GLFW okno nevytvoří)
+
+set -u
+
+TRACKER="${BOX_CONSOLE_TRACKER:-/home/pi/tracker/tracker}"
+CAMERA="${BOX_CONSOLE_CAMERA:-/dev/video0}"
+BALLS="${BOX_CONSOLE_BALLS:-1}"
+WAIT="${BOX_CONSOLE_WAIT:-60}"
+RETRY="${BOX_CONSOLE_RETRY:-2}"
+BACKOFF="${BOX_CONSOLE_BACKOFF:-10}"
+LIMIT="${BOX_CONSOLE_LIMIT:-10}"
+SOFTGL="${BOX_CONSOLE_SOFTGL:-1}"
+
+log() {
+    printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2
+    command -v logger >/dev/null 2>&1 && logger -t box-console -- "$*" || true
+    return 0
+}
+
+if [ "$SOFTGL" = 1 ]; then
+    # Hardwarový GLX na tomhle boxu neumí pro GLFW kontext (GLXBadFBConfig),
+    # viz hlavička. Softwarový GL stojí CPU (asi jedno jádro), ale obraz je.
+    export LIBGL_ALWAYS_SOFTWARE=1
+fi
+
+log "== HDMI konzole: X session, okno trackeru (softwarový GL: $SOFTGL) =="
+
+# ── 1. Kamera se po bootu objeví až za pár sekund ────────────────────────
+waited=0
+while [ ! -e "$CAMERA" ] && [ "$waited" -lt "$WAIT" ]; do
+    [ "$waited" -eq 0 ] && log "čekám na kameru $CAMERA (až ${WAIT}s)"
+    sleep 1
+    waited=$((waited + 1))
+done
+if [ -e "$CAMERA" ]; then
+    log "kamera $CAMERA v pořádku${waited:+ (čekáno ${waited}s)}"
+else
+    log "POZOR: $CAMERA se neobjevila za ${WAIT}s — zkusím tracker stejně"
+fi
+
+# ── 2. Režim výstupu: jen do logu ──────────────────────────────────────
+#
+# X necháváme v nativním režimu TV — do konfigurace Xorgu ani do xinitu
+# se žádný režim nedostává. Tady ho jen evidujeme, ať šlo poznat, co se
+# TV chystalo. POZOR: xrandr --output ... --mode 640x480 NESMÍ —
+# přepnutí režimu za běhu zneplatní GLX vizuály a GLFW skončí na
+# "GLX: Failed to create context: GLXBadFBConfig" (rc 134). To platí i pro
+# zmenšení framebufferu přes --fb, takže ani škálování nepomůže.
+if command -v xrandr >/dev/null 2>&1; then
+    log "výstup: $(xrandr 2>/dev/null | awk '/ connected/{for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+x[0-9]+/) {print $1" "$i; exit}}')"
+else
+    log "xrandr chybí, režim výstupu neověřím"
+fi
+
+# ── 3. Tracker: cyklus, všechno ostatní je zdvojení pro efekt ──────────
+if [ ! -x "$TRACKER" ]; then
+    log "POZOR: $TRACKER není spustitelný — relace končí, box-console.sh off/on"
+    exit 1
+fi
+
+# terminus.ttf (font v UI) se hledá v pracovním adresáři, ne v PATH
+cd "$(dirname "$TRACKER")" || exit 1
+
+log "spouštím: $TRACKER $BALLS (okno)"
+
+# Relace běží, dokud tracker jede (nebo dokud nevyčerpá jistič). Skončí jen
+# přes `box-console.sh off`, jinak z jiného tty (Ctrl+Alt+F2) na login prompt.
+
+# Výstup trackera jde do souboru — na tty ho nevidíme, v journalu by byl jen
+# jeho stdout, a když spadne (SIGABRT z GLFW), je v chybě jediná informace.
+tlog="/tmp/box-console-tracker.log"
+fails=0
+while :; do
+    "$TRACKER" "$BALLS" >"$tlog" 2>&1
+    rc=$?
+    fails=$((fails + 1))
+    why="$(grep -vE '^\[ WARN:0@|GStreamer' "$tlog" 2>/dev/null | tail -2 | tr '\n' ' ')"
+    # Když padá pořád (chybí X, GLX bez vizuálů, rozbitá binárka), necháme
+    # na TV login prompt, ať u něj člověk může — jinak by blikala bez zjevu.
+    if [ "$fails" -ge "$LIMIT" ]; then
+        log "tracker se nespravuje ($fails pádů po sobě${why:+ — $why}) — končím relaci, na TV bude login prompt"
+        log "oprava: box-console.sh off, journalctl -t box-console, pak reboot"
+        exit 1
+    fi
+    if [ "$rc" -eq 0 ]; then
+        fails=0
+        log "tracker skončil čistě (rc=0) — pustím ho znovu, X relace běží dál"
+        sleep "$RETRY"
+        continue
+    fi
+    # Když kamera nepojde dlouho (odpojená, obsazená), netlačím do logu
+    # každé 2 s — po každých pěti pádech se počká déle.
+    if [ $((fails % 5)) -eq 0 ]; then
+        log "tracker skončil s $rc${why:+ — $why} — znovu za ${BACKOFF}s (pád č. $fails)"
+        sleep "$BACKOFF"
+    else
+        log "tracker skončil s $rc${why:+ — $why} — znovu za ${RETRY}s"
+        sleep "$RETRY"
+    fi
+done

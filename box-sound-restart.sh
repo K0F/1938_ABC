@@ -16,6 +16,10 @@
 #   RESTART_UNITS      default "tracker.service" (Box B: "sampler.service",
 #                      prázdné = restartovat nic)
 #   RESTART_CMD        default "systemctl restart"
+#                      (v konzolové relaci přepisuje box-console.sh na
+#                       pkill -KILL -x: drží ho cyklus v box-console.xinit,
+#                       ne systemd)
+#   RESTART_CMD        default "systemctl restart"
 #                      (ne try-restart-or-restart — to umí až systemd 254,
 #                       Raspberry Pi OS bookworm má 252)
 #   SETTLE_SEC         default 3  (karty se v /proc objeví postupně)
@@ -56,8 +60,13 @@ fi
 
 for unit in $RESTART_UNITS; do
     if $RESTART_CMD "$unit"; then
-        log "restartováno: $unit"
+        if [ "$RESTART_CMD" = "systemctl restart" ]; then
+            log "restartováno: $unit"
+        else
+            # konzole: pustí ho cyklus v box-console.xinit nad čerstvou kartou
+            log "provedeno: $RESTART_CMD $unit"
+        fi
     else
-        log "restart $unit selhal (nainstalovaná?)"
+        log "$RESTART_CMD $unit selhal (nainstalovaná?)"
     fi
 done

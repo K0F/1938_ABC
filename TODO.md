@@ -4,6 +4,12 @@ Feature ideas and planned work for the tracker.
 
 ## Hardware — Box A / Box B
 
+- [ ] **AXAGON ADA-17 fyzicky přepojit** — USB zvuková karta boxu byla při testu
+      odpojena přes `/sys/bus/usb/drivers/usb/unbind` a na Raspberry Pi OS s
+      jádrem 6.12 se zařízení po unbindu samo nevrátí (`bind` → `No such
+      device`), takže ji musí někdo vyjmout a vložit zpět. Zvuk se po připojení
+      sám dožene (udev → `box-sound-restart` → restart trackera)
+
 - [ ] **Dokončit zesilovač v Boxu A** — CA-3110S + interní reproduktor LS40N 40 mm,
       panelový jack 3,5 mm (TIP=L, RING=R, SLEEVE=GND) paralelně přes Y-rozdvojku.
       Z výstupu AXAGONu 3,5 mm do vstupu CA-3110S je potřeba **redukce 3,5 → 6,3 mm**
@@ -33,6 +39,18 @@ Feature ideas and planned work for the tracker.
 - [x] **More robust ball count** — auto-detect how many balls are present instead of fixed CLI arg
 - [ ] **Perspective calibration UI polish** — show quadrant labels (1–4) and axis indicators on the rectified plane
 - [ ] **Configurable track file locations** — allow custom sample paths via argument
+- [ ] **Kalibrace v HDMI konzoli** — dnes jde `S`/`R`/`C` jen v okně a myš
+      táhne po souřadnicích snímku; v konzoli se okno zvětší na 1920x1080, takže
+      by se hodilo ukázat, že se dokládek počítá v souřadnicích kamery (a
+      třeba zrcadlit ovládání na druhém monitoru)
+- [ ] **Přehodí USB kamery v konzoli** — zvuková karta má obnovu přes udev, ale
+      když se přehodí kamera, tracker v konzoli umře a cyklus ho sice zvedne,
+      čeká se na `/dev/video0`; u USB kamery to chvíli trvá a hlídá se to jen
+      při startu relace, ne za běhu
+- [ ] **Softwarový GL v konzoli** — běží na `LIBGL_ALWAYS_SOFTWARE=1`, protože
+      hardwarový GLX na tomhle Pi neumí pro GLFW kontext (`GLXBadFBConfig`).
+      Kdyby se to na novějším jádře opravilo, přepnout na `BOX_CONSOLE_SOFTGL=0`
+      a ušetřit dvě jádra CPU
 - [ ] **Calibration hotkey in headless mode** — today `S`/`R`/`C` need a window, so
       calibration means a temporary HDMI session; a web/UDP command would avoid it
 
@@ -45,6 +63,13 @@ Feature ideas and planned work for the tracker.
 
 ## Done
 
+- [x] v0.5.1 — HDMI konzole pro Box A: autologin na `tty1` + okno trackeru na
+      celou TV (`box-console.sh on|off|status`, `box-console.xinit`,
+      `getty-tty1-autologin.conf`). Snímek 640x480 se v okně 1920x1080 vejde
+      svisle (pillarbox) — okno se rozjede na velikost monitoru, ne přes
+      `FLAG_FULLSCREEN_MODE` (ten přepíná výstup na 640x480, kde okno nevznikne).
+      Relace běží na Mesa softwarovém GL, protože hardwarový GLX tady GLFW
+      kontext nevytvoří. Testy: `tests/test-box-console.sh`
 - [x] v0.5.1 — autostart po restartu odolný proti pomalé kameře: `StartLimitIntervalSec=0`
       v `tracker.service` (jinak systemd po 5 restartech za 2 s shodí jednotku do
       `failed`), tracker bez zvukové karty končí nenulově a čeká na ni v restartu

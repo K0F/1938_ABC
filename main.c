@@ -11,6 +11,7 @@
 #endif
 #include <opencv2/tracking.hpp>
 #include "raylib.h"
+#include "rlgl.h"   // rlPushMatrix/rlScalef — škálování snímku na celý monitor
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 #include <iostream>
@@ -170,9 +171,52 @@ int main(int argc, char* argv[]) {
     int frameHeight = frame.rows;
 
     Font font = {0};
+    float scale = 1.0f;   // 1.0 = okno 1:1 s kamerou (Xvfb, vývoj)
+    float offX = 0.0f, offY = 0.0f;  // horní levý roh obrazu v okně
     if (!headless) {
+        // Vývoj (Xvfb, jiný display): okno 1:1 s kamerou
         InitWindow(frameWidth, frameHeight, "Tracker " VERSION_STRING);
         SetTargetFPS(60);
+
+        // Na HDMI konzoli má být obraz na celé TV, takže okno natáhnu na celý
+        // monitor. Rozměry monitoru se dají zjistit až po otevření okna —
+        // v raylib je totiž GetScreenWidth() šířka OKNA (framebufferu), ne
+        // monitoru, a na začátku bych si přepsal sám sebe.
+        // NE přes FLAG_FULLSCREEN_MODE: ten si vybere "nejbližší video režim"
+        // k velikosti okna, tedy 640x480, a na Raspberry Pi přepne výstup —
+        // tam GLX vizuály nejsou a okno vůbec nevznikne. Bez window managera
+        // okno prostě leží přes celou obrazovku.
+        int mon = GetCurrentMonitor();
+        if (mon >= 0) {
+            int monW = GetMonitorWidth(mon);
+            int monH = GetMonitorHeight(mon);
+            if (monW > 0 && monH > 0
+                && (monW != frameWidth || monH != frameHeight)) {
+                SetWindowSize(monW, monH);
+                // Bez window managera se okno po zvětšení neposune samo a
+                // zůstane vycentrované podle původní velikosti — na TV by pak
+                // visela jen jeho pravá polovina.
+                SetWindowPosition(0, 0);
+            }
+        }
+        int outW = GetScreenWidth();
+        int outH = GetScreenHeight();
+        // 4:3 snímek na 16:9 monitor natáhnout na plnou šířku by zkreslilo
+        // míče na elipsy, takže se vejde svisle a do stran zbude pillarbox.
+        if (outW > 0 && outH > 0) {
+            scale = (float)outW / (float)frameWidth;
+            if ((float)outH / (float)frameHeight < scale) {
+                scale = (float)outH / (float)frameHeight;
+            }
+            offX = ((float)outW - frameWidth * scale) / 2.0f;
+            offY = ((float)outH - frameHeight * scale) / 2.0f;
+            // na stderr, ne na stdout: stdout jde v konzoli do souboru, a to je
+            // blokově bufferované — řádek by se objevil až při konci procesu,
+            // když je už k poštování pozdě.
+            std::cerr << "  okno " << outW << "x" << outH
+                      << ", snímek " << frameWidth << "x" << frameHeight
+                      << " x" << scale << " na (" << (int)offX << "," << (int)offY << ")" << std::endl;
+        }
 
         font = LoadFontEx("terminus.ttf", 20, NULL, 0);
         if (font.texture.id <= 0) font = GetFontDefault();
@@ -301,16 +345,22 @@ int main(int argc, char* argv[]) {
                 }
             }
 
+            // Myš je v souřadnicích okna, kalibrace v souřadnicích snímku.
             Vector2 mouse = GetMousePosition();
-            cv::Point2f mp((float)mouse.x, (float)mouse.y);
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                dragIdx = nearestCorner(mp);
-                dragging = dragIdx >= 0;
-            } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            float mx = ((float)mouse.x - offX) / scale;
+            float my = ((float)mouse.y - offY) / scale;
+            if (mx >= 0 && my >= 0 && mx < frameWidth && my < frameHeight) {
+                cv::Point2f mp(mx, my);
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    dragIdx = nearestCorner(mp);
+                    dragging = dragIdx >= 0;
+                } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                    dragging = false;
+                }
+                if (dragging && dragIdx >= 0) corners[dragIdx] = mp;
+            } else {
                 dragging = false;
-                dragIdx = -1;
             }
-            if (dragging && dragIdx >= 0) corners[dragIdx] = mp;
         }
 
         if (!headless) {
@@ -321,7 +371,13 @@ int main(int argc, char* argv[]) {
             Texture2D texture = LoadTextureFromImage(raylibImage);
 
             BeginDrawing();
-            ClearBackground(RAYWHITE);
+            ClearBackground(BLACK);
+            // Všechno kreslíme v souřadnicích snímku; matrix je zvedne na
+            // monitor (nejdřív posun, pak scale — obráceně by to bylo
+            // posunutí * scale a obraz by skočil mimo obrazovku).
+            rlPushMatrix();
+            rlTranslatef(offX, offY, 0.0f);
+            rlScalef(scale, scale, 1.0f);
             DrawTexture(texture, 0, 0, WHITE);
 
             for (int i = 0; i < 4; i++) {
@@ -365,6 +421,7 @@ int main(int argc, char* argv[]) {
             DrawTextEx(font, TextFormat("Balls: %d", numBalls),
                 {10, (float)(frameHeight - 80)}, 16, 0.0f, RAYWHITE);
 
+            rlPopMatrix();
             EndDrawing();
             UnloadTexture(texture);
         }

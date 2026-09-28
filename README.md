@@ -88,13 +88,63 @@ Dvě věci, které tu neuhodl popis, ale jinak to nefunguje:
 - Pravidlo musí zařízení otagovat `TAG+="systemd"`. Bez tagu systemd-udevd zařízení přehlížne a `SYSTEMD_WANTS` neřeší — jednotka se nespustí, aniž by to v logu bylo nějak vidět. Stejně postupují vlastní pravidla systemd v `99-systemd.rules`.
 - Restart má záměrnou prodlevu (`SETTLE_SEC`, default 3 s), aby se karta stihla usadit. Při bootu to znamená, že se tracker startuje dvakrát (systemd, pak udev) a nahrává až druhý běh; bez prodlevy by se občas chytil ještě ne úplně připravenou kartu.
 
-Ověření na skutečném boxu (bez fyzického přehazování — jde o unbind/bind USB zařízení, události jsou stejné jako po přepojení):
+Ověření na skutečném boxu (bez fyzického přehazování — jde o unbind USB zařízení, události jsou stejné jako po přepojení):
 ```bash
 echo 1-1.1 | sudo tee /sys/bus/usb/drivers/usb/unbind   # karta zmizí
-sleep 4
-echo 1-1.1 | sudo tee /sys/bus/usb/drivers/usb/bind     # a zase se objeví
-journalctl -u box-sound-restart -b -n 5   # "restartováno: tracker.service"
+journalctl -u box-sound-restart -b -n 5                 # "restartováno: tracker.service"
 ```
+POZOR: unbind je jednosměrný. Na Raspberry Pi OS s jádrem 6.12 (rpi) se
+zařízení po unbindu samo nevrátí a `/sys/bus/usb/drivers/usb/bind` skončí
+`No such device` — karta se musí připojit fyzicky (zařízení na portu pak
+ohlásí udev jako nové a obnova proběhne sama). Pro opakované testy bez
+fyzického zásahu nepoužívej unbind, ale přepojuj vlastní USB rozbočovač.
+
+### HDMI konzole (Box A — obraz na TV)
+Když u boxu není monitor, ale je připojená TV, jde tracker spustit oknem, které
+zaplní celou obrazovku: autologin na `tty1` → `xinit` → okno trackeru na celý
+displej. Snímek kamery 640x480 se v něm vejde svisle a do stran je pillarbox
+(4:3 na 16:9 bez zkreslení míčů) — řeší to tracker sám, viz `main.c`.
+
+```bash
+cd /home/pi/tracker
+sudo ./box-console.sh on      # nainstaluje profil, autologin, relaci; přepojí login
+./box-console.sh status       # režim, X, tracker, poslední logy
+sudo ./box-console.sh off     # zpět na headless (tracker.service)
+```
+Do `/etc` se ukládá `box-console.sh`, `box-console.xinit` a
+`getty-tty1-autologin.conf`; stav režimu je v `/etc/box-console-mode`. V konzoli
+je `tracker.service` vypnutá — kameru i zvukovku smí mít otevřené jen jeden
+proces, jinak by si ji rvaly (EBUSY) a nebyl by slyšet ani jeden.
+
+#### Na tomhle boxu běží na softwarovém GL
+Hardwarový GLX na Raspberry Pi (vc4) tu **neumí vytvořit kontext, který chce
+GLFW**: X server přitom GLX nabízí normálně (`glxinfo` vidí 144 vizuálů, OpenGL
+3.1 přes V3D), jen samotné okno skončí na
+`GLX: Failed to create context: GLXBadFBConfig` a neobjeví se. Relace proto
+běží na Mesa softwarovém GL (`LIBGL_ALWAYS_SOFTWARE=1`), který kontext vytvoří
+vždy a přežije i restarty trackera. Stojí to zhruba dvě jádra CPU (kamera,
+OpenCV i kreslení) — na boxu, kde má grafika vykonávat práci, to vypnout lze
+proměnnou:
+```bash
+BOX_CONSOLE_SOFTGL=0   # v box-console.xinit, kdyby box hardwarový GL uměl
+```
+
+#### Když na TV není okno
+V konzoli se nesmí nic, co okno zruší. Konkrétně X nesmí přepnout do jiného
+režimu výstupu — v 640x480 (kde GLX vizuály nejsou) okno nevznikne vůbec, ať
+se k tomu režimu dostaneš přes `xrandr --mode`, `xrandr --fb`, `-screen` v
+argumentu `xinit` nebo v `xorg.conf`. Proto se režim výstupu v konzoli vůbec
+nemění: X běží v nativním režimu TV a okno má velikost monitoru.
+```bash
+journalctl -t box-console -b -n 20    # co relace dělá a proč něco selhalo
+cat /tmp/box-console-tracker.log      # výstup trackera (začátek: "okno 1920x1080, snímek 640x480 x2.25 na (240,0)")
+```
+Relace běží, dokud tracker jede; když spadne dvakrát po sobě za dvě sekundy,
+zvedne ho cyklus v `box-console.xinit`. Když se nedaří (chybí binárka, X bez
+GLX), relace skončí a na TV zůstane login prompt, ať u něj člověk může —
+jinak by TV blikala bez zjevu. Stejně po třech rychlých restartech skončí
+profil: `box-console: X relace padá pořád dokola`. Po opravě `rm
+/tmp/.box-console.fails` nebo `box-console.sh off && on`.
 
 ### Ověření zvuku (Box A / Box B)
 Box má USB zvukovou kartu i vestavěný jack Pi. `/etc/asound.conf` generuje skript `box-alsa-setup.sh`, který zařízení pojmenuje **podle typu**:
