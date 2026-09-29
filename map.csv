@@ -1,6 +1,9 @@
 # Format: decimal_code, sample_file
-# Odečteno z reálného SRX882S na GPIO15 (box A, sampler --listen,
-# --debounce-ms 5000), 2026-09-29. Každý kód byl potvrzen opakováním.
+# Odečteno z reálného SRX882S na GPIO15 (box A, sampler --listen
+# --debounce-ms 5000 --confirm 3), 2026-09-29.
+# Kódy A-E jsou tlačítka (A=3365153, B=3478913, C=3387393, D=3380993,
+# E=3382769). F je speciální klíč: vypadá jako ostatní, ale vysílá jiný
+# kód — id 318091, mimo rodinu A-E (210322-217432).
 3365153, track1.wav
 3478913, track2.wav
 3387393, track3.wav
@@ -8,3 +11,5 @@
 # E: zatím reuse track1 — chybí 5. vzorek (nahrát potřebuje CA-3110S
 # a 8-26 V napájecí adaptér, v dostupnost.txt je [CHYBÍ]).
 3382769, track1.wav
+# F (speciální klíč): reuse track1, dokud není nahrán vlastní zvuk.
+5089457, track1.wav
