@@ -313,6 +313,23 @@ sudo systemctl enable --now sampler
 ```
 *Služba je předkonfigurována pro Box B (`--box b`); vzorový soubor obsahuje `WorkingDirectory=/home/pi/tracker`.*
 
+### Testovací režim na Boxu A
+Přijímač SRX882S je na GPIO15 boxu A, ale ten má na kartě tracker. `hw:` je
+exkluzivní, takže testovací režim bere zesilovač trackeru a vrací ho zpět:
+```bash
+sudo ./box-button-test.sh start    # zastaví tracker, pustí sampler na A-E
+sudo ./box-button-test.sh status
+sudo ./box-button-test.sh stop     # vrátí kartu a nastartuje tracker
+tail -f /home/pi/tracker/btn.log   # co se stisklo
+```
+Režim není služba: běží jako transientní jednotka `box-button-test`, takže
+přežije zavření ssh relace a po `stop` po sobě nic nenechá. Kláč F (`@restart`)
+tu záměrně nefunguje — jde o systémovou akci a Box A má být jen na test
+tlačítek. Běží se s `--lcd-addr off`, protože A nemá displej.
+
+Testy: `tests/test-box-button-test.sh` (31 případů nad falešnými příkazy, bez
+GPIO, zvuku a systemd).
+
 #### Čtení 433 MHz do journalu
 Na bezhlavém boxu nevidíš obrazovku, takže každý přijatý kód jde do journalu. Podle toho se pozná, jestli tlačítka vůbec něco chytí, i když `map.csv` je ještě prázdná:
 ```bash
@@ -429,6 +446,8 @@ sudo systemctl start tracker
 - `map.csv.example` — Šablona pro mapování RF kódů na zvukové stopy
 - `build_termux.sh` — Skript pro nastavení v prostředí Termux
 - `sampler.service` — systemd služba pro automatický start Boxu B
+- `box-button-test.sh` — Testovací režim: sampler na tlačítka A–E přímo na Boxu A
+  (transientní jednotka, bere trackeru zvukovač a vrací ho)
 - `docs/` — Schémata, manuály a generátory PDF
 - `HW.md` / `nakup.txt` / `dostupnost.txt` — Seznam hardwaru a součástek (česky)
 
