@@ -24,7 +24,11 @@
 #endif
 
 #define MAX_BUTTONS 20
-#define RF_GPIO_LINE 22
+// Výchozí pin přijímače je BCM 15 (fyzický pin 33) — tam je DATA
+// opravdu zapojený. Předpis to uvádí jako „GPIO15 (GPIO22)", kde 15 je
+// fyzický pin hlavičky a 22 BCM číslo; na zapojeném boxu ale DATA sedí
+// v pinu 33, ne 15. Přepínač --rf-pin to nechá přepsat.
+#define RF_GPIO_LINE 15
 #define RF_CHIP "gpiochip0"
 
 #define LCD_COLS 16
@@ -62,6 +66,7 @@ static int lcdAddr = 0x27;
 static int lcdEnabled = 1;
 static int teUs = 320;
 static uint64_t debounceUs = 300000ull;
+static unsigned rfPinOverride = RF_GPIO_LINE;
 static uint64_t pressCount = 0;
 static int numSlots = 0;
 static Slot slots[MAX_BUTTONS];
@@ -439,7 +444,7 @@ static struct gpiod_line* rfLine = NULL;
 static int rfInit() {
     rfChip = gpiod_chip_open_by_name(RF_CHIP);
     if (!rfChip) return -1;
-    rfLine = gpiod_chip_get_line(rfChip, RF_GPIO_LINE);
+    rfLine = gpiod_chip_get_line(rfChip, rfPinOverride);
     if (!rfLine) {
         gpiod_chip_close(rfChip);
         rfChip = NULL;
@@ -488,6 +493,7 @@ static void usage(const char* prog) {
         "  --lcd-addr HEX      PCF8574 I2C address, or off (default: 0x27)\n"
         "  --te-us N           EV1527 base timing in microseconds (default: 320)\n"
         "  --debounce-ms N     per-button debounce window (default: 300)\n"
+        "  --rf-pin N          BCM GPIO line of receiver DATA (default: 15)\n"
         "  --listen            decode-only: print received codes (build mapa.csv)\n"
         "  --learn             register buttons interactively, writes map on disk\n"
         "  --simulate          read codes from stdin instead of the RF receiver\n"
@@ -527,6 +533,10 @@ int main(int argc, char* argv[]) {
             int ms = std::atoi(argv[++i]);
             if (ms < 0) { fprintf(stderr, "Error: --debounce-ms must be >= 0\n"); return -1; }
             debounceUs = (uint64_t)ms * 1000ull;
+        } else if (strcmp(argv[i], "--rf-pin") == 0 && i + 1 < argc) {
+            int pin = std::atoi(argv[++i]);
+            if (pin < 0 || pin > 27) { fprintf(stderr, "Error: --rf-pin must be 0..27\n"); return -1; }
+            rfPinOverride = (unsigned)pin;
         } else if (strcmp(argv[i], "--listen") == 0) {
             listenMode = 1;
         } else if (strcmp(argv[i], "--learn") == 0) {
@@ -592,10 +602,10 @@ int main(int argc, char* argv[]) {
     }
 
     fprintf(stdout,
-            "sampler %s (box %c, %s, te=%dus, debounce=%llums)\n",
+            "sampler %s (box %c, %s, te=%dus, debounce=%llums, rf=gpiochip0/%u)\n",
             VERSION_STRING, boxLetter,
             learnMode ? "learn" : (listenMode ? "listen" : "play"),
-            teUs, (unsigned long long)(debounceUs / 1000ull));
+            teUs, (unsigned long long)(debounceUs / 1000ull), rfPinOverride);
     fflush(stdout);
 
     if (learnMode) {
@@ -612,8 +622,8 @@ int main(int argc, char* argv[]) {
         if (!haveRf) {
 #if HAVE_GPIOD
             fprintf(stderr,
-                    "Error: cannot open %s line %d: %s\n",
-                    RF_CHIP, RF_GPIO_LINE, strerror(errno));
+                    "Error: cannot open %s line %u: %s\n",
+                    RF_CHIP, rfPinOverride, strerror(errno));
 #else
             fprintf(stderr,
                     "Error: built without libgpiod; RF unavailable.\n"

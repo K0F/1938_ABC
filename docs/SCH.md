@@ -93,7 +93,8 @@ Synchronizace samplů A↔B: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
                 │                 └──► LED (–)                        │
                 │  GPIO11 (GPIO17) ─┬─ TLAČÍTKO reset (NO) ─► GND     │
                 │                   └─ 10 kΩ ─► 3V3                   │
-                │  GPIO15 (GPIO22) ◄──── SRX882S  DATA                │
+                │  GPIO15 (pin 33) ◄── SRX882S  DATA               │
+                │  3V3 (pin 1)    ◄──── SRX882S  CS  (jinak spí)    │
                 │  GPIO37 (GPIO26) ── 330 Ω ─► LED [+] ─► GND         │
                 │                                                    │
                 │  USB-A ──► USB zvuková karta AXAGON ADA-17             │
@@ -150,11 +151,23 @@ Synchronizace samplů A↔B: WiFi 2,4 GHz (rsync), mimo pásmo RF 433 MHz.
    ┌──────────┐
    │ [ANT]    │  integrovaná anténa (PCB)
    │ [VCC] ───► 3V3 (pin 1)
-   │ [DATA] ──► GPIO22 (pin 15)
+   │ [CS]  ───► 3V3 (pin 1)   ← povinné, jinak modul spí
+   │ [DATA] ──► GPIO15 (pin 33)
    │ [GND] ───► GND (pin 6)
    └──────────┘    (pokud napájíte 5 V, DATA = 5 V logika → převodník!)
 ```
-- Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 22. Mapa `kód → sample` (10 ks → B). Hlásit dosah se zavřeným víkem.
+- **CS (pin 4) na 3V3.** Řídí režim modulu (`1 = pracuje, 0 = spánek`).
+  Volně ponechaný nebo na GND znamená uspaný přijímač: DATA trvale nízká,
+  na GPIO žádné hrany a tlačítko se tváří jako mrtvé — i s novou baterií a
+  držené u antény. Před zapnutím přepoj a odpočítej piny: 1 ANT, 2 GND,
+  3 VCC, **4 CS**, 5 DATA, 6 GND, 7 ANT.
+- DATA je na **BCM 15 = fyzický pin 33**, ne GPIO 22 / pin 15 (předpis ty
+  dvě čísla dřív zaměnil — jsou to dva různé piny).
+- Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 15, přepínač
+  `--rf-pin N` přepíše pin. Mapa `kód → sample` (10 ks → B). Hlásit dosah se
+  zavřeným víkem.
+- Tlačítko vysílá opakovaně, dokud je držené: při výchozím debounce 300 ms se
+  jeden stisk vypíše až 16×. Pro režim hraní použij `--debounce-ms 5000`.
 
 #### 4.2.1 Anténa — nejdřív bez pájení
 
@@ -173,7 +186,7 @@ kovu často nehraje o nic víc. Pořadí, od nejlevnějšího:
    a hlučná, malý samostatný kovový plíšek bývá lepší než lepší tyč.
 
 Chceš-li opravdu dosah, vynést anténu **z krabice**: dipól 75 Ω na koaxu
-(2× 34,5 cm) mimo kov. Jenže pak DATA na GPIO 22 nesmí být dlouhý kabel
+(2× 34,5 cm) mimo kov. Jenže pak DATA na GPIO 15 nesmí být dlouhý kabel
 vedený vedle spínacího zdroje — krátký koax nebo malý buffer, jinak si
 line udělá vlastní anténu a bude jen chytit síť.
 
@@ -243,7 +256,8 @@ Oba boxy jsou **stejné** (Pi 4) a napájení je jednotné — každý box se za
 |----------------|-----------|-----|------------|
 | I2C SDA        | 2         | 3   | LCD 1602 (PCF8574) — jen B |
 | I2C SCL        | 3         | 5   | LCD 1602 (PCF8574) — jen B |
-| RF RX DATA     | 22        | 15  | SRX882S DATA — jen B |
+| RF RX DATA     | 15        | 33  | SRX882S DATA — jen B |
+| RF RX CS       | —         | —   | SRX882S CS → 3V3, jinak spí |
 | Reset tlačítko | 17        | 11  | tlačítko NO → GND, pull-up 10 kΩ |
 | Indikace chodu | 26        | 37  | 330 Ω → LED → GND |
 | 3V3            | —         | 1   | SRX882S VCC, LCD VCC (3,3 V varianta), pull-upy |

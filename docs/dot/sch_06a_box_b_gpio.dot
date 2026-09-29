@@ -16,7 +16,7 @@ subgraph cluster_pi {
     pin5 [label="GPIO 5\n(SCL, pin 5)" shape=box fillcolor="#bbdefb"];
     pin6 [label="GPIO 6\n(GND, pin 6)" shape=box fillcolor="#e0e0e0"];
     pin11 [label="GPIO17\n(pin 11)" shape=box fillcolor="#bbdefb"];
-    pin15 [label="GPIO22\n(pin 15)" shape=box fillcolor="#bbdefb"];
+    pin33 [label="GPIO15\n(pin 33)" shape=box fillcolor="#bbdefb"];
     pin37 [label="GPIO26\n(pin 37)" shape=box fillcolor="#bbdefb"];
     usb_a [label="USB-A" shape=box fillcolor="#e1bee7"];
     usb_c [label="USB-C\nzdroj 15,3 W" shape=box fillcolor="#ffecb3"];
@@ -24,7 +24,7 @@ subgraph cluster_pi {
 
 // Peripherals
 lcd [label="LCD 1602\n(I2C PCF8574)\nVCC / SDA / SCL / GND" shape=box style="filled,rounded" fillcolor="#c8e6c9" width=2];
-srx [label="SRX882S\n433 MHz\nVCC / DATA / GND" shape=box style="filled,rounded" fillcolor="#ffccbc" width=1.8];
+srx [label="SRX882S\n433 MHz\nVCC / CS / DATA / GND" shape=box style="filled,rounded" fillcolor="#ffccbc" width=1.8];
 pullups [label="Pull-upy 4,7 kΩ\n(SDA / SCL)" shape=box fillcolor="#ffe0b2"];
 tlacitko [label="Tlačítko reset\n(NO)" shape=box style="filled,rounded" fillcolor="#ffccbc"];
 led_gnd [label="LED (–)" shape=box style="filled,rounded" fillcolor="#c8e6c9"];
@@ -55,7 +55,8 @@ pin11 -> pullup10k [label="  " penwidth=1.5 style=dashed];
 pullup10k -> v33 [label="  3V3  " color="#d32f2f"];
 
 // RF data
-srx -> pin15 [label="  DATA  " color="#ff6f00" penwidth=1.5];
+srx -> pin33 [label="  DATA  " color="#ff6f00" penwidth=1.5];
+srx -> pin1 [label="  CS → 3V3  (jinak spí)  " color="#c62828" penwidth=1.5];
 
 // LED
 pin37 -> led_gnd [label="  330 Ω → LED  " color="#2e7d32" penwidth=1.2];

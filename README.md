@@ -202,8 +202,15 @@ QEMU má dvě omezení, která nejsou chyba testu: neemuluje `bcm2835` audio kod
 
 Sampler funguje jako samostatná bezdrátová spouštěcí jednotka. Využívá 433 MHz RF přijímač pro příjem signálů z 10 bezdrátových tlačítek (Solight 1L67T, protokol EV1527) a přehrává jednorázové zvukové samply přes `SDL2_mixer`. Také může volitelně aktualizovat stav úderů na 16×2 I2C displeji.
 
-- RF kódy jsou dekódovány nativně na **GPIO22** pomocí interního EV1527 dekodéru přes `libgpiod` (není potřeba rc-switch/wiringPi).
+- RF kódy jsou dekódovány nativně na **GPIO15** (fyzický pin 33) pomocí interního EV1527 dekodéru přes `libgpiod` (není potřeba rc-switch/wiringPi).
 - Samply jsou jednorázové a spouští se znovu při každém stisknutí.
+
+> **Než připojíš tlačítko:** pin CS (4) SRX882S patří na 3V3. Volně ponechaný
+> nebo na GND uspí modul — DATA pak trvale nízká, na GPIO žádné hrany a
+> tlačítko vypadá jako mrtvé i s novou baterií. Podrobně `docs/SCH.md` §4.2.
+>
+> Tlačítko vysílá opakovaně, dokud je držené. Při výchozím debounce 300 ms se
+> jeden stisk vypíše až 16×; v režimu hraní je proto vhodné `--debounce-ms 5000`.
 - Identita boxu (`b`) určuje, jaké samply a jaký mapovací soubor se použijí.
 
 ### Sestavení (Raspberry Pi OS)
@@ -226,6 +233,7 @@ make sampler
 | `--lcd-addr HEX` | `0x27` | I2C adresa PCF8574 displeje, nebo `off` |
 | `--te-us N` | `320` | Základní časování EV1527 v µs (nutno doladit pro každé tlačítko) |
 | `--debounce-ms N` | `300` | Časové okno pro debounce každého tlačítka |
+| `--rf-pin N` | `15` | BCM GPIO linka DATA přijímače (fyzický pin 33) |
 | `--listen` | — | Režim pouhého poslechu: vypíše každý detekovaný kód |
 | `--learn` | — | Interaktivní registrace tlačítek, zapisuje rovnou do mapy |
 | `--simulate` | — | Načítá kódy ze standardního vstupu (stdin) místo RF přijímače |
@@ -245,7 +253,9 @@ už bylo stisknuto — a další kolo registrace na ni naváže. Tlačítko, kte
 v mapě je, se znovu neregistruje, takže se dá pokračovat po výměně baterií.
 
 `--learn` nepotřebuje zesilovač ani zvukovou kartu, takže funguje dřív než
-se do krabice něco zapojí. K registrování tlačítek stačí přijímač na GPIO22.
+se do krabice něco zapojí. K registrování tlačítek stačí přijímač na GPIO15
+**s CS pinem připojeným na 3V3** — volný nebo na GND znamená uspaný modul
+a DATA trvale nízká (příznak viz `docs/SCH.md` §4.2).
 
 Starší způsob, když `--learn` nepotřebujete (chcete jen kódy, zapisujete
 ručně), je `--listen`:

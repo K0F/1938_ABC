@@ -12,21 +12,23 @@ subgraph cluster_srx {
 
     ant [label="[ANT]\nIntegrovaná anténa (PCB)" shape=box fillcolor="#e1bee7"];
     vcc [label="[VCC]" shape=box fillcolor="#fff9c4"];
+    cs [label="[CS]\npin 4" shape=box fillcolor="#ffcdd2"];
     data [label="[DATA]" shape=box fillcolor="#ffccbc"];
     gnd [label="[GND]" shape=box fillcolor="#e0e0e0"];
 }
 
 // Pi 4 pins
 pi3v3 [label="3V3\n(pin 1)" shape=oval fillcolor="#fff9c4"];
-pi_gpio [label="GPIO22\n(pin 15)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
+pi_gpio [label="GPIO15\n(pin 33)" shape=box style="filled,rounded" fillcolor="#bbdefb"];
 pi_gnd [label="GND\n(pin 6)" shape=oval fillcolor="#e0e0e0"];
 
 // Connections
 vcc -> pi3v3 [label="  3V3  " color="#d32f2f" penwidth=1.5];
+cs -> pi3v3 [label="  CS → 3V3  (jinak spí!)  " color="#c62828" penwidth=1.5];
 data -> pi_gpio [label="  DATA  " color="#ff6f00" penwidth=1.5];
 gnd -> pi_gnd [label="  GND  " color="#666666" penwidth=1.5];
 
 // Note
-note [label="Pokud napájíte 5 V:\nDATA = 5 V logika\n→ převodník!" shape=note fillcolor="#ffcdd2" fontsize=10];
+note [label="CS (pin 4) na 3V3,\njinak modul spí:\nDATA zůstává nízká\na nejsou hrany.\n\nPokud napájíte 5 V:\nDATA = 5 V logika\n→ převodník!" shape=note fillcolor="#ffcdd2" fontsize=10];
 gnd -> note [style=dotted color="#666666"];
 }

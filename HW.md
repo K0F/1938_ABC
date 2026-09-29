@@ -160,11 +160,24 @@ USB zvuková karta AXAGON ADA-17 (USB-A na Pi)   (oba boxy, stejně):
 ### 5.4 RF přijímač 433 MHz (SRX882S) na GPIO Pi 4 (jen B)
 
 ```
-Pi GPIO22 (pin 15) ◄── DATA ── SRX882S [VCC ◄── 3V3 (pin 1)]
-Pi GND (pin 6)     ◄────── GND ── SRX882S [ANT ── integrovaná anténa]
+Pi GPIO15 (pin 33) ◄── DATA ── SRX882S [VCC ◄── 3V3 (pin 1)]
+Pi 3V3 (pin 1)     ◄────── CS  ── SRX882S [ANT ── integrovaná anténa]
+Pi GND (pin 6)     ◄────── GND ── SRX882S
 ```
 - SRX882S (ASK/OOK, 433,92 MHz): DATA = 3,3 V logika, napájet **3V3**.
-- Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 22. Mapa `kód → sample` (10 ks → B). Hlásit dosah se zavřeným víkem.
+- **CS (pin 4) patří na 3V3 — jinak modul spí.** Pin CS řídí režim
+  (`1 = pracuje, 0 = spánek`). Volně ponechaný nebo na GND = přijímač
+  uspaný, DATA trvale nízká a na GPIO nejsou žádné hrany — tlačítko pak
+  vypadá jako mrtvé, i když je plně funkční a baterie má nové. Před zapnutím
+  vždy přepoj a odpočítej pět pinů: 1 ANT, 2 GND, 3 VCC, **4 CS**, 5 DATA,
+  6 GND, 7 ANT.
+- **DATA je na GPIO 15, tedy fyzický pin 33** (nikoli GPIO 22 / pin 15 — to
+  byly dva různé piny a v zapojení se to zaměnilo). Přepínač `--rf-pin N` v
+  `sampler.c` umožňuje pin přepsat, výchozí je 15.
+- Dekódování: `sampler.c` (libgpiod, EV1527) na GPIO 15. Mapa `kód → sample` (10 ks → B). Hlásit dosah se zavřeným víkem.
+- **Tlačítko opakuje vysílání**, dokud je držené. Při výchozím debounce
+  300 ms se jeden stisk vypíše až 16×; v režimu hraní je proto vhodné
+  `--debounce-ms 5000`.
 - **Anténa**: modul má vlastní (PCB stopa nebo cívka). Krabice je hliníková, takže
   nejdřív odstup od Pi ≥2 cm a svislá orientace, pak teprve ~17,3 cm tyč
   (čtvrt vlny na 433,92 MHz). Podrobně `docs/SCH.md` §4.2.1.
