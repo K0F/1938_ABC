@@ -122,8 +122,14 @@ has '^enable sampler\.service$'    "$SYSTEMCTL_LOG" "sampler.service zapnutá"
 has '^start sampler\.service$'     "$SYSTEMCTL_LOG" "sampler.service spuštěná"
 has 'Environment=RESTART_UNITS=sampler\.service' "$RB/etc/systemd/system/box-sound-restart.service" \
     "box-sound-restart restartuje sampler"
-has 'ExecStart=/usr/local/bin/sampler --box b$'  "$RB/etc/systemd/system/sampler.service" \
-    "sampler.service spuštěný s --box b"
+has 'ExecStart=/usr/local/bin/sampler --box b --allow-restart$' \
+    "$RB/etc/systemd/system/sampler.service" \
+    "sampler.service spuštěný s --box b a --allow-restart"
+# Náhrada písmena za --box nesmí spadnout i na zbytek ExecStart řádku:
+# dřívější sed "s/--box .*/.../" zahodil --allow-restart a akční tlačítko
+# F tiše přestalo restartovat.
+hasnt 'sampler --box b$'  "$RB/etc/systemd/system/sampler.service" \
+    "ExecStart nemá jen --box b bez --allow-restart"
 [ -x "$RB/usr/local/bin/sampler" ] && ok "binárka samplera nainstalovaná" || bad "binárka chybí"
 [ -e "$RB/etc/systemd/system/tracker.service" ] && bad "nainstaloval se i tracker.service" \
     || ok "tracker se netýká"

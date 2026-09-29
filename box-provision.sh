@@ -102,8 +102,15 @@ if [ "$BOX" = "B" ]; then
     install -m 0644 sampler.service "$R/etc/systemd/system/sampler.service"
     # identita boxu do jednotky. Malé písmeno, ať to odpovídá tomu, co sampler
     # vypisuje do --help i čemu se řídí map.csv; BOX přichází jako A/B.
-    sed -i "s/--box .*/--box $(printf '%s' "$BOX" | tr 'A-Z' 'a-z')/" \
+    # Náhradí se POUZE písmeno za --box, ne celý zbytek řádku — jinak by se
+    # zahodilo i --allow-restart a akční tlačítko F by zůstalo nefunční.
+    sed -i -E "s/--box [a-c]/--box $(printf '%s' "$BOX" | tr 'A-Z' 'a-z')/" \
         "$R/etc/systemd/system/sampler.service"
+    # Ochrana: --allow-restart musí v jednotce zůstat, jinak F nic nerestartuje.
+    grep -q -- '--allow-restart' "$R/etc/systemd/system/sampler.service" || {
+        echo "[box$BOX] CHYBA: sampler.service přišel o --allow-restart" >&2
+        exit 1
+    }
     UNIT=sampler.service
     START=1
 fi
