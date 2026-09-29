@@ -4,6 +4,11 @@
 #   usage: sudo ./box-network.sh <BOX>          # A nebo B
 #          BOX_IP=192.168.8.103 BOX_WIFI_SSID=... sudo ./box-network.sh B
 #
+# Jestli existuje box-network.defaults (gitignored, vzor je
+# box-network.defaults.example), načte se jako výchozí WiFi. Proměnná
+# z prostředí má vždy přednost, takže jednorázový override jde i s profilem
+# v repu.
+#
 # Proč NetworkManager a ne dhcpcd: RPi OS od 2023 vede síť přes NetworkManager
 # (v /etc/NetworkManager/system-connections/), takže /etc/dhcpcd.conf box nikdy
 # nečte. Statická adresa je proto keyfile, ne řádek v konfiguraci daemona.
@@ -17,6 +22,8 @@
 #     mimo WiFi pásmo, a 5 GHz box nepotřebuje.
 #
 #   ABC38_NET_ROOT   default /     (kořen, do nějž se zapisuje)
+#   ABC38_NET_DEFAULTS              soubor s výchozími hodnotami, default
+#                    box-network.defaults vedle skriptu; prázdné = vypnuto
 #   BOX_IP           default 192.168.8.103 pro B, 192.168.8.104 pro A
 #                    (dva boxy v jedné síti musí mít různé adresy; .102
 #                    patří notebooku, ze kterého se image připravuje)
@@ -30,6 +37,31 @@
 #   BOX_CONN_NAME    default "box-<BOX>"
 
 set -e
+
+# Vychozi WiFi z box-network.defaults (gitignored, viz .example). Cteno PRED
+# spocitanim vychozich hodnot nize, ale s obranou: promenna, kterou uz poslal
+# okoli (BOX_WIFI_SSID=... ./box-network.sh B), se po nacteni vrati. Bez toho
+# by profil v repu tiše prepsal jednorazovy override na prikazce.
+#
+# ABC38_NET_DEFAULTS  cesta k souboru s vychozimi hodnotami, default
+#                     <skript>/box-network.defaults. Prazdne = vypnuto
+#                     (pouzivaji testy, aby si nevezly WiFi z lokalnih souboru).
+HERE="$(cd "$(dirname "$0")" && pwd)"
+DEFAULTS="${ABC38_NET_DEFAULTS-$HERE/box-network.defaults}"
+if [ -n "$DEFAULTS" ] && [ -f "$DEFAULTS" ]; then
+    # hodnoty, které poslalo okolí, schováme a po nactení vrátíme. `-n`
+    # rozliší "nastaveno na prázdné" (BOX_DNS=) od "nenastaveno vůbec".
+    _ssid_was="${BOX_WIFI_SSID-__unset__}"
+    _psk_was="${BOX_WIFI_PSK-__unset__}"
+    _hid_was="${BOX_WIFI_HIDDEN-__unset__}"
+    # shellcheck disable=SC1090
+    . "$DEFAULTS"
+    [ "$_ssid_was" != __unset__ ] && BOX_WIFI_SSID="$_ssid_was"
+    [ "$_psk_was"  != __unset__ ] && BOX_WIFI_PSK="$_psk_was"
+    [ "$_hid_was"  != __unset__ ] && BOX_WIFI_HIDDEN="$_hid_was"
+    unset _ssid_was _psk_was _hid_was
+    echo "network: vychozi z $DEFAULTS"
+fi
 
 ROOT="${ABC38_NET_ROOT:-/}"
 CONN_DIR="$ROOT/etc/NetworkManager/system-connections"

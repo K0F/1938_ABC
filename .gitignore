@@ -12,6 +12,9 @@ __pycache__/
 docs/log-docs-sync.txt
 session-*.md
 
+# localni WiFi heslo pro box-network.sh (repa je na GitHubu verejne)
+box-network.defaults
+
 # generated docs
 docs/dot/*.pdf
 docs/*.pdf

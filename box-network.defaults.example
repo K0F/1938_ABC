@@ -1,0 +1,16 @@
+# Vychozi nastaveni pro box-network.sh — vzor. Zkopiruj na box-network.defaults
+# a doplň heslo. Tenhle soubor JE v repu, takže do něj nikdy nedávej skutečné
+# heslo k WiFi — repa je na GitHubu veřejně.
+#
+#   cp box-network.defaults.example box-network.defaults
+#   chmod 600 box-network.defaults
+#   $EDITOR box-network.defaults
+#
+# box-network.sh tento soubor načte, pokud existuje, a hodnoty z něj použije
+# jako výchozí. Proměnná z prostředí (BOX_WIFI_SSID=... ./box-network.sh B)
+# má přednost, takže se dá jednorázově přepsat bez editace souboru.
+#
+# Prázdná BOX_WIFI_SSID = žádný WiFi profil, box jede na eth0.
+
+BOX_WIFI_SSID=HUAWEI-B310-C3A0
+BOX_WIFI_PSK=SEM-DOJDE-HESLO-WIFI

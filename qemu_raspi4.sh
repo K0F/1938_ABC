@@ -270,16 +270,28 @@ EOF
                "$MOUNT_ROOT/etc/systemd/system/multi-user.target.wants/box-firstboot.service"
     echo "  box-firstboot.service -> enabled (BOX=$BOX)"
 
-    if [ -n "$BOXIP" ] || [ -n "$WIFI_SSID" ]; then
+    # Proměnné, které už nejsou nastavené, se NEODEVZDÁVAJÍ — prázdné
+    # BOX_WIFI_SSID= by v box-network.sh přepsalo profil z
+    # box-network.defaults prázdnem, a box by skončil na eth0. Navíc se
+    # box-network.sh volá i když je adresa prázdná a WiFi jen v defaults.
+    local netenv=(
+        "ABC38_NET_ROOT=$MOUNT_ROOT"
+        "BOX_CONN_NAME=box-$BOX"
+    )
+    [ -n "$BOXIP" ]       && netenv+=("BOX_IP=$BOXIP")
+    [ -n "$WIFI_SSID" ]   && netenv+=("BOX_WIFI_SSID=$WIFI_SSID")
+    [ -n "$WIFI_PASS" ]   && netenv+=("BOX_WIFI_PSK=$WIFI_PASS")
+    [ "$WIFI_HIDDEN" = 1 ] && netenv+=("BOX_WIFI_HIDDEN=$WIFI_HIDDEN")
+
+    if [ -n "$BOXIP" ] || [ -n "$WIFI_SSID" ] || \
+       [ -n "${ABC38_NET_DEFAULTS-}" ] || \
+       [ -f "$SCRIPT_DIR/box-network.defaults" ]; then
         step "Statická adresa boxu"
-        ABC38_NET_ROOT="$MOUNT_ROOT" \
-        BOX_IP="$BOXIP" \
-        BOX_WIFI_SSID="$WIFI_SSID" \
-        BOX_WIFI_PSK="$WIFI_PASS" \
-        BOX_WIFI_HIDDEN="$WIFI_HIDDEN" \
-            "$SCRIPT_DIR/box-network.sh" "$BOX"
+        env "${netenv[@]}" "$SCRIPT_DIR/box-network.sh" "$BOX"
         echo "  QEMU síť nesimuluje, takže to ověříš až na skutečném boxu:"
-        echo "    ip -4 addr show $([ -n "$WIFI_SSID" ] && echo wlan0 || echo eth0)"
+        echo "    ip -4 addr show $([ -n "$WIFI_SSID" ] && echo wlan0 || \
+              { grep -qs '^BOX_WIFI_SSID=.' "$SCRIPT_DIR/box-network.defaults" \
+                2>/dev/null && echo wlan0 || echo eth0; })"
     fi
 }
 
@@ -323,14 +335,24 @@ prepare() {
     # hostem sestavené binárky se do image nesmějí dostat: rsync -a jim nechá
     # mtime, takže "make sampler" na Pi by hlásil "up to date" a nainstaloval
     # x86-64 binárku, kterou systemd nespustí.
+    # box-network.defaults je gitignorovaný, ale rsync -a ho bez výslovného
+    # vyloučení přenese do image. WiFi heslo by pak bylo v /home/pi/tracker
+    # čitelné na každým. Vzor (.example) v repu být smí.
     rsync -a --exclude=rom/ --exclude=.git/ \
           --exclude=/sampler --exclude=/tracker \
+          --exclude=/box-network.defaults \
           "$SCRIPT_DIR"/ "$MOUNT_ROOT/home/$RPI_USER/tracker/"
     chown -R 1000:1000 "$MOUNT_ROOT/home/$RPI_USER/tracker"
     chmod +x "$MOUNT_ROOT/home/$RPI_USER/tracker"/*.sh
+    # --exclude zabrání novému kopírování, ale starší image už v sobě ten
+    # soubor mohl mít (rsync bez --delete by ho nechal ležet).
+    rm -f "$MOUNT_ROOT/home/$RPI_USER/tracker/box-network.defaults"
     if [ -e "$MOUNT_ROOT/home/$RPI_USER/tracker/sampler" ] || \
        [ -e "$MOUNT_ROOT/home/$RPI_USER/tracker/tracker" ]; then
         die "host binary leaked into the image (rsync exclude broken)"
+    fi
+    if [ -e "$MOUNT_ROOT/home/$RPI_USER/tracker/box-network.defaults" ]; then
+        die "WiFi heslo (box-network.defaults) prosaklo do image"
     fi
     echo "  Source synced to /home/$RPI_USER/tracker"
 

@@ -319,6 +319,25 @@ nmcli con show box-B && ip -4 addr show wlan0
 ```
 Výchozí: box B `192.168.8.103/24`, box A `192.168.8.104`, gateway i DNS `192.168.8.1`. Přepnout jde proměnnými `BOX_IP`, `BOX_PREFIX`, `BOX_GATEWAY`, `BOX_DNS`. Adresa `.102` patří notebooku, ze kterého se image připravuje — nedávat ji boxu.
 
+#### WiFi profil bez hesla na příkazce
+WiFi heslo do repa nepatří (GitHub je veřejný), takže ho `box-network.sh` umí číst z vedlejšího souboru `box-network.defaults`, který je v `.gitignore`:
+```bash
+cp box-network.defaults.example box-network.defaults
+chmod 600 box-network.defaults
+$EDITOR box-network.defaults        # BOX_WIFI_SSID=... a BOX_WIFI_PSK=...
+sudo ./box-network.sh B            # profil se vytvoří, netřeba nic psát do příkazu
+```
+Soubor platí jen když existuje, takže bez něj je chování stejné jako dřív (viz `box-network.defaults.example`). Proměnná z prostředí má vždy přednost, takže jednorázově lze přepsat i profil v repu:
+```bash
+BOX_WIFI_SSID=jinaSit BOX_WIFI_PSK=jineHeslo sudo ./box-network.sh B
+```
+Pro image to znamená, že `--wifi`/`--wifi-pass` vypustíš, pokud profil leží v `box-network.defaults`:
+```bash
+sudo ./qemu_raspi4.sh prepare --box B --ip 192.168.8.103
+```
+
+> WiFi na Bookworm nekonfiguruj přes `raspi-config` → S1 Wireless LAN — hlásí `there was an error running option S1 Wireless LAN`, protože od Bullseye síť vede NetworkManager a S1 handler je starý. Použij `nmtui`, nebo (lépe) napiš profil do image jako tady.
+
 Dvě věci, které se projeví jinak, než čekáš:
 - Keyfile musí mít práva **0600** a vlastníka root — NetworkManager odmítne profil s volně čitelnou WiFi heslem a box skončí bez adresy.
 - `ipv4.method` musí být `manual`, jinak DHCP při prvním připojení nabídne jinou adresu a přepíše tvoji.
