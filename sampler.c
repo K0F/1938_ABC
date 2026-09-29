@@ -16,6 +16,8 @@
 #include <cstdint>
 #include <ctime>
 #include <csignal>
+#include <unistd.h>
+#include <sys/wait.h>
 #include <string>
 #include <vector>
 
@@ -41,6 +43,9 @@ struct Slot {
     std::string file;
     Mix_Chunk* chunk;
     uint64_t lastUs;
+    // Slot s restartUnits != "" je akční: místo přehrání samplu spustí
+    // `systemctl restart` na uvedených jednotkách. Zbytek je audio.
+    std::string restartUnits;
 };
 
 struct Decoder {
@@ -58,6 +63,11 @@ static int learnMode = 0;
 static int simulateMode = 0;
 static int simulateRf = 0;
 static int audioOk = 0;
+// --dry-run: akční sloty se vypíší, ale systemctl se nespustí. Bez toho
+// by nebylo jak vůbec ověřit, že mapa parsuje správně, aniž se něco
+// restartovalo.
+static int dryRun = 0;
+static int noAudio = 0;
 static const char* mapPath = "map.csv";
 static const char* samplesDir = "samples";
 static int learnQuit = 0;
@@ -82,6 +92,11 @@ static uint64_t confirmWindowUs = 120000ull;  // 120 ms
 static uint32_t candCode = 0;
 static int candCount = 0;
 static uint64_t candUs = 0;
+// Akční sloty (@restart) jsou záměrně vypnuté, dokud se to výslovně
+// nepovolí: mapa se načítá i v --listen, kde by stisk tlačítka jinak
+// restartoval služby jen tím, že někdo poslouchal. sampler.service to
+// musí zapnout explicitně.
+static int restartAllowed = 0;
 static uint32_t lastLearnCode = 0;
 static uint64_t lastLearnUs = 0;
 static volatile sig_atomic_t running = 1;
@@ -223,6 +238,24 @@ static void loadMap(const char* path) {
                     path, MAX_BUTTONS, code);
             continue;
         }
+        // Akční slot: "@restart unit1 unit2". Na rozdíl od audia nemá
+        // smysl cpát z cesty samples/ — jde o jednotky systemd.
+        slots[n].restartUnits.clear();
+        if (k >= 8 && strncmp(name, "@restart", 8) == 0) {
+            if (!restartAllowed) {
+                fprintf(stderr,
+                        "Warning: map '%s' wants @restart, but "
+                        "--allow-restart was not given; code %lu is ignored\n",
+                        path, code);
+                continue;
+            }
+            // "unit1 unit2" nebo "unit1,unit2" — obojí smí být.
+            std::string units = std::string(name + 8);
+            for (size_t i = 0; i < units.size(); i++)
+                if (units[i] == ',') units[i] = ' ';
+            slots[n].restartUnits = units;
+        }
+
         slots[n].code = (uint32_t)code;
         slots[n].channel = n;
         slots[n].file = name;
@@ -317,6 +350,7 @@ static void learnCode(uint32_t code) {
     slots[numSlots].code = code;
     slots[numSlots].file = name;
     slots[numSlots].lastUs = 0;
+    slots[numSlots].restartUnits.clear();
     numSlots++;
     fprintf(stdout, "  zapsáno do %s (%d/%d)\n", mapPath, numSlots, MAX_BUTTONS);
     fflush(stdout);
@@ -325,6 +359,69 @@ static void learnCode(uint32_t code) {
         snprintf(l2, sizeof(l2), "S%02d ok", numSlots);
         lcdLine(0, "BOX %c LEARN");
         lcdLine(1, l2);
+    }
+}
+
+// Akční slot: `systemctl restart` na jednotkách z mapy. system() je tu
+// záměrně — je to jediný způsob jak volat systemctl z C a vstup pochází
+// z mapy, kterou vlastní správce boxu (viz --no-restart a security
+// note v README: mapa musí být pod kontrolou stejně jako služby).
+// argv se předává bez shellu, aby se jméno jednotky nedalo zmršit.
+static void doRestart(const std::string& units, int slotIdx) {
+    // "@restart tracker.service" — za slovem je mezera, která by se jinak
+    // převedla na prázdný člen a vypisala se jako " @restart".
+    std::string rest = units;
+    while (!rest.empty() && rest[0] == ' ') rest.erase(rest.begin());
+    std::vector<std::string> list;
+    std::string cur;
+    for (size_t i = 0; i <= rest.size(); i++) {
+        if (i == rest.size() || rest[i] == ' ') {
+            if (!cur.empty()) { list.push_back(cur); cur.clear(); }
+        } else {
+            cur += rest[i];
+        }
+    }
+    if (list.empty()) {
+        fprintf(stderr, "Warning: @restart slot S%02d has no units\n",
+                slotIdx + 1);
+        return;
+    }
+    for (size_t i = 0; i < list.size(); i++) {
+        fprintf(stdout, "code=%u -> @restart %s\n", slots[slotIdx].code,
+                list[i].c_str());
+        fflush(stdout);
+        if (dryRun) {
+            fprintf(stdout, "@restart %s: dry-run, not run\n",
+                    list[i].c_str());
+            fflush(stdout);
+            continue;
+        }
+        if (geteuid() != 0) {
+            fprintf(stdout, "@restart %s: needs root, skipped\n",
+                    list[i].c_str());
+            fflush(stdout);
+            continue;
+        }
+        pid_t pid = fork();
+        if (pid == 0) {
+            // Dědíme stdout, ať jde výsledek do journalu služby.
+            execlp("systemctl", "systemctl", "restart", "--",
+                   list[i].c_str(), (char*)NULL);
+            _exit(127);
+        } else if (pid > 0) {
+            int status = 0;
+            waitpid(pid, &status, 0);
+            if (WIFEXITED(status) && WEXITSTATUS(status) == 127) {
+                fprintf(stdout, "@restart %s: systemctl not found\n",
+                        list[i].c_str());
+            } else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+                fprintf(stdout, "@restart %s: rc=%d\n", list[i].c_str(),
+                        WEXITSTATUS(status));
+            }
+            fflush(stdout);
+        } else {
+            perror("fork");
+        }
     }
 }
 
@@ -372,10 +469,29 @@ static void onCode(uint32_t code) {
             // vypisoval do journalu desítky řádků.
             slots[i].lastUs = t;
             pressCount++;
+            // Akční slot (@restart) nejprve, bez zvuku — přehrát sampl by
+            // tady nedával smysl a restart chvíli trvá.
+            if (!slots[i].restartUnits.empty()) {
+                fprintf(stdout, "code=%u -> @restart (%s, #%llu)\n",
+                        code, slots[i].restartUnits.c_str(),
+                        (unsigned long long)pressCount);
+                fflush(stdout);
+                doRestart(slots[i].restartUnits, i);
+                if (lcdEnabled) lcdStatusHit(i);
+                return;
+            }
             // Každý stisk jde do journalu, i když nehraje — na bezhlavém boxu
             // je to jediné, podle čeho se pozná, že 433 MHz tlačítko funguje.
             if (!slots[i].chunk) {
                 fprintf(stdout, "code=%u -> %s (S%02d, #%llu) VZOREK NENACHRANY\n",
+                        code, slots[i].file.c_str(), i + 1,
+                        (unsigned long long)pressCount);
+                fflush(stdout);
+                return;
+            }
+            if (!audioOk) {
+                // --no-audio: slot je platný, jen se nepřehrává.
+                fprintf(stdout, "code=%u -> %s (S%02d, #%llu) [no-audio]\n",
                         code, slots[i].file.c_str(), i + 1,
                         (unsigned long long)pressCount);
                 fflush(stdout);
@@ -516,6 +632,11 @@ static void usage(const char* prog) {
         "  --debounce-ms N     per-button debounce window (default: 300)\n"
         "  --confirm N         in --listen, require the code N times in a row\n"
         "                      to print it (default: 1 = off; 3 filters noise)\n"
+        "  --allow-restart     honour @restart slots in the map (needs root;\n"
+        "                      off by default so --listen can't restart units)\n"
+        "  --dry-run           with --allow-restart, print what would be run\n"
+        "  --no-audio          skip audio init; decode and act, but play nothing\n"
+        "                      (for testing @restart on a box with no sound card)\n"
         "  --rf-pin N          BCM GPIO line of receiver DATA (default: 15)\n"
         "  --listen            decode-only: print received codes (build map.csv)\n"
         "  --learn             register buttons interactively, writes map on disk\n"
@@ -560,6 +681,12 @@ int main(int argc, char* argv[]) {
             int n = std::atoi(argv[++i]);
             if (n < 1) { fprintf(stderr, "Error: --confirm must be >= 1\n"); return -1; }
             confirmMin = n;
+        } else if (strcmp(argv[i], "--allow-restart") == 0) {
+            restartAllowed = 1;
+        } else if (strcmp(argv[i], "--dry-run") == 0) {
+            dryRun = 1;
+        } else if (strcmp(argv[i], "--no-audio") == 0) {
+            noAudio = 1;
         } else if (strcmp(argv[i], "--rf-pin") == 0 && i + 1 < argc) {
             int pin = std::atoi(argv[++i]);
             if (pin < 0 || pin > 27) { fprintf(stderr, "Error: --rf-pin must be 0..27\n"); return -1; }
@@ -592,7 +719,7 @@ int main(int argc, char* argv[]) {
 
     // learn jako listen zvuk nepotřebuje — na boxu bez zesilovače nemá být
     // hlasitý a bez zvukové karty se vůbec nesmí omezovat v registraci
-    if (!listenMode && !learnMode) {
+    if (!listenMode && !learnMode && !noAudio) {
         if (SDL_Init(SDL_INIT_AUDIO) < 0) {
             fprintf(stderr, "Error: SDL audio init failed: %s\n", SDL_GetError());
             return -1;
@@ -607,15 +734,18 @@ int main(int argc, char* argv[]) {
 
     if (!listenMode)
         loadMap(map);
-    if (!listenMode && !learnMode) {
+    if (!listenMode && !learnMode && !noAudio) {
         int loaded = 0;
         for (int i = 0; i < numSlots; i++) {
+            if (!slots[i].restartUnits.empty()) continue;  // nemá vzorek
             std::string path = std::string(samplesDir) + "/" + slots[i].file;
             slots[i].chunk = Mix_LoadWAV(path.c_str());
             if (slots[i].chunk) loaded++;
             else fprintf(stderr, "Warning: cannot load sample '%s'\n", path.c_str());
         }
         fprintf(stdout, "sample: %d/%d loaded from %s/\n", loaded, numSlots, samplesDir);
+    } else if (!listenMode && !learnMode) {
+        fprintf(stdout, "sample: audio disabled (--no-audio)\n");
     }
 
     if (lcdEnabled) {

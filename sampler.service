@@ -6,7 +6,11 @@ Wants=sound.target
 [Service]
 Type=simple
 WorkingDirectory=/home/pi/tracker
-ExecStart=/usr/local/bin/sampler --box b
+# --allow-restart: bez něj sampler ignoruje akční sloty @restart v mapě
+# a tlačítko F hlásí "not in map". Služba běží jako root, aby systemctl
+# restart fungoval. Pokud se někdy mapu edituje ručně, je to ekvivalent
+# úrovni přístupu k root — mapa je důvěryhodný vstup, ne data z boxu.
+ExecStart=/usr/local/bin/sampler --box b --allow-restart
 Restart=always
 RestartSec=2
 # 433 MHz readout do journalu: každý stisk tlačítka jako

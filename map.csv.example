@@ -9,3 +9,9 @@
 #12200123, sample_b_01.wav
 #12200124, sample_b_02.wav
 #12200125, sample_b_03.wav
+#
+# Akční slot: místo samplu se pustí `systemctl restart` na uvedených
+# jednotkách. Nefunguje, dokud sampler není spuštěný s --allow-restart
+# (a jako root); jinak se slot vynechá. Oddělit jednotky mezerou
+# nebo čárkou. Jméno jednotky nesmí začínat '-'.
+#5089457, @restart tracker.service sampler.service

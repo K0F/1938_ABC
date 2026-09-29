@@ -11,5 +11,9 @@
 # E: zatím reuse track1 — chybí 5. vzorek (nahrát potřebuje CA-3110S
 # a 8-26 V napájecí adaptér, v dostupnost.txt je [CHYBÍ]).
 3382769, track1.wav
-# F (speciální klíč): reuse track1, dokud není nahrán vlastní zvuk.
-5089457, track1.wav
+# F (speciální klíč): vypadá jako ostatní, ale vysílá jiný kód (id 318091).
+# Místo samplu restartuje služby, které hlídají signál. Akční slot je
+# neaktivní, dokud sampler nedostane --allow-restart (a root); v
+# sampler.service je zapnutý. Bez něj mapa slot vynechá a tlačítko
+# hlásí "not in map".
+5089457, @restart tracker.service sampler.service

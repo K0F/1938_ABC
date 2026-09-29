@@ -234,6 +234,9 @@ make sampler
 | `--te-us N` | `320` | Základní časování EV1527 v µs (nutno doladit pro každé tlačítko) |
 | `--debounce-ms N` | `300` | Časové okno pro debounce každého tlačítka |
 | `--confirm N` | `1` (vypnuto) | V `--listen` vyžaduje N potvrzení kódu těsně po sobě, než se vypíše. Skutečné tlačítko vysílá opakovaně, šum občas vyplodí jeden rámec s unique id, který debounce nepotlačí — proto `--confirm 3` |
+| `--allow-restart` | vypnuto | Povolí akční sloty `@restart` v mapě (potřebuje root) |
+| `--dry-run` | — | Spolu s `--allow-restart` vypíše, co by se spustilo, ale neudělá to |
+| `--no-audio` | — | Přeskočí inicializaci zvuku; kódy se stále dekódují a akce vykonají, ale nic se nehraje. Na testování `@restart` boxem bez zvukové karty |
 | `--rf-pin N` | `15` | BCM GPIO linka DATA přijímače (fyzický pin 33) |
 | `--listen` | — | Režim pouhého poslechu: vypíše každý detekovaný kód |
 | `--learn` | — | Interaktivní registrace tlačítek, zapisuje rovnou do mapy |
@@ -268,6 +271,30 @@ Stiskněte každé tlačítko a zkopírujte vypsaná čísla `code=` do `map.csv
 12200123, sample_b_01.wav
 ```
 Umístěte příslušné soubory (`sample_b_*.wav`) do složky `samples/`.
+
+#### Speciální kláč: `@restart`
+
+Místo samplu může slot spustit `systemctl restart` na vybraných
+službách. Hodí se pro tlačítko, které má něco „resetovat“:
+
+```csv
+5089457, @restart tracker.service sampler.service
+```
+
+Jednotky odděl mezerou nebo čárkou. Bez `--allow-restart` se slot
+vynechá a kláč hlásí `not in map`, aby `--listen` nemohl omylem
+restartovat služby jen tím, že někdo poslouchá. `sampler.service` běží
+jako root a `--allow-restart` má zapnutý, takže tam to funguje.
+
+Otestovat, aniž by se něco spustilo, lze přes `--dry-run`, na boxu bez
+zvukové karty i přes `--no-audio`:
+
+```bash
+echo 5089457 | ./sampler --box b --no-audio --allow-restart --dry-run --simulate
+```
+
+**Bezpečnost:** mapa je důvěryhodný vstup, ne data z boxu. Kdo může
+zapsat do `map.csv`, může nastartovat cokoliv, co je v mapě uvedeno.
 
 ### Testování na desktopu
 ```bash
