@@ -163,6 +163,23 @@ OUT="$(smp --box b --lcd-addr off --debounce 300 --map "$TMP/mapa2.csv" \
 printf '%s\n' "$OUT" | grep -q 'code=12200123.*#1)' && ok "první stisk #1" || bad "první stisk nemá #1: $(printf '%s' "$OUT" | tr '\n' '|')"
 printf '%s\n' "$OUT" | grep -q 'code=12200124.*#2)' && ok "druhý stisk #2" || bad "druhý stisk nemá #2: $(printf '%s' "$OUT" | tr '\n' '|')"
 
+echo "== 5d) default debounce 2000 ms: retransmise tlačítka nejsou slyšet =="
+# Naměřeno na boxu A: tlačítka vysílají kód opakovaně přes sekundu. Při
+# defaultu 300 ms spustil jeden stisk 2s vzorek 5× za sebou (trhání).
+# Default proto musí být 2000 ms — jinak sampler.service na boxu B bude
+# trhat taky, protože jednotka --debounce-ms nepředává.
+OUT="$(smp --box b --lcd-addr off --no-audio --map "$TMP/mapa2.csv" \
+        --samples-dir "$TMP/samples" --simulate 2>&1 </dev/null)"
+printf '%s\n' "$OUT" | grep -q 'debounce=2000ms' \
+    && ok "default debounce je 2000ms" \
+    || bad "default debounce není 2000ms: $(printf '%s\n' "$OUT" | grep debounce)"
+# Kód v mapě bez vzorku: stisk se vypíše, i když nehraje.
+OUT="$(printf '12200123\n' | smp --box b --lcd-addr off --no-audio \
+        --map "$TMP/mapa2.csv" --samples-dir "$TMP/samples" --simulate 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'code=12200123 ->' \
+    && ok "jeden stisk bez --debounce funguje" \
+    || bad "stisk se nevypíše: $(printf '%s' "$OUT" | tr '\n' '|')"
+
 echo "== 6) --simulate ze stdin: stejný readout jako u skutečného tlačítka =="
 OUT="$(printf '12200123\n' | smp --box b --listen --lcd-addr off --simulate 2>&1)"
 if printf '%s\n' "$OUT" | grep -q 'code=12200123,'; then

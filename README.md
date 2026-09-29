@@ -209,8 +209,9 @@ Sampler funguje jako samostatná bezdrátová spouštěcí jednotka. Využívá 
 > nebo na GND uspí modul — DATA pak trvale nízká, na GPIO žádné hrany a
 > tlačítko vypadá jako mrtvé i s novou baterií. Podrobně `docs/SCH.md` §4.2.
 >
-> Tlačítko vysílá opakovaně, dokud je držené. Při výchozím debounce 300 ms se
-> jeden stisk vypíše až 16×; v režimu hraní je proto vhodné `--debounce-ms 5000`.
+> Tlačítko vysílá opakovaně, dokud je držené. Výchozí debounce 2000 ms
+> přesahuje celý burst, takže jeden stisk = jedno přehrání. Kratší okno
+> (např. `--debounce-ms 5000`) je vhodné v režimu hraní.
 - Identita boxu (`b`) určuje, jaké samply a jaký mapovací soubor se použijí.
 
 ### Sestavení (Raspberry Pi OS)
@@ -232,7 +233,7 @@ make sampler
 | `--samples-dir SLOŽKA` | `samples` | Složka obsahující WAV soubory |
 | `--lcd-addr HEX` | `0x27` | I2C adresa PCF8574 displeje, nebo `off` |
 | `--te-us N` | `320` | Základní časování EV1527 v µs (nutno doladit pro každé tlačítko) |
-| `--debounce-ms N` | `300` | Časové okno pro debounce každého tlačítka |
+| `--debounce-ms N` | `2000` | Časové okno pro debounce každého tlačítka. Tlačítka vysílají kód opakovaně přes sekundu, takže kratší okno spustí vzorek několikrát za jeden stisk (měřeno 5× při 300 ms) |
 | `--confirm N` | `1` (vypnuto) | V `--listen` vyžaduje N potvrzení kódu těsně po sobě, než se vypíše. Skutečné tlačítko vysílá opakovaně, šum občas vyplodí jeden rámec s unique id, který debounce nepotlačí — proto `--confirm 3` |
 | `--allow-restart` | vypnuto | Povolí akční sloty `@restart` v mapě (potřebuje root) |
 | `--dry-run` | — | Spolu s `--allow-restart` vypíše, co by se spustilo, ale neudělá to |

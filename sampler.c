@@ -75,7 +75,11 @@ static std::vector<uint32_t> simCodes;
 static int lcdAddr = 0x27;
 static int lcdEnabled = 1;
 static int teUs = 320;
-static uint64_t debounceUs = 300000ull;
+// Tyto tlačítka nevysílají jeden rámec, ale opakovaně po dobu přes
+// sekundu. Při 300 ms propadla každá retransmise do debounce a stisk
+// spustil 2s vzorek 5x za sebou (slyšitelné trhání). 2000 ms přesahuje
+// celý burst, takže jeden stisk = jeden mix. Měřeno na boxu A 2026-09-29.
+static uint64_t debounceUs = 2000000ull;
 static unsigned rfPinOverride = RF_GPIO_LINE;
 static uint64_t pressCount = 0;
 static int numSlots = 0;
@@ -629,7 +633,9 @@ static void usage(const char* prog) {
         "  --samples-dir DIR   sample directory (default: samples)\n"
         "  --lcd-addr HEX      PCF8574 I2C address, or off (default: 0x27)\n"
         "  --te-us N           EV1527 base timing in microseconds (default: 320)\n"
-        "  --debounce-ms N     per-button debounce window (default: 300)\n"
+        "  --debounce-ms N     per-button debounce window (default: 2000; these\n"
+        "                      buttons retransmit for over a second, so a shorter\n"
+        "                      window retriggers the sample several times per press)\n"
         "  --confirm N         in --listen, require the code N times in a row\n"
         "                      to print it (default: 1 = off; 3 filters noise)\n"
         "  --allow-restart     honour @restart slots in the map (needs root;\n"
