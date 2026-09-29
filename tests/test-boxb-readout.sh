@@ -139,13 +139,13 @@ printf '%s\n' "$OUT" | grep -q 'Error' \
     && ck_bad "simulate-rf psal do stderr chybu" \
     || ck_ok "bez chyb na stderr"
 
-# ── 5) mapa.csv: stisk bez samplu nesmí zmizet ──────────────
+# ── 5) map.csv: stisk bez samplu nesmí zmizet ──────────────
 # mapa s jedním kódem a neexistujícím wavem. Kdyby VZOREK NENACHRANY nebyl
 # v logu, na bezhlavém boxu by se mrtvý přijímač nerozlišil od mrtvého
 # tlačítka.
 TMPD="$(mktemp -d)"
-printf '12200123, chybi_soubor.wav\n' > "$TMPD/mapa.csv"
-OUT="$("$BIN" --box b --lcd-addr off --map "$TMPD/mapa.csv" \
+printf '12200123, chybi_soubor.wav\n' > "$TMPD/map.csv"
+OUT="$("$BIN" --box b --lcd-addr off --map "$TMPD/map.csv" \
         --samples-dir "$TMPD" --simulate-rf 12200123 12200123 2>&1)"
 printf '%s\n' "$OUT" | grep -q 'code=12200123 ->' \
     && ck_ok "stisk v mapě vypsán i bez samplu" \
@@ -157,15 +157,15 @@ ck $([ "$N" = 1 ]; echo $?) "dva rámce po sobě = jeden řádek (je to $N)"
 rm -rf "$TMPD"
 
 # ── 6) mapa na boxu: sloty a samply ─────────────────────────
-if [ -f "$SRC/mapa.csv" ]; then
-    printf 'INFO\tmap\t%s\n' "$SRC/mapa.csv"
+if [ -f "$SRC/map.csv" ]; then
+    printf 'INFO\tmap\t%s\n' "$SRC/map.csv"
     awk -F, '!/^[[:space:]]*#/ && NF>1 {n++} END {print n+0}' \
-        "$SRC/mapa.csv" | while read -r n; do printf 'INFO\tmapslots\t%s\n' "$n"; done
+        "$SRC/map.csv" | while read -r n; do printf 'INFO\tmapslots\t%s\n' "$n"; done
     nwav="$(find "$SRC/samples" -maxdepth 1 -name '*.wav' 2>/dev/null | wc -l)"
     printf 'INFO\twavs\t%s\n' "$nwav"
-    ck_ok "mapa.csv existuje"
+    ck_ok "map.csv existuje"
 else
-    ck_bad "chybí mapa.csv (bez ní sampler jen tiskne kódy)"
+    ck_bad "chybí map.csv (bez ní sampler jen tiskne kódy)"
 fi
 
 # ── 7) jednotka sampler.service ──────────────────────────────

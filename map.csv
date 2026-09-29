@@ -1,3 +1,10 @@
+# Format: decimal_code, sample_file
+# Odečteno z reálného SRX882S na GPIO15 (box A, sampler --listen,
+# --debounce-ms 5000), 2026-09-29. Každý kód byl potvrzen opakováním.
 3365153, track1.wav
-3627297, track2.wav
-3889441, track3.wav
+3478913, track2.wav
+3387393, track3.wav
+3380993, track4.wav
+# E: zatím reuse track1 — chybí 5. vzorek (nahrát potřebuje CA-3110S
+# a 8-26 V napájecí adaptér, v dostupnost.txt je [CHYBÍ]).
+3382769, track1.wav

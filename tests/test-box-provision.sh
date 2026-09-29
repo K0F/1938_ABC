@@ -54,7 +54,7 @@ mkdir -p "$STAGE"
 # všechno, co provisioning instaluje — chybějící souroj by ho zastavil (set -e)
 cp "$ROOT"/box-{alsa-setup,sound-restart,network,provision}.sh "$STAGE/"
 cp "$ROOT"/{sampler,tracker,box-sound-restart}.service "$STAGE/"
-cp "$ROOT"/99-box-sound.rules "$ROOT"/mapa.csv.example "$ROOT"/install-deps.sh "$STAGE/"
+cp "$ROOT"/99-box-sound.rules "$ROOT"/map.csv.example "$ROOT"/install-deps.sh "$STAGE/"
 
 # Box A jde přes install-deps.sh (raylib se staví z Gitu) — v testu to musí být
 # náhrada, jinak by provisioning sáhl na síť
@@ -128,9 +128,9 @@ has 'ExecStart=/usr/local/bin/sampler --box b$'  "$RB/etc/systemd/system/sampler
 [ -e "$RB/etc/systemd/system/tracker.service" ] && bad "nainstaloval se i tracker.service" \
     || ok "tracker se netýká"
 
-echo "== 3) mapa.csv vznikne z příkladu, když na boxu žádná není =="
-[ -f "$STAGE/mapa.csv" ] && ok "mapa.csv vytvořena" || bad "mapa.csv nevznikla"
-grep -q 'mapa.csv vytvořena' "$TMP/out-B.log" && ok "o tom řekne v logu" || bad "chybí hláška o mapa.csv"
+echo "== 3) map.csv vznikne z příkladu, když na boxu žádná není =="
+[ -f "$STAGE/map.csv" ] && ok "map.csv vytvořena" || bad "map.csv nevznikla"
+grep -q 'map.csv vytvořena' "$TMP/out-B.log" && ok "o tom řekne v logu" || bad "chybí hláška o map.csv"
 
 echo "== 4) statická adresa se zapíše do image =="
 NMKEY="$RB/etc/NetworkManager/system-connections/box-B.nmconnection"

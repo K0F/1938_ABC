@@ -92,16 +92,16 @@ if [ "$BOX" = "B" ]; then
     # doneckonal v kruhu restartu.
     ./sampler --version
     install -m 0755 sampler "$R/usr/local/bin/sampler"
-    # mapa.csv bez ní sampler jen tiskne kódy a nic nehraje (viz README)
-    if [ -f mapa.csv ]; then
-        echo "[box$BOX] mapa.csv je na place"
+    # map.csv bez ní sampler jen tiskne kódy a nic nehraje (viz README)
+    if [ -f map.csv ]; then
+        echo "[box$BOX] map.csv je na place"
     else
-        cp -n mapa.csv.example mapa.csv
-        echo "[box$BOX] mapa.csv vytvořena z příkladu (kódy se doplní --listen)"
+        cp -n map.csv.example map.csv
+        echo "[box$BOX] map.csv vytvořena z příkladu (kódy se doplní --listen)"
     fi
     install -m 0644 sampler.service "$R/etc/systemd/system/sampler.service"
     # identita boxu do jednotky. Malé písmeno, ať to odpovídá tomu, co sampler
-    # vypisuje do --help i čemu se řídí mapa.csv; BOX přichází jako A/B.
+    # vypisuje do --help i čemu se řídí map.csv; BOX přichází jako A/B.
     sed -i "s/--box .*/--box $(printf '%s' "$BOX" | tr 'A-Z' 'a-z')/" \
         "$R/etc/systemd/system/sampler.service"
     UNIT=sampler.service

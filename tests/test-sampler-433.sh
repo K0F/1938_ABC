@@ -115,8 +115,8 @@ fi
 
 echo "== 4) hra bez zvukové karty: kód v mapě, ale bez načteného samplu =="
 mkdir -p "$TMP/samples"
-printf '12200123, chybi_soubor.wav\n' > "$TMP/mapa.csv"
-OUT="$(smp --box b --lcd-addr off --map "$TMP/mapa.csv" --samples-dir "$TMP/samples" \
+printf '12200123, chybi_soubor.wav\n' > "$TMP/map.csv"
+OUT="$(smp --box b --lcd-addr off --map "$TMP/map.csv" --samples-dir "$TMP/samples" \
         --simulate-rf 12200123 2>"$TMP/err2.log")"
 if grep -q 'cannot load sample' "$TMP/err2.log"; then
     ok "chybějící sampl oznámen"
@@ -132,7 +132,7 @@ else
 fi
 
 echo "== 5) kód, který v mapě není, se jen oznámí =="
-OUT="$(smp --box b --lcd-addr off --map "$TMP/mapa.csv" --samples-dir "$TMP/samples" \
+OUT="$(smp --box b --lcd-addr off --map "$TMP/map.csv" --samples-dir "$TMP/samples" \
         --simulate-rf 999 2>"$TMP/err3.log")"
 if grep -q 'code=999 not in map' "$TMP/err3.log"; then
     ok "nezmapovaný kód nahlášen"
@@ -150,7 +150,7 @@ echo "== 5b) jeden stisk = jeden řádek, i když sampl chybí =="
 # překryté časovky a druhý rámec spadne ještě v dekodéru. Tady se tím
 # nechceme klamat — testuje se debounce, ne časování rámců.
 OUT="$(printf '12200123\n12200123\n' | smp --box b --lcd-addr off --debounce 300 \
-        --map "$TMP/mapa.csv" --samples-dir "$TMP/samples" --simulate 2>&1)"
+        --map "$TMP/map.csv" --samples-dir "$TMP/samples" --simulate 2>&1)"
 N="$(printf '%s\n' "$OUT" | grep -c 'code=12200123 ->')"
 [ "$N" = 1 ] && ok "dva rámce po sobě = jeden řádek" || bad "vypsalo se to $N× místo jednou"
 printf '%s\n' "$OUT" | grep -q '#1)' && ok "počet stisků je 1" || bad "počet stisků je jiný: $(printf '%s' "$OUT" | tr '\n' '|')"
@@ -169,6 +169,35 @@ if printf '%s\n' "$OUT" | grep -q 'code=12200123,'; then
     ok "kód ze stdin dekódován"
 else
     bad "stdin kód chybí  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+fi
+
+echo "== 6b) --confirm N v --listen: jednorázový šum se nepropíše =="
+# Šum občas vyplodí rámec, který projde jako platný 24bitový kód. Nemá
+# unique id, takže ho debounce nepotlačí (vypíše se hned). Skutečné
+# tlačítko vysílá opakovaně, takže --confirm požaduje N potvrzení.
+OUT="$(printf '12200123\n' | smp --box b --listen --lcd-addr off --confirm 3 --simulate 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'code=12200123,' \
+    && bad "jediný šumový rámec prošel při --confirm 3  [$OUT]" \
+    || ok "jediný rámec odfiltrován (--confirm 3)"
+
+OUT="$(printf '12200123\n12200123\n12200123\n' | smp --box b --listen --lcd-addr off \
+        --confirm 3 --simulate 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'code=12200123,' \
+    && ok "tři rámce po sobě projdou (--confirm 3)" \
+    || bad "potvrzený kód neprošel  [$OUT]"
+
+N="$(printf '%s\n' "$OUT" | grep -c 'code=12200123,')"
+[ "$N" = 1 ] && ok "tři rámce = jeden řádek, ne tři" || bad "vypsalo se to $N×"
+
+echo "== 6c) --confirm 1 (default) chování nemění =="
+OUT="$(printf '12200123\n' | smp --box b --listen --lcd-addr off --simulate 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'code=12200123,' \
+    && ok "bez filtru se kód vypíše hned" || bad "filtr je zapnutý, i když nemá být"
+
+if smp --box b --listen --lcd-addr off --confirm 0 --simulate-rf 12200123 >/dev/null 2>&1; then
+    bad "--confirm 0 prošlo bez chyby"
+else
+    ok "--confirm 0 = chyba"
 fi
 
 echo "== 7) --simulate-rf bez kódů je chyba, ne tichý průchod =="

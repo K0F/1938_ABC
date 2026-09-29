@@ -58,7 +58,7 @@ static int learnMode = 0;
 static int simulateMode = 0;
 static int simulateRf = 0;
 static int audioOk = 0;
-static const char* mapPath = "mapa.csv";
+static const char* mapPath = "map.csv";
 static const char* samplesDir = "samples";
 static int learnQuit = 0;
 static std::vector<uint32_t> simCodes;
@@ -73,6 +73,15 @@ static Slot slots[MAX_BUTTONS];
 static int lcdFd = -1;
 static uint32_t lastListenCode = 0;
 static uint64_t lastListenUs = 0;
+// Potvrzení kódu: šum občas vyplodí rámec, který projde jako platný
+// 24bitový kód (a má unique id, takže ho debounce nepotlačí). Skutečné
+// tlačítko vysílá opakovaně, takže požadujeme, aby se kód potvrdil
+// CONFIRM_MIN× za sebou v rámci CONFIRM_WINDOW_US, než ho vypíšeme.
+static int confirmMin = 1;
+static uint64_t confirmWindowUs = 120000ull;  // 120 ms
+static uint32_t candCode = 0;
+static int candCount = 0;
+static uint64_t candUs = 0;
 static uint32_t lastLearnCode = 0;
 static uint64_t lastLearnUs = 0;
 static volatile sig_atomic_t running = 1;
@@ -326,6 +335,18 @@ static void onCode(uint32_t code) {
     }
     if (listenMode) {
         uint64_t t = nowUs();
+        // Nejdřív potvrzení: kód musí vyplnit celý rámec opakovaně.
+        if (code == candCode && candCount && t - candUs <= confirmWindowUs) {
+            candCount++;
+        } else {
+            candCode = code;
+            candCount = 1;
+        }
+        candUs = t;
+        if (candCount < confirmMin) return;
+        // Po potvrzení kód nesmí potvrzovat dál — další rámce téhož stisku
+        // spadají do debounce, jinak by jeden stisk vypisoval done.
+        candCount = 0;
         if (code == lastListenCode && lastListenUs &&
             t - lastListenUs < debounceUs)
             return;
@@ -488,13 +509,15 @@ static void usage(const char* prog) {
         "\n"
         "Options:\n"
         "  --box b|c           box identity (required; shown on LCD)\n"
-        "  --map FILE          code->sample map (default: mapa.csv)\n"
+        "  --map FILE          code->sample map (default: map.csv)\n"
         "  --samples-dir DIR   sample directory (default: samples)\n"
         "  --lcd-addr HEX      PCF8574 I2C address, or off (default: 0x27)\n"
         "  --te-us N           EV1527 base timing in microseconds (default: 320)\n"
         "  --debounce-ms N     per-button debounce window (default: 300)\n"
+        "  --confirm N         in --listen, require the code N times in a row\n"
+        "                      to print it (default: 1 = off; 3 filters noise)\n"
         "  --rf-pin N          BCM GPIO line of receiver DATA (default: 15)\n"
-        "  --listen            decode-only: print received codes (build mapa.csv)\n"
+        "  --listen            decode-only: print received codes (build map.csv)\n"
         "  --learn             register buttons interactively, writes map on disk\n"
         "  --simulate          read codes from stdin instead of the RF receiver\n"
         "  --simulate-rf C...  self-test: synthesize EV1527 frames for the given codes\n"
@@ -533,6 +556,10 @@ int main(int argc, char* argv[]) {
             int ms = std::atoi(argv[++i]);
             if (ms < 0) { fprintf(stderr, "Error: --debounce-ms must be >= 0\n"); return -1; }
             debounceUs = (uint64_t)ms * 1000ull;
+        } else if (strcmp(argv[i], "--confirm") == 0 && i + 1 < argc) {
+            int n = std::atoi(argv[++i]);
+            if (n < 1) { fprintf(stderr, "Error: --confirm must be >= 1\n"); return -1; }
+            confirmMin = n;
         } else if (strcmp(argv[i], "--rf-pin") == 0 && i + 1 < argc) {
             int pin = std::atoi(argv[++i]);
             if (pin < 0 || pin > 27) { fprintf(stderr, "Error: --rf-pin must be 0..27\n"); return -1; }
@@ -602,10 +629,14 @@ int main(int argc, char* argv[]) {
     }
 
     fprintf(stdout,
-            "sampler %s (box %c, %s, te=%dus, debounce=%llums, rf=gpiochip0/%u)\n",
+            "sampler %s (box %c, %s, te=%dus, debounce=%llums, rf=gpiochip0/%u%s)\n",
             VERSION_STRING, boxLetter,
             learnMode ? "learn" : (listenMode ? "listen" : "play"),
-            teUs, (unsigned long long)(debounceUs / 1000ull), rfPinOverride);
+            teUs, (unsigned long long)(debounceUs / 1000ull), rfPinOverride,
+            (listenMode && confirmMin > 1) ? ", confirm" : "");
+    if (listenMode && confirmMin > 1)
+        fprintf(stdout, "confirm: %d frames in %llums required\n",
+                confirmMin, (unsigned long long)(confirmWindowUs / 1000ull));
     fflush(stdout);
 
     if (learnMode) {

@@ -228,11 +228,12 @@ make sampler
 | Možnost | Výchozí | Význam |
 |--------|---------|---------|
 | `--box b` | — | Identita boxu (vyžadováno, zobrazeno na LCD) |
-| `--map SOUBOR` | `mapa.csv` | Soubor mapující kódy na samply |
+| `--map SOUBOR` | `map.csv` | Soubor mapující kódy na samply |
 | `--samples-dir SLOŽKA` | `samples` | Složka obsahující WAV soubory |
 | `--lcd-addr HEX` | `0x27` | I2C adresa PCF8574 displeje, nebo `off` |
 | `--te-us N` | `320` | Základní časování EV1527 v µs (nutno doladit pro každé tlačítko) |
 | `--debounce-ms N` | `300` | Časové okno pro debounce každého tlačítka |
+| `--confirm N` | `1` (vypnuto) | V `--listen` vyžaduje N potvrzení kódu těsně po sobě, než se vypíše. Skutečné tlačítko vysílá opakovaně, šum občas vyplodí jeden rámec s unique id, který debounce nepotlačí — proto `--confirm 3` |
 | `--rf-pin N` | `15` | BCM GPIO linka DATA přijímače (fyzický pin 33) |
 | `--listen` | — | Režim pouhého poslechu: vypíše každý detekovaný kód |
 | `--learn` | — | Interaktivní registrace tlačítek, zapisuje rovnou do mapy |
@@ -240,7 +241,7 @@ make sampler
 
 ### Mapování a nahrávání tlačítek
 
-Na boxu B použijte `--learn` — kód se po stisku zapíše do `mapa.csv` sám:
+Na boxu B použijte `--learn` — kód se po stisku zapíše do `map.csv` sám:
 ```bash
 sudo systemctl stop sampler
 ./sampler --box b --learn --lcd-addr off
@@ -260,9 +261,9 @@ a DATA trvale nízká (příznak viz `docs/SCH.md` §4.2).
 Starší způsob, když `--learn` nepotřebujete (chcete jen kódy, zapisujete
 ručně), je `--listen`:
 ```bash
-./sampler --box b --listen
+./sampler --box b --listen --confirm 3
 ```
-Stiskněte každé tlačítko a zkopírujte vypsaná čísla `code=` do `mapa.csv`. Formát:
+Stiskněte každé tlačítko a zkopírujte vypsaná čísla `code=` do `map.csv`. Formát:
 ```csv
 12200123, sample_b_01.wav
 ```
@@ -285,7 +286,7 @@ sudo systemctl enable --now sampler
 *Služba je předkonfigurována pro Box B (`--box b`); vzorový soubor obsahuje `WorkingDirectory=/home/pi/tracker`.*
 
 #### Čtení 433 MHz do journalu
-Na bezhlavém boxu nevidíš obrazovku, takže každý přijatý kód jde do journalu. Podle toho se pozná, jestli tlačítka vůbec něco chytí, i když `mapa.csv` je ještě prázdná:
+Na bezhlavém boxu nevidíš obrazovku, takže každý přijatý kód jde do journalu. Podle toho se pozná, jestli tlačítka vůbec něco chytí, i když `map.csv` je ještě prázdná:
 ```bash
 journalctl -t sampler -f      # code=12200123 -> sample_b_01.wav (S01, #7)
 journalctl -u sampler -b -n 20
@@ -397,7 +398,7 @@ sudo systemctl start tracker
 - `main.c` — Zdrojový kód aplikace Tracker
 - `sampler.c` — Zdrojový kód aplikace Sampler (EV1527 RF + SDL2_mixer + volitelně LCD)
 - `Makefile` — Systém sestavení
-- `mapa.csv.example` — Šablona pro mapování RF kódů na zvukové stopy
+- `map.csv.example` — Šablona pro mapování RF kódů na zvukové stopy
 - `build_termux.sh` — Skript pro nastavení v prostředí Termux
 - `sampler.service` — systemd služba pro automatický start Boxu B
 - `docs/` — Schémata, manuály a generátory PDF
