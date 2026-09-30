@@ -826,11 +826,16 @@ int main(int argc, char* argv[]) {
     if (!listenMode)
         loadMap(map);
     if (!listenMode && !learnMode && !noAudio && eagerLoad) {
-        int loaded = 0;
+        // Akční sloty (@restart) zvuk nemají, takže je přeskočit — jinak by
+        // se pokusil Mix_LoadWAV na "@restart tracker.service" a hlásil
+        // chybu na slot, který je v pořádku. Počítá se jen proti zvukovým.
+        int loaded = 0, audio = 0;
         for (int i = 0; i < numSlots; i++) {
+            if (!slots[i].restartUnits.empty()) continue;
+            audio++;
             if (loadSample(i)) loaded++;
         }
-        fprintf(stdout, "sample: %d/%d loaded from %s/\n", loaded, numSlots, samplesDir);
+        fprintf(stdout, "sample: %d/%d loaded from %s/\n", loaded, audio, samplesDir);
     } else if (!listenMode && !learnMode && !noAudio) {
         // Líné načítání: zvuk se rozjede jen při --eager, jinak se každý
         // vzorek načte až při prvním stisku jeho tlačítka.

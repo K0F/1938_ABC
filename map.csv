@@ -4,13 +4,32 @@
 # Kódy A-E jsou tlačítka (A=3365153, B=3478913, C=3387393, D=3380993,
 # E=3382769). F je speciální klíč: vypadá jako ostatní, ale vysílá jiný
 # kód — id 318091, mimo rodinu A-E (210322-217432).
-3365153, track1.wav
-3478913, track2.wav
-3387393, track3.wav
-3380993, track4.wav
-# E: zatím reuse track1 — chybí 5. vzorek (nahrát potřebuje CA-3110S
-# a 8-26 V napájecí adaptér, v dostupnost.txt je [CHYBÍ]).
-3382769, track1.wav
+#
+# Každý slot je vrstva: stisk ji rozfádí od ticha (--fade-ms) a nechá
+# přehrávat v okruhu, dokud ji nevypne. Vrstvy se skládají — tlačítko B
+# nepřeruší A, jen přidá další. A-D jsou čtyři směry z jedné sady, proto
+# jsou X-ová dvojice vedle sebe (A, B) a Y-ová taky (C, D).
+3365153, Interactive_music_X-left-DRAMA.wav
+3478913, Interactive_music_X-right-INTIMACY.wav
+3387393, Interactive_music_Y-down_PEACE.wav
+3380993, Interactive_music_Y-up_WAR.wav
+3382769, Teskno.wav
+# E dostal Teskno (83 s) — nejkratší ze zbytku, takže se v okruhu vrátí
+# nejdřív. Kdyby vadila opakovaná smyčka, je v gitu i Sokol (11.6 min),
+# Gro Teskno (2.8 min) a Sokol(2).
+#
+# V samples/ jsou tyhle samply uložené jako samples/*.opus (mono 24 kHz,
+# 32 kbit/s); tady se píší .wav, protože sampler čte jen WAV. WAV
+# vyrobí samples-decode.sh (přes `make samples`) a prepare-sd.sh ho
+# pustí ještě před rsyncem do SD karty, takže na boxu ffmpeg není.
+# Bez nich sampler při startu vypíše "cannot load sample" a tlačítko
+# skončí na "VZOREK NENACHRANY".
+#
+# V gitu leží i samply bez tlačítka: Sokol.wav, Gro Teskno.wav a
+# Sokol(2).wav. Sokol(2) je prokazatelně prvních 20.7 s ze Sokolu
+# (shodné bajty PCM), tedy výřez, ne jiná skladba — zůstává jen kvůli
+# případnému 6. tlačítku. Šestého kódu zatím neznáme.
+#
 # F (speciální klíč): vypadá jako ostatní, ale vysílá jiný kód (id 318091).
 # Místo samplu restartuje služby, které hlídají signál. Akční slot je
 # neaktivní, dokud sampler nedostane --allow-restart (a root); v

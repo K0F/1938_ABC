@@ -332,6 +332,18 @@ printf '%s\n' "$OUT" | grep -q 'sample: 2/2 loaded' \
     && ok "--eager načte všechny vrstvy hned" \
     || bad "--eager nenačetl 2/2  [$(printf '%s' "$OUT" | tr '\n' '|')]"
 
+# Akční slot nemá zvuk, takže ho --eager nesmí zkusit načíst jako WAV.
+# Bez toho by to hlásilo "cannot load sample" na slot, který je v pořádku.
+MIXED="$(mktemp)"; printf '12200123, track1.wav\n99001122, @restart sampler.service\n' > "$MIXED"
+OUT="$(smp --box b --lcd-addr off --allow-restart --eager --map "$MIXED" --simulate </dev/null 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'sample: 1/1 loaded' \
+    && ok "--eager přeskočí @restart slot" \
+    || bad "--eager počítá @restart jako vzorek  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+printf '%s\n' "$OUT" | grep -qi 'cannot load sample' \
+    && bad "--eager zkouší načíst @restart jako WAV" \
+    || ok "--eager netýká akční slot"
+rm -f "$MIXED"
+
 # Dvě vrstvy, dvě tlačítka. Ta stará logika pustila Mix_PlayChannel(.., 0)
 # a Mix_HaltChannel na kanálu slotu — tedy jedno tlačítko druhé ut’alo.
 # Tohle je přesně ta vlastnost, kvůli níž je sampler vrstvený: obě

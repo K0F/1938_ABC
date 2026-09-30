@@ -2,8 +2,27 @@
 #
 # Format: decimal_code, sample_file
 # - codes come from running `sampler --listen --box b` and pressing each button
-# - sample files live in samples/ (e.g. sample_b_01.wav .. sample_b_10.wav)
-# - one line per button, max 10 entries; '#' starts a comment
+# - one line per button, max 20 entries (MAX_BUTTONS v sampler.c); beyond
+#   that sampler ostatní řádky vynechá a napíše to do journalu
+# - '#' starts a comment
+#
+# Každý slot je VRSTVA: stisk ji rozfádí od ticha (--fade-ms, default
+# 2000 ms) a nechá přehrávat v okruhu, dokud ji nevypne. Vrstvy se
+# skládají — stisk tlačítka B nepřeruší vrstvu A, jen přidá další, tak
+#že z pěti tlačítek vzniká proměnlivá skladba. Každý stisk dané vrstvy
+# ji rozfádí znovu od začátku.
+#
+# Jméno v mapě musí být to, co sampler načítá: WAV v samples/.
+# samples/*.opus se na WAV převádí skriptem samples-decode.sh
+# (`make samples`, nebo `prepare-sd.sh` před rsyncem do SD karty), takže
+# jméno *.opus sem nenapiš — Mix_LoadWAV by ho nenačetl. V repo je pak
+# slot bez souboru: "cannot load sample" a tlačítko skončí na
+# "VZOREK NENACHRANY".
+#
+# Paměť: sampler drží v RAM jen vrstvy, které se opravdu rozehrají (první
+# stisk ji načte), a načítá je do 24 kHz. Pět vrstev delších než pár
+# minut znamená v RAM stovky MB; --eager načte všechny hned, ale pak je
+# tam všechny.
 #
 # Box B (sample_b_*.wav) — uncomment and fill in your real codes:
 #12200123, sample_b_01.wav
