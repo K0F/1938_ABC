@@ -125,10 +125,13 @@ OPUS="$(printf '%s\n' "$TRACKED" | grep -c '\.opus$')"
 # smějí — --learn do nich zapisuje a testy je používají jako "chybějící
 # vzorek". Zakázané jsou jen WAV vrstev, tedy stejné jméno jako u .opus.
 DUP=0
-for o in $(printf '%s\n' "$TRACKED" | grep '\.opus$'); do
+while IFS= read -r o; do
+    [ -n "$o" ] || continue
     w="${o%.opus}.wav"
     printf '%s\n' "$TRACKED" | grep -qxF "$w" && DUP=$((DUP + 1))
-done
+done <<EOF
+$(printf '%s\n' "$TRACKED" | grep '\.opus$')
+EOF
 [ "$DUP" -eq 0 ] \
     && ok "v indexu není žádný WAV převedené vrstvy" \
     || bad "$DUP WAV souborů v indexu — push na GitHub by narazil na limit"
@@ -140,6 +143,49 @@ HUGE="$(git -C "$ROOT" ls-files -s samples/ 2>/dev/null | while read -r _ h _ f;
 [ "$HUGE" -eq 0 ] \
     && ok "žádný vzorek v indexu nepřesahuje 100 MB" \
     || bad "$HUGE vzorků v indexu přesahuje 100 MB (limit GitHubu)"
+
+echo "== 10) map.csv ukazuje na samply, které samples-decode.sh vyrobí =="
+# Tady je chyba, kterou by box ohlásil až za provozu: mapa odkazuje na
+# Interactive_music_X-left-DRAMA.wav, ale samples/Interactive_music_X-left-
+# DRAMA.opus neexistuje, takže prepare-sd.sh nic nevyrobí a sampler skončí
+# na "VZOREK NENACHRANY" — bez obrazovky se to na boxu B špatně hledá.
+# Kontrola nad skutečným map.csv: každý zvukový slot musí mít zdroj, který
+# se z převede. Akční sloty (@restart) nemají zvuk, takže se přeskakují.
+MAP="$ROOT/map.csv"
+if [ ! -f "$MAP" ]; then
+    skip "map.csv v repu není — nemá co ověřovat"
+else
+    MISS=0; SLOTS=0; MISSP=""
+    # Cyklus musí jet po řádcích ze souboru, ne přes $( ) — v mapě jsou
+    # jména s mezerami ("Gro Teskno.wav") a ta by se bez toho rozpadla
+    # na jednotlivá slova.
+    while IFS= read -r line; do
+        case "$line" in ''|\#*) continue ;; esac
+        name="${line#*,}"
+        name="$(printf '%s' "$name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        case "$name" in @*|'') continue ;; esac
+        SLOTS=$((SLOTS + 1))
+        [ -f "$ROOT/samples/${name%.wav}.opus" ] || {
+            MISS=$((MISS + 1)); MISSP="$MISSP$name "
+        }
+    done < "$MAP"
+    [ "$MISS" -eq 0 ] \
+        && ok "všech $SLOTS zvukových slotů má zdroj v samples/*.opus" \
+        || bad "$MISS z $SLOTS slotů nemá zdroj (chybí: $MISSP) — box by hlásil VZOREK NENACHRANY"
+    # A obráceně: .opus v mapě nikdy nesmí být, Mix_LoadWAV ho nenačte.
+    # Stejně jako tady v testu je potřeba jména číst po řádcích.
+    OPUSMAP=0
+    while IFS= read -r line; do
+        case "$line" in ''|\#*) continue ;; esac
+        name="${line#*,}"
+        name="$(printf '%s' "$name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        case "$name" in @*) continue ;; esac
+        case "$name" in *.opus) OPUSMAP=$((OPUSMAP + 1)) ;; esac
+    done < "$MAP"
+    [ "$OPUSMAP" -eq 0 ] \
+        && ok "v mapě nejsou .opus — jen .wav, jak sampler čte" \
+        || bad "$OPUSMAP slotů v mapě míří na .opus — Mix_LoadWAV by je nenačetl"
+fi
 
 echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
