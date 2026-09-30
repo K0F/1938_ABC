@@ -23,3 +23,13 @@ docs/*.pdf
 # QEMU Raspberry Pi 4 image assets
 rom/*
 !rom/.gitkeep
+
+# raw stereo 44.1kHz originals (642 MB) - v gitu jsou jen mono Opus
+# (samples/*.opus), tyhle zustavaji lokalne. GitHub ma limit 100 MB/soubor.
+samples/raw/
+
+# WAV ziskane z samples/*.opus skriptem samples-decode.sh (na hostu pred
+# rsyncem do SD karty). Generovane, v gitu nejsou - v gitu jsou .opus.
+# track?.wav jsou male placeholdery, ty se commituji.
+samples/*.wav
+!samples/track?.wav

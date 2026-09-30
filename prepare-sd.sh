@@ -106,6 +106,14 @@ echo "  hostname -> $HOSTNAME"
 step "Copying tracker source into image"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$ROOT/home/$USER/tracker"
+# samples/*.opus se prevadi na WAV jeste tady, na hostu — box pak nepotrebuje
+# ffmpeg a pri startu neceka na nic. Prevod bezi pred rsyncem, aby se do
+# image dostal uz hotovy WAV; jinak by tam byl samotny Opus, ktery
+# SDL_mixer v Mix_LoadWAV nerozluje. Box A samply nehraje, takze se to
+# preskakuje.
+if [ "$BOX" = "B" ]; then
+    sh "$SCRIPT_DIR/samples-decode.sh"
+fi
 # NOTE: host-built binaries MUST NOT be copied. `sampler`/`tracker` are gitignored
 # but present in the working tree; rsync -a preserves their mtimes, so `make sampler`
 # on the Pi would report "up to date" and install the x86-64 host binary.

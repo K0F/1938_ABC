@@ -78,7 +78,7 @@ ALL_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(RAYLIB_LIBS) $(OPENCV_LIBS) $(SYS_LIBS)
 SAMPLER_CXXFLAGS = $(CXXFLAGS) $(SDL2_CFLAGS) $(GPIOD_CFLAGS) -DGIT_VERSION='"$(GIT_VERSION)"'
 SAMPLER_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(GPIOD_LIBS) -lm -lpthread
 
-.PHONY: all clean docs
+.PHONY: all clean docs samples
 
 all: $(BIN) $(SAMPLER_BIN)
 
@@ -90,6 +90,12 @@ $(SAMPLER_BIN): $(SAMPLER_SRC)
 
 docs:
 	sh docs/build-docs.sh
+
+# samples/*.opus -> samples/*.wav. V gitu je jen Opus (13 MB); WAV (141 MB)
+# jsou generovane a sampler je z nich prevadi. prepare-sd.sh si tohle pusti
+# taky, takze do image se rsyncne uz hotovy WAV a box nepotrebuje ffmpeg.
+samples:
+	./samples-decode.sh
 
 clean:
 	rm -f $(BIN) $(BIN)_test $(SAMPLER_BIN)

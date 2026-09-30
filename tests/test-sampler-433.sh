@@ -312,5 +312,61 @@ else
 fi
 
 echo
+echo "== 9) vrstvy: líné načítání, loop a nezávislost kanálů =="
+# Vrstva se po stisku rozfádí a hraje v okruhu, ne jednou. Používá se
+# track1-4.wav, což jsou jediné WAV v repu (2 s, mono) — test tak nemusí
+# generovat žádný fixture a funguje i v čistém checkoutu.
+LAYERS="$TMP/layers.csv"
+printf '12200123, track1.wav\n12200124, track2.wav\n' > "$LAYERS"
+
+# Bez --eager se nic nenačte, dokud na tlačítko někdo nesáhne — mapa má
+# většinou víc vrstev, než se kdy hraje najednou, a všechny v RAM by
+# stály stovky MB.
+OUT="$(smp --box b --lcd-addr off --map "$LAYERS" --simulate </dev/null 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'lazy load' \
+    && ok "default je líné načítání" \
+    || bad "není líné načítání  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+
+OUT="$(smp --box b --lcd-addr off --eager --map "$LAYERS" --simulate </dev/null 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'sample: 2/2 loaded' \
+    && ok "--eager načte všechny vrstvy hned" \
+    || bad "--eager nenačetl 2/2  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+
+# Dvě vrstvy, dvě tlačítka. Ta stará logika pustila Mix_PlayChannel(.., 0)
+# a Mix_HaltChannel na kanálu slotu — tedy jedno tlačítko druhé ut’alo.
+# Tohle je přesně ta vlastnost, kvůli níž je sampler vrstvený: obě
+# vrstvy zní současně a každá má vlastní fade.
+OUT="$(printf '12200123\n12200124\n' | smp --box b --lcd-addr off --fade-ms 10 \
+        --map "$LAYERS" --simulate 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'layers still playing: 2' \
+    && ok "dvě vrstvy hrají současně, druhá druhou neutne" \
+    || bad "vrstvy se navzájem ruší  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+printf '%s\n' "$OUT" | grep -q 'code=12200123 -> track1.wav.*loop' \
+    && ok "vrstva hraje v okruhu, ne jednou" \
+    || bad "vrstva nehlásí loop  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+
+OUT="$(smp --box b --lcd-addr off --fade-ms 1500 --map "$LAYERS" --simulate </dev/null 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'fade=1500ms' \
+    && ok "--fade-ms se propíše do hlavičky" \
+    || bad "--fade-ms v hlavičce chybí  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+printf '12200123\n' | smp --box b --lcd-addr off --fade-ms 1500 \
+    --map "$LAYERS" --simulate 2>&1 | grep -q 'fade 1500ms, loop' \
+    && ok "stisk hlásí délku fade" \
+    || bad "stisk nehlásí délku fade"
+
+smp --box b --lcd-addr off --fade-ms -1 --map "$LAYERS" --simulate </dev/null >/dev/null 2>&1 \
+    && bad "--fade-ms -1 prošel" \
+    || ok "--fade-ms -1 = chyba"
+
+# Chybějící vzorek se nesmí zkoušet znovu při každém stisku — bez debounce
+# by jeden stisk vypisoval do journalu desítkyřádků. mapa2.csv má oba kódy
+# a $TMP/samples je prázdná, takže každý stisk je pokus o načtení.
+N="$(printf '12200123\n12200123\n' | smp --box b --lcd-addr off --debounce 0 \
+        --map "$TMP/mapa2.csv" --samples-dir "$TMP/samples" --simulate 2>&1 \
+        | grep -c 'cannot load sample')"
+[ "$N" = 1 ] && ok "chybějící vzorek se hlásí jen jednou" \
+             || bad "chybějící vzorek se opakoval $N× místo jednou"
+
+echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

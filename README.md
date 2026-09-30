@@ -235,6 +235,8 @@ make sampler
 | `--te-us N` | `320` | Základní časování EV1527 v µs (nutno doladit pro každé tlačítko) |
 | `--debounce-ms N` | `2000` | Časové okno pro debounce každého tlačítka. Tlačítka vysílají kód opakovaně přes sekundu, takže kratší okno spustí vzorek několikrát za jeden stisk (měřeno 5× při 300 ms) |
 | `--confirm N` | `1` (vypnuto) | V `--listen` vyžaduje N potvrzení kódu těsně po sobě, než se vypíše. Skutečné tlačítko vysílá opakovaně, šum občas vyplodí jeden rámec s unique id, který debounce nepotlačí — proto `--confirm 3` |
+| `--fade-ms N` | `2000` | Doba rozfádění vrstvy po stisku. Vrstva se rozjede z ticha, aby vkradla do toho, co už znějí. `0` = náběh okamžitý |
+| `--eager` | vypnuto | Načte všechny samply hned na startu místo až při prvním stisku. Stojí za to paměť — viz [Vrstvy](#vrstvy-fade-a-pamat) |
 | `--allow-restart` | vypnuto | Povolí akční sloty `@restart` v mapě (potřebuje root) |
 | `--dry-run` | — | Spolu s `--allow-restart` vypíše, co by se spustilo, ale neudělá to |
 | `--no-audio` | — | Přeskočí inicializaci zvuku; kódy se stále dekódují a akce vykonají, ale nic se nehraje. Na testování `@restart` boxem bez zvukové karty |
@@ -272,6 +274,61 @@ Stiskněte každé tlačítko a zkopírujte vypsaná čísla `code=` do `map.csv
 12200123, sample_b_01.wav
 ```
 Umístěte příslušné soubory (`sample_b_*.wav`) do složky `samples/`.
+
+#### Vrstvy, fade a paměť
+
+Každý slot v mapě je **vrstva**: stisk ji rozfádí od ticha a nechá
+přehrávat v okruhu, dokud ji nevypnete. Vrstvy se skládají — stisk
+tlačítka B nepřeruší vrstvu A, jen přidá další. Každá má vlastní
+`--fade-ms` průběh na vlastním kanálu, takže pět tlačítek dělá
+skladbu, která se mění podle toho, co právě zmáčknete. Každý stisk
+dané vrstvy ji rozfádí znovu od začátku.
+
+Kanálů je 20 (`MAX_BUTTONS`), reálně se používá tolik, kolik je slotů
+v mapě.
+
+Paměť je tu jediná opravdu úzká věc. SDL_mixer převádí každý vzorek na
+formát mixeru hned po načtení, takže **v RAM ho počítá rychlost mixeru,
+ne rychlost souboru** — 24 kHz mono stereo je 96 kB/s, 44.1 kHz 176
+kB/s. Pěti současně znějícím vrstvám dělá 240 MB proti 480 MB. Proto
+mixer běží na 24 kHz a vzorek se načítá až při **prvním stisku**: v mapě
+bývá vrstev víc, než se kdy hraje najednou, a načíst všechny znamená
+držet v RAM stovky MB. První stisk tak trochu počká, další už ne.
+`--eager` to otočí a načte všechno hned (za cenu paměti) — hodí se na
+box s dostatkem RAM nebo když chcete hlásit rozbité vzorky při startu.
+
+Na konci se vypíše, co pořád hrálo:
+```
+layers still playing: 2 [Teskno.wav, Sokol.wav]
+```
+
+#### Samply v gitu: Opus, ne WAV
+
+V `samples/` jsou vrstvy uložené jako **mono Opus 24 kHz / 32 kbit/s**
+(`samples/*.opus`), dohromady asi 13 MB. WAV v gitu nejsou a nebyly
+ nikdy v této podobě — surové stereo od Matouse má 642 MB a dva
+ soubory přesahují GitHubův limit 100 MB na soubor, takže by push
+ skončil chybou.
+
+Důvod, proč to není jen vlastní úsporou místa: `Mix_Chunk` v SDL2_mixer
+nemá typový tag, takže `Mix_PlayChannel` umí přehrát jen to, co načetl
+`Mix_LoadWAV`. Komprimovaný zvuk jde hrat jedině přes `Mix_PlayMusic` —
+a to je jeden globální stream, ne kanál na tlačítko. Vrstvení pěti
+tlačítek by tím nešlo udělat.
+
+Proto se Opus převádí na WAV ještě na hostu (`samples-decode.sh`, přes
+`make samples`) a `prepare-sd.sh` to spustí taky, takže do SD karty
+jde už hotový WAV a **box nepotřebuje ffmpeg** ani nic čekat při startu.
+Převod je idempotentní (přeskočí, co je čerstvé) a generované WAV jsou
+v `.gitignore`; v gitu zůstávají jen `track?.wav` placeholdery.
+
+```bash
+make samples          # samples/*.opus -> samples/*.wav
+./samples-decode.sh --force   # přepíše všechny
+```
+
+Do `map.csv` pak pište jména s `.wav`, jak je sampler hraje — stejně
+jako dřív, formát mapy se nemění.
 
 #### Speciální kláč: `@restart`
 
@@ -393,6 +450,12 @@ Testy běží bez sítě i bez NetworkManageru: `./tests/test-box-network.sh`, p
 `./tests/test-sampler-433.sh` staví sampler z hostu a pustí ho proti EV1527 rámcům, které si vyrobí sám, takže jde spustit i bez GPIO a bez zvukové karty. Chybí-li SDL2, skript přeskočí (exit 77) místo toho, aby hlásil falešné chyby. Když je SDL2 jen v cross/sysrootu, stačí ho přimířit:
 ```bash
 ABC38_SYSROOT=/tmp/sdlbuild/sysroot ./tests/test-sampler-433.sh
+```
+
+Převod samplů má test bez ffmpeg — `FFMPEG` se přesměruje na falešný
+skript, takže jde ověřit logika, ne samotný převod:
+```bash
+./tests/test-samples-decode.sh
 ```
 
 ---

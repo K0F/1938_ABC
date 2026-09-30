@@ -37,6 +37,16 @@
 #define EV1527_BITS 24
 #define LCD_BACKLIGHT 0x08
 
+// Mixer běží na 24 kHz, ne na 44.1 kHz. SDL_mixer převádí každý vzorek na
+// formát mixeru hned po načtení, takže rychlost mixeru — ne rychlost
+// souboru — určuje, kolik RAM vrstva zabere: 96 kB/s mono 24 kHz proti
+// 176 kB/s stereo 44.1 kHz. Pěti současně znějícím vrstvám to dělá 240 MB
+// místo 480 MB, což je na boxu s 1 GB rozdíl mezi fungováním a OOM.
+// Box má mono výstup a 12 kHz audio pásmo v 24 kHz mu stačí; samples-decode.sh
+// z Opus dělá WAV přesně v tomhle formátu (24 kHz je navíc rate, kterou umí
+// libopus — 22050 neumí).
+#define MIX_RATE 24000
+
 struct Slot {
     uint32_t code;
     int channel;
@@ -46,6 +56,12 @@ struct Slot {
     // Slot s restartUnits != "" je akční: místo přehrání samplu spustí
     // `systemctl restart` na uvedených jednotkách. Zbytek je audio.
     std::string restartUnits;
+    // Od kdy se vrstva rozfádívá (0 = nehraje). Mix_Volume je na kanál,
+    // takže každá vrstva má vlastní, nezávislý fade.
+    uint64_t fadeStartUs;
+    // 1 = Mix_LoadWAV už proběhl (až to selhalo, ať se to při každém
+    // stisku nezkoušelo znovu a neplavalo se to do journalu).
+    int loadTried;
 };
 
 struct Decoder {
@@ -68,6 +84,14 @@ static int audioOk = 0;
 // restartovalo.
 static int dryRun = 0;
 static int noAudio = 0;
+// Doba rozfádění vrstvy po stisku. Vrstva se prehraje v loopu, takže pak
+// zní, dokud ji někdo nevypne; stisk rozfádí od ticha, aby se pěkně
+// vkradla do současně znějících vrstev.
+static uint64_t fadeUs = 2000000ull;
+// Líné načítání: vzorek se čte až při prvním stisku. Vrstev je v mapě
+// typicky víc, než se kdy hraje najednou, a načíst jich všechny znamená
+// držet v RAM stovky MB. --eager to vrací na startu všechny.
+static int eagerLoad = 0;
 static const char* mapPath = "map.csv";
 static const char* samplesDir = "samples";
 static int learnQuit = 0;
@@ -429,6 +453,56 @@ static void doRestart(const std::string& units, int slotIdx) {
     }
 }
 
+// Načte vzorek slotu do paměti. Vrací true, když je slot přehrávatelný.
+// Slot, který už jednou selhal (chybějící soubor, poškozený WAV), se znovu
+// nezkouší — jinak by každý stisk vypisoval do journalu totéž.
+static bool loadSample(int i) {
+    if (slots[i].chunk) return true;
+    if (slots[i].loadTried) return false;
+    slots[i].loadTried = 1;
+    std::string path = std::string(samplesDir) + "/" + slots[i].file;
+    slots[i].chunk = Mix_LoadWAV(path.c_str());
+    if (!slots[i].chunk)
+        fprintf(stderr, "Warning: cannot load sample '%s'\n", path.c_str());
+    return slots[i].chunk != NULL;
+}
+
+// Rozjede vrstvu daného slotu a začne ji rozfádívat. Mix_PlayChannel s
+// loops = -1 hraje v okruhu, takže vrstva zní, dokud ji někdo nevypne —
+// stisk dalšího tlačítka ji neodpojí, jen přidá další.
+static void startLayer(int i) {
+    Mix_HaltChannel(slots[i].channel);
+    // 0 = potichu, pak to odtud odtiká fadesTick().
+    Mix_Volume(slots[i].channel, fadeUs ? 0 : MIX_MAX_VOLUME);
+    Mix_PlayChannel(slots[i].channel, slots[i].chunk, -1);
+    slots[i].fadeStartUs = nowUs();
+}
+
+// Krátká lineární rampa na každém kanálu, který se právě rozfádívá.
+// Mix_Volume je per-kanál, takže vrstvy jedou nezávisle a i během fade
+// se jich může skládat víc. Volá se z hlavní smyčky (~2 ms), takže 2s
+// fade má ~1000 kroků — na sluchátku to nezahrká.
+static void fadesTick(void) {
+    if (!audioOk) return;
+    uint64_t t = nowUs();
+    for (int i = 0; i < numSlots; i++) {
+        if (!slots[i].fadeStartUs) continue;              // tato vrstva zrovna nehraje
+        if (!Mix_Playing(slots[i].channel)) {              // došla? (loops=-1, jen pro jistotu)
+            slots[i].fadeStartUs = 0;
+            continue;
+        }
+        uint64_t el = t - slots[i].fadeStartUs;
+        if (el >= fadeUs) {
+            Mix_Volume(slots[i].channel, MIX_MAX_VOLUME);  // dorazeno na konec
+            slots[i].fadeStartUs = 0;
+            continue;
+        }
+        // fadeUs může být 0 (okamžitý náběh) — to už ošetřil startLayer.
+        int v = (int)((uint64_t)MIX_MAX_VOLUME * el / fadeUs);
+        Mix_Volume(slots[i].channel, v);
+    }
+}
+
 static void onCode(uint32_t code) {
     if (learnMode) {
         learnCode(code);
@@ -486,7 +560,8 @@ static void onCode(uint32_t code) {
             }
             // Každý stisk jde do journalu, i když nehraje — na bezhlavém boxu
             // je to jediné, podle čeho se pozná, že 433 MHz tlačítko funguje.
-            if (!slots[i].chunk) {
+            // Bez --eager se vzorek načítá tady, až když je opravdu potřeba.
+            if (!loadSample(i)) {
                 fprintf(stdout, "code=%u -> %s (S%02d, #%llu) VZOREK NENACHRANY\n",
                         code, slots[i].file.c_str(), i + 1,
                         (unsigned long long)pressCount);
@@ -501,11 +576,11 @@ static void onCode(uint32_t code) {
                 fflush(stdout);
                 return;
             }
-            Mix_HaltChannel(slots[i].channel);
-            Mix_PlayChannel(slots[i].channel, slots[i].chunk, 0);
-            fprintf(stdout, "code=%u -> %s (S%02d, #%llu)\n", code,
+            startLayer(i);
+            fprintf(stdout, "code=%u -> %s (S%02d, #%llu) fade %llums, loop\n", code,
                     slots[i].file.c_str(), i + 1,
-                    (unsigned long long)pressCount);
+                    (unsigned long long)pressCount,
+                    (unsigned long long)(fadeUs / 1000ull));
             fflush(stdout);
             if (lcdEnabled) lcdStatusHit(i);
             return;
@@ -641,6 +716,10 @@ static void usage(const char* prog) {
         "  --allow-restart     honour @restart slots in the map (needs root;\n"
         "                      off by default so --listen can't restart units)\n"
         "  --dry-run           with --allow-restart, print what would be run\n"
+        "  --fade-ms N         fade-in time of a triggered layer (default: 2000).\n"
+        "                      0 fades in instantly; layers loop until stopped\n"
+        "  --eager            load every sample at start instead of on first\n"
+        "                      press (costs RAM: all layers resident at once)\n"
         "  --no-audio          skip audio init; decode and act, but play nothing\n"
         "                      (for testing @restart on a box with no sound card)\n"
         "  --rf-pin N          BCM GPIO line of receiver DATA (default: 15)\n"
@@ -691,6 +770,12 @@ int main(int argc, char* argv[]) {
             restartAllowed = 1;
         } else if (strcmp(argv[i], "--dry-run") == 0) {
             dryRun = 1;
+        } else if (strcmp(argv[i], "--fade-ms") == 0 && i + 1 < argc) {
+            int ms = std::atoi(argv[++i]);
+            if (ms < 0) { fprintf(stderr, "Error: --fade-ms must be >= 0\n"); return -1; }
+            fadeUs = (uint64_t)ms * 1000ull;
+        } else if (strcmp(argv[i], "--eager") == 0) {
+            eagerLoad = 1;
         } else if (strcmp(argv[i], "--no-audio") == 0) {
             noAudio = 1;
         } else if (strcmp(argv[i], "--rf-pin") == 0 && i + 1 < argc) {
@@ -730,7 +815,7 @@ int main(int argc, char* argv[]) {
             fprintf(stderr, "Error: SDL audio init failed: %s\n", SDL_GetError());
             return -1;
         }
-        if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024) < 0) {
+        if (Mix_OpenAudio(MIX_RATE, MIX_DEFAULT_FORMAT, 2, 1024) < 0) {
             fprintf(stderr, "Error: Mix_OpenAudio failed: %s\n", Mix_GetError());
             return -1;
         }
@@ -740,16 +825,17 @@ int main(int argc, char* argv[]) {
 
     if (!listenMode)
         loadMap(map);
-    if (!listenMode && !learnMode && !noAudio) {
+    if (!listenMode && !learnMode && !noAudio && eagerLoad) {
         int loaded = 0;
         for (int i = 0; i < numSlots; i++) {
-            if (!slots[i].restartUnits.empty()) continue;  // nemá vzorek
-            std::string path = std::string(samplesDir) + "/" + slots[i].file;
-            slots[i].chunk = Mix_LoadWAV(path.c_str());
-            if (slots[i].chunk) loaded++;
-            else fprintf(stderr, "Warning: cannot load sample '%s'\n", path.c_str());
+            if (loadSample(i)) loaded++;
         }
         fprintf(stdout, "sample: %d/%d loaded from %s/\n", loaded, numSlots, samplesDir);
+    } else if (!listenMode && !learnMode && !noAudio) {
+        // Líné načítání: zvuk se rozjede jen při --eager, jinak se každý
+        // vzorek načte až při prvním stisku jeho tlačítka.
+        fprintf(stdout, "sample: lazy load from %s/ (first press per layer)\n",
+                samplesDir);
     } else if (!listenMode && !learnMode) {
         fprintf(stdout, "sample: audio disabled (--no-audio)\n");
     }
@@ -765,10 +851,11 @@ int main(int argc, char* argv[]) {
     }
 
     fprintf(stdout,
-            "sampler %s (box %c, %s, te=%dus, debounce=%llums, rf=gpiochip0/%u%s)\n",
+            "sampler %s (box %c, %s, te=%dus, debounce=%llums, fade=%llums, rf=gpiochip0/%u%s)\n",
             VERSION_STRING, boxLetter,
             learnMode ? "learn" : (listenMode ? "listen" : "play"),
-            teUs, (unsigned long long)(debounceUs / 1000ull), rfPinOverride,
+            teUs, (unsigned long long)(debounceUs / 1000ull),
+            (unsigned long long)(fadeUs / 1000ull), rfPinOverride,
             (listenMode && confirmMin > 1) ? ", confirm" : "");
     if (listenMode && confirmMin > 1)
         fprintf(stdout, "confirm: %d frames in %llums required\n",
@@ -816,7 +903,12 @@ int main(int argc, char* argv[]) {
             while (*p == ' ' || *p == '\t') p++;
             if (*p == '#' || *p == '\n' || *p == '\0') continue;
             onCode((uint32_t)strtoul(p, NULL, 10));
+            // Tady nekalu smyčka sama (blokuje na stdin), takže rozfádění
+            // musí odtiknout rovnou po stisku, jinak by v --simulate zůstalo
+            // viset ticho do konce vstupu.
+            fadesTick();
         }
+        fadesTick();
     } else {
         while (running) {
             uint64_t t[32];
@@ -840,9 +932,14 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 usleep(2000);
+                // Rozfádění jde po stejném tiku jako čtení GPIO — hlavní
+                // smyčka se jinak jen čeká, takže je to jediné místo, kde
+                // je čas přesný a nemusí se volat SDL_GetTicks().
+                fadesTick();
                 continue;
             }
             for (int i = 0; i < n; i++) decoderPush(dec, t[i], r[i]);
+            fadesTick();
         }
     }
 
@@ -858,6 +955,21 @@ int main(int argc, char* argv[]) {
 #endif
     if (lcdFd >= 0) close(lcdFd);
     if (audioOk) {
+        // Co pořád hraje, se na bezhlavém boxu jinak nepozná — sampler se
+        // ukončuje signálem a poslední stisky nejsou nikde jinde vidět.
+        // Hodí se to i v testu: dvě vrstvy po dvou stiscích musí být
+        // vypnuté obě, ne jen ta poslední. V --listen/--learn nic nehraje,
+        // takže je tenhle výpis prázdný a není potřeba ho nijak hlídat.
+        int live = 0;
+        std::string list;
+        for (int i = 0; i < numSlots; i++) {
+            if (Mix_Playing(slots[i].channel) != 0) {
+                if (live++) list += ", ";
+                list += slots[i].file;
+            }
+        }
+        if (live)
+            fprintf(stdout, "layers still playing: %d [%s]\n", live, list.c_str());
         for (int i = 0; i < numSlots; i++)
             if (slots[i].chunk) Mix_FreeChunk(slots[i].chunk);
         Mix_CloseAudio();
