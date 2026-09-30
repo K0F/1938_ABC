@@ -304,11 +304,19 @@ layers still playing: 2 [Teskno.wav, Sokol.wav]
 
 #### Samply v gitu: Opus, ne WAV
 
-V `samples/` jsou vrstvy uložené jako **mono Opus 24 kHz / 32 kbit/s**
-(`samples/*.opus`), dohromady asi 13 MB. WAV v gitu nejsou a nebyly
- nikdy v této podobě — surové stereo od Matouse má 642 MB a dva
- soubory přesahují GitHubův limit 100 MB na soubor, takže by push
- skončil chybou.
+V `samples/` jsou vrstvy uložené jako **mono Opus 24 kHz / 256 kbit/s**
+(`samples/*.opus`), dohromady 99 MB. WAV v gitu nejsou a nebyly
+  nikdy v této podobě — surové stereo od Matouse má 642 MB a dva
+  soubory přesahují GitHubův limit 100 MB na soubor, takže by push
+  skončil chybou. Po převodu je největší soubor `Sokol.opus` s 22 MB,
+  tedy pod čtvrtinou limitu. Originály zůstávají na disku v `samples/raw/`
+  (mimo git) a v záloze na `pesek.com` v `~/ABC38-raw-backup/`.
+
+256 kbit/s je maximum, které `libopus` pro mono přijme. `-b:a 320k` skončí
+chybou `The bit rate 320000 bps is unsupported. Please choose a value
+between 500 and 256000` a nevytvoří vůbec nic. Ani vyšší kvalita ale není
+význam — mixer hraje mono 24 kHz (`MIX_RATE`), takže cokoliv nad 24 kHz
+šířku pásma a cokoliv stereo se zahodí ještě před reproduktory.
 
 Důvod, proč to není jen vlastní úsporou místa: `Mix_Chunk` v SDL2_mixer
 nemá typový tag, takže `Mix_PlayChannel` umí přehrát jen to, co načetl
@@ -326,6 +334,18 @@ v `.gitignore`; v gitu zůstávají jen `track?.wav` placeholdery.
 make samples          # samples/*.opus -> samples/*.wav
 ./samples-decode.sh --force   # přepíše všechny
 ```
+
+Opačný směr — z původních WAV v `samples/raw/` do Opusu v gitu:
+
+```bash
+make encode-samples           # samples/raw/*.wav -> samples/*.opus
+BITRATE=192k make encode-samples   # nižší kvalita, ~75 MB
+```
+
+Není to součást `make samples`, aby `prepare-sd.sh` při stavbě image
+nikdy nepřeváděl 642 MB originálů — staví image z toho, co už v gitu je.
+`Sokol(1).wav` se přeskakuje: má stejné md5 jako `Sokol.wav`, do gitu by
+jinak přišel jeden zbytečný Opus s 11.6 minuty zvuku navíc.
 
 Do `map.csv` pak pište jména s `.wav`, jak je sampler hraje — stejně
 jako dřív, formát mapy se nemění.
@@ -453,9 +473,10 @@ ABC38_SYSROOT=/tmp/sdlbuild/sysroot ./tests/test-sampler-433.sh
 ```
 
 Převod samplů má test bez ffmpeg — `FFMPEG` se přesměruje na falešný
-skript, takže jde ověřit logika, ne samotný převod:
+skript, takže jde ověřit logika, ne samotný převod. Oba směry:
 ```bash
-./tests/test-samples-decode.sh
+./tests/test-samples-decode.sh   # Opus -> WAV (to, co jde na box)
+./tests/test-samples-encode.sh   # raw WAV -> Opus (to, co je v gitu)
 ```
 
 ---

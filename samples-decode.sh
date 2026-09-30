@@ -1,9 +1,11 @@
 #!/bin/bash
 # samples-decode.sh — prevede samples/*.opus na WAV, ze kterych zivi sampler.
 #
-# V gitu jsou samply ulozene jako mono Opus (32 kbit/s) — 524 MB raw stereo
-# prevedenych na 13 MB, coz se vejde do limitu GitHubu i do gitu, ktery se
-# neposila po siti. SDL_mixer umi jen WAV (Mix_Chunk nema typovy tag, takze
+# V gitu jsou samply ulozene jako mono Opus (256 kbit/s) — 642 MB raw stereo
+# prevedenych na 99 MB, coz se vejde do limitu GitHubu (100 MB na soubor,
+# nejvetsi ma Sokol 22 MB). Prevedene je to skriptem samples-encode.sh,
+# `make encode-samples`; originals lezi v samples/raw/ a mimo git.
+# SDL_mixer umi jen WAV (Mix_Chunk nema typovy tag, takze
 # hudbu umi hrat jen Mix_PlayMusic — jednou globalne, ne na kazdem kanalu
 # zvlast), a box ma mit v RAM jen par vrstev, ne vsechny samply najednou.
 # Proto se tady, na hostu s ffmpeg, udelaji z Opus WAV a do image se
