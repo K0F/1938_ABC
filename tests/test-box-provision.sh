@@ -105,6 +105,7 @@ run_box() {
 cmds()  { cat "$SYSTEMCTL_LOG"; }
 unit()  { cat "$TMP/root-$1/etc/systemd/system/$2" 2>/dev/null || true; }
 has()   { grep -qE "$1" "$2" && ok "$3" || bad "$3  [$(tr '\n' '|' <"$2" | head -c 200)]"; }
+hasnt() { ! grep -qE "$1" "$2" && ok "$3" || bad "$3  [$(tr '\n' '|' <"$2" | head -c 200)]"; }
 
 echo "== 1) Box A: tracker.service, žádný sampler =="
 RA="$(run_box A)"
