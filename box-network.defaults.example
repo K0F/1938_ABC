@@ -11,6 +11,20 @@
 # má přednost, takže se dá jednorázově přepsat bez editace souboru.
 #
 # Prázdná BOX_WIFI_SSID = žádný WiFi profil, box jede na eth0.
+#
+# Adresa hlavní sítě. Android hotspot má typicky 192.168.43.0/24 a branu .1,
+# domácí router bývá 192.168.8.1 — proto to tady není nastavené natvrdo pro
+# 192.168.8.x a dá se to přepsat podle toho, kam box pustíš.
+#
+# ZÁLOŽNÍ SÍŤ (BOX_WIFI_SSID2): druhý profil, box na něj přepne sám, když
+# hlavní není v dosahu. Bez BOX_IP2 jde backup po DHCP — správně pro hotspot,
+# protože vzít mu adresu hlavní sítě by znamenalo nedosažitelnou adresu.
 
 BOX_WIFI_SSID=HUAWEI-B310-C3A0
 BOX_WIFI_PSK=SEM-DOJDE-HESLO-WIFI
+# BOX_IP=192.168.8.103
+# BOX_GATEWAY=192.168.8.1
+# BOX_DNS=192.168.8.1
+
+# BOX_WIFI_SSID2=Internet_5CC1
+# BOX_WIFI_PSK2=SEM-DOJDE-HESLO-ZALOHNI
