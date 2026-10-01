@@ -196,6 +196,30 @@ DROPIN="$ROOT/getty-tty1-autologin.conf"
 has "autologin bez hesla na tty1" "$(cat "$DROPIN")" "--autologin pi"
 has "a vypne původní ExecStart" "$(cat "$DROPIN")" "ExecStart="
 
+# Autologin pro box B (login shell na TV, když je headless sampler a nemá
+# binárku tracker). Oba prepare skripty MAZOU autologin.conf jako artefakt
+# předchozího boxu, takže se musí instalovat AŽ po tom rm — jinak by si
+# skript smazal to, co před chvílí nainstaloval.
+for P in "$ROOT/prepare-sd.sh" "$ROOT/qemu_raspi4.sh"; do
+    N="$(basename "$P")"
+    [ -f "$P" ] || { bad "$N chybí"; continue; }
+    has "$N umí --console-login" "$(cat "$P")" "--console-login"
+    has "$N instaluje getty drop-in" "$(cat "$P")" \
+        "getty@tty1.service.d/autologin.conf"
+    # Pořadí: rm musí být před instalací.
+    I_RM="$(grep -n 'rm -f .*getty@tty1.service.d/autologin.conf' "$P" | head -1 | cut -d: -f1)"
+    I_IN="$(grep -n 'getty-tty1-autologin.conf' "$P" | head -1 | cut -d: -f1)"
+    if [ -n "$I_RM" ] && [ -n "$I_IN" ] && [ "$I_IN" -gt "$I_RM" ]; then
+        ok "$N: drop-in se instaluje až po rm, který by ho smazal (ř. $I_IN > $I_RM)"
+    else
+        bad "$N: instalace (ř. ${I_IN:-?}) není za rm (ř. ${I_RM:-?}) — skript by si vlastní práci smazal"
+    fi
+    # Box B nemá tracker, takže X relace se NEinstaluje — jinak by padala v
+    # smyčce (viz box-console.xinit, který bez binárky končí).
+    hasnt "$N: X relaci na box B netáhne" "$(cat "$P")" \
+        "box-console-profile.sh"
+done
+
 SCRIPT="$ROOT/box-console.sh"
 S="$(cat "$SCRIPT")"
 has "režim on vypne headless službu" "$S" "systemctl disable --now tracker.service"
