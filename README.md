@@ -209,7 +209,7 @@ Sampler funguje jako samostatná bezdrátová spouštěcí jednotka. Využívá 
 > nebo na GND uspí modul — DATA pak trvale nízká, na GPIO žádné hrany a
 > tlačítko vypadá jako mrtvé i s novou baterií. Podrobně `docs/SCH.md` §4.2.
 >
-> Tlačítko vysílá opakovaně, dokud je držené. Výchozí debounce 2000 ms
+> Tlačítko vysílá opakovaně, dokud je držené. Výchozí debounce 2000 ms. Při opakovaném stisku tlačítka, jehož vzorek právě hraje, se vrstva místo restartu pouze ztlumí (fade-out).
 > přesahuje celý burst, takže jeden stisk = jedno přehrání. Kratší okno
 > (např. `--debounce-ms 5000`) je vhodné v režimu hraní.
 - Identita boxu (`b`) určuje, jaké samply a jaký mapovací soubor se použijí.
