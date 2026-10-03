@@ -177,21 +177,80 @@ else
     ok "mimo git repo, přeskočeno"
 fi
 
-echo "== 18) box-network.defaults se nesmí dostat do image =="
+echo "== 18a) dvě sítě: záložní profil, jiný uuid, nižší priorita =="
+# Druhá WiFi (backup), na kterou box přepne sám. Klíčové je uuid: kdyby bylo
+# odvozené jen z písmena boxu, oba profily by měly shodné uuid a NetworkManager
+# by druhý tiše odmítl — záloha by nikdy nenaskočila.
+F2="$(gen two B BOX_WIFI_SSID2=zalohni BOX_WIFI_PSK2=heslo456)"
+B2="${F2%/box-B.nmconnection}/box-B-backup.nmconnection"
+[ -f "$B2" ] && ok "záložní keyfile vznikl" || bad "záložní keyfile chybí"
+grep -q '^ssid=zalohni$'      "$B2" && ok "záložní SSID zapsán"  || bad "záložní SSID chybí"
+grep -q '^psk=heslo456$'     "$B2" && ok "záložní PSK zapsán"   || bad "záložní PSK chybí"
+U_MAIN="$(grep '^uuid=' "$F2" | cut -d= -f2)"
+U_BAK="$(grep '^uuid=' "$B2" | cut -d= -f2)"
+[ -n "$U_BAK" ] && ok "záložní má uuid" || bad "záložní nemá uuid"
+[ "$U_MAIN" != "$U_BAK" ] && ok "hlavní a záložní uuid jsou různé" \
+                           || bad "stejné uuid — NM by zálohu odmítl"
+grep -q '^autoconnect-priority=100$'  "$F2" && ok "hlavní má přednost (100)" || bad "hlavní priorita chybí"
+grep -q '^autoconnect-priority=-100$' "$B2" && ok "záložní až v druhé vlně (-100)" || bad "záložní priorita chybí"
+grep -q '^autoconnect-retries=0$' "$B2" && ok "záložní nečeká donekonečna" || bad "retries chybí"
+# Bez BOX_IP2 musí backup jet po DHCP — adresa hlavní sítě by na jiné síti
+# nikdo neposlouchala a box by neměl routu.
+grep -q '^method=auto$'      "$B2" && ok "záložní bez BOX_IP2 jede po DHCP" || bad "záložní není DHCP"
+grep -q '^addresses='        "$B2" && bad "záložní má statickou adresu hlavní sítě" \
+                                || ok "záložní nemá adresu hlavní sítě"
+
+echo "== 18b) záložní jde i staticky, když BOX_IP2 zadám =="
+F3="$(gen two_static B BOX_WIFI_SSID2=zalohni BOX_IP2=10.9.0.50 BOX_GATEWAY2=10.9.0.1)"
+B3="${F3%/box-B.nmconnection}/box-B-backup.nmconnection"
+grep -q '^method=manual$'                 "$B3" && ok "BOX_IP2 -> manual"   || bad "BOX_IP2 nevyrobilo manual"
+grep -q '^addresses=10\.9\.0\.50/24$'     "$B3" && ok "záložní adresa 10.9.0.50" || bad "záložní adresa chybí"
+grep -q '^gateway=10\.9\.0\.1$'           "$B3" && ok "záložní brána 10.9.0.1" || bad "záložní brána chybí"
+
+echo "== 18c) BOX_IP2 musí být IPv4, jinak ať to řekne =="
+rm -rf "$TMP/bad2"
+if ABC38_NET_ROOT="$TMP/bad2" ABC38_NET_DEFAULTS= \
+   BOX_WIFI_SSID2=zalohni BOX_IP2=not-an-ip bash "$SCRIPT" B >"$TMP/bad2.log" 2>&1; then
+    bad "rozbité BOX_IP2 prošlo bez chyby"
+else
+    grep -q 'not an IPv4' "$TMP/bad2.log" && ok "řekne, že BOX_IP2 není IPv4" || bad "chybová hláška nejasná"
+fi
+
+echo "== 18d) bez BOX_WIFI_SSID2 se druhý profil nevytváří =="
+F4="$(gen one B)"
+D4="${F4%/box-B.nmconnection}"
+[ -e "$D4/box-B-backup.nmconnection" ] && bad "záložní profil vznikl bez SSID2" \
+                                       || ok "jen jeden profil"
+
+echo "== 18e) SSID2 z defaults funguje, proměnná z okolí ji přepíše =="
+printf 'BOX_WIFI_SSID=hlavni\nBOX_WIFI_PSK=heslo123\nBOX_WIFI_SSID2=zdefault\nBOX_WIFI_PSK2=heslo456\n' > "$DEF"
+rm -rf "$TMP/d2"
+ABC38_NET_ROOT="$TMP/d2" ABC38_NET_DEFAULTS="$DEF" bash "$SCRIPT" B >/dev/null 2>&1
+grep -q '^ssid=zdefault$' "$TMP/d2/etc/NetworkManager/system-connections/box-B-backup.nmconnection" \
+    && ok "záložní SSID ze souboru" || bad "záložní SSID ze souboru ignorován"
+rm -rf "$TMP/d3"
+ABC38_NET_ROOT="$TMP/d3" ABC38_NET_DEFAULTS="$DEF" BOX_WIFI_SSID2=zenv \
+    bash "$SCRIPT" B >/dev/null 2>&1
+grep -q '^ssid=zenv$' "$TMP/d3/etc/NetworkManager/system-connections/box-B-backup.nmconnection" \
+    && ok "BOX_WIFI_SSID2 přepsalo soubor" || bad "BOX_WIFI_SSID2 nepřepsalo soubor"
+
+echo "== 18f) box-network.defaults se nesmí dostat do image =="
 # qemu_raspi4.sh rsyncuje repo do /home/pi/tracker. Protože je defaults
 # gitignorovaný (ne v .gitignore pro rsync), musí být vyloučený výslovně,
 # jinak by se WiFi heslo četlo z karty.
-QEMU="$ROOT/qemu_raspi4.sh"
-if [ -f "$QEMU" ]; then
-    grep -q -- '--exclude=/box-network.defaults' "$QEMU" \
-        && ok "rsync defaults výslovně vylučuje" \
-        || bad "rsync box-network.defaults nevylučuje — heslo by prosákl na kartu"
-    grep -q 'box-network.defaults' "$QEMU" \
-        && ok "prepare_defaults kontroluje" \
-        || bad "prepare se na defaults ani nepodívá"
-else
-    ok "qemu_raspi4.sh tu není, přeskočeno"
-fi
+# Oba prepare skripty rsyncují repo do /home/pi/tracker. Protože je defaults
+# gitignorovaný (ne v .gitignore pro rsync), musí být vyloučený výslovně,
+# jinak by se WiFi heslo četlo z karty.
+for S in "$ROOT/qemu_raspi4.sh" "$ROOT/prepare-sd.sh"; do
+    N="$(basename "$S")"
+    [ -f "$S" ] || { bad "$N chybí, přeskočeno"; continue; }
+    grep -q -- '--exclude=/box-network.defaults' "$S" \
+        && ok "$N: rsync defaults výslovně vylučuje" \
+        || bad "$N: rsync box-network.defaults nevylučuje — heslo by prosákl na kartu"
+    grep -q 'prosaklo do image' "$S" \
+        && ok "$N: po rsync kontroluje, že neprosákl" \
+        || bad "$N: po rsync nehlídá, aby heslo neprosáklo"
+done
 
 echo "== 19) prázdné BOX_IP = DHCP (kavárna, kde neznáme subnet) =="
 F="$(gen dhcp B BOX_WIFI_SSID=kavarna BOX_IP=)"

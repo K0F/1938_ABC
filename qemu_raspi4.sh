@@ -243,9 +243,21 @@ prepare_box() {
     rm -f "$MOUNT_ROOT/usr/local/sbin/box-alsa-setup.sh" \
           "$MOUNT_ROOT/usr/local/sbin/box-sound-restart.sh"
     rm -f "$MOUNT_ROOT/var/lib/box-provisioned" "$MOUNT_ROOT/var/lib/boxa-provisioned"
-    # WiFi profil jiného boxu by držel box na staré síti / staré adrese
+    # WiFi profil jiného boxu by držel box na staré síti / staré adrese.
+    # Glob chytí i záložní profil (box-B-backup.nmconnection).
     rm -f "$MOUNT_ROOT"/etc/NetworkManager/system-connections/box-*.nmconnection
     echo "  staré boxové artefakty odstraněny"
+
+    # Autologin na tty1 se instaluje AZ tady — výše ho tenhle blok právě
+    # smazal jako artefakt předchozího boxu. Bez posunu pořadí by si skript
+    # smazal to, co před chvílí nainstaloval.
+    if [ "$CONSOLE_LOGIN" = 1 ]; then
+        install -d "$MOUNT_ROOT/etc/systemd/system/getty@tty1.service.d"
+        install -m 0644 "$SCRIPT_DIR/getty-tty1-autologin.conf" \
+            "$MOUNT_ROOT/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+        echo "  getty@tty1.service.d/autologin.conf -> autologin pi"
+        echo "  jen login shell: X relace se NEinstaluje, box B nemá tracker"
+    fi
 
     install -d "$MOUNT_ROOT/usr/local/sbin"
     install -m 0755 "$SCRIPT_DIR/box-provision.sh" "$MOUNT_ROOT/usr/local/sbin/box-provision.sh"
@@ -542,6 +554,9 @@ usage() {
     echo "  --wifi SSID          WiFi profil v NetworkManageru (wlan0)"
     echo "  --wifi-pass HESLO    WPA2 heslo; bez nej otevrena sit"
     echo "  --wifi-hidden        skryta WiFi sit"
+    echo "  --console-login      autologin na tty1 (login shell pi bez hesla)."
+    echo "                       Pro box B k ladeni u TV s klavesnici; X relace"
+    echo "                       se neinstaluje, box B nema binarku tracker."
     echo "  --audio-test         install + enable the oneshot that runs"
     echo "                       box-audio-test.sh and powers the machine off"
     echo
@@ -565,10 +580,12 @@ BOXIP=""
 WIFI_SSID=""
 WIFI_PASS=""
 WIFI_HIDDEN=0
+CONSOLE_LOGIN=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --audio)      AUDIO=1; shift ;;
         --audio-test) AUDIO_TEST=1; shift ;;
+        --console-login) CONSOLE_LOGIN=1; shift ;;
         --box)        BOX="${2:-}"; shift 2 ;;
         --ip)         BOXIP="${2:-}"; shift 2 ;;
         --wifi)       WIFI_SSID="${2:-}"; shift 2 ;;

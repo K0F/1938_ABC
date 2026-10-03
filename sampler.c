@@ -47,6 +47,11 @@
 // libopus — 22050 neumí).
 #define MIX_RATE 24000
 
+// systemctl vrací 5, když jednotku na tomhle boxu nenajde. Je to jiná chyba
+// než "restart se nepovedl" a v instalaci, kde má každá jednotka svůj box,
+// je to normální stav.
+#define EXIT_UNIT_NOT_FOUND 5
+
 struct Slot {
     uint32_t code;
     int channel;
@@ -56,9 +61,17 @@ struct Slot {
     // Slot s restartUnits != "" je akční: místo přehrání samplu spustí
     // `systemctl restart` na uvedených jednotkách. Zbytek je audio.
     std::string restartUnits;
+    // Akční slot navíc může mít @stopall: umlčí všechny hrající vrstvy,
+    // než se pustí restart. Tohle je ten "reset" tlačítka F.
+    int stopAll;
     // Od kdy se vrstva rozfádívá (0 = nehraje). Mix_Volume je na kanál,
     // takže každá vrstva má vlastní, nezávislý fade.
     uint64_t fadeStartUs;
+    // Umčení (@stopall) běží opačně — od hodnoty, na které vrstva zrovna
+    // je, dolů. Bez toho by Mix_HaltChannel vystřel prasknutí, slyšitelné
+    // v sále. 0 = nehraje/nefadeuje.
+    uint64_t fadeFromVol;
+    int fadingOut;
     // 1 = Mix_LoadWAV už proběhl (až to selhalo, ať se to při každém
     // stisku nezkoušelo znovu a neplavalo se to do journalu).
     int loadTried;
@@ -88,6 +101,9 @@ static int noAudio = 0;
 // zní, dokud ji někdo nevypne; stisk rozfádí od ticha, aby se pěkně
 // vkradla do současně znějících vrstev.
 static uint64_t fadeUs = 2000000ull;
+// Doba umčení všeho (@stopall). Krátká: je to tlačítko "zhasnout", ne
+// fade do jiné skladby, takže 300 ms — rychle, ale bez prasknutí v sále.
+static uint64_t stopFadeUs = 300000ull;
 // Líné načítání: vzorek se čte až při prvním stisku. Vrstev je v mapě
 // typicky víc, než se kdy hraje najednou, a načíst jich všechny znamená
 // držet v RAM stovky MB. --eager to vrací na startu všechny.
@@ -266,22 +282,68 @@ static void loadMap(const char* path) {
                     path, MAX_BUTTONS, code);
             continue;
         }
-        // Akční slot: "@restart unit1 unit2". Na rozdíl od audia nemá
-        // smysl cpát z cesty samples/ — jde o jednotky systemd.
+        // Akční slot: "@stopall" a/nebo "@restart unit1 unit2". Na rozdíl od
+        // audia nemá smysl cpát z cesty samples/ — jde o akce nad mixem a
+        // jednotkami systemd. Direktivy se v jednom slotu skládají, takže
+        // "@stopall @restart tracker.service" umlčí a pak restartuje.
         slots[n].restartUnits.clear();
-        if (k >= 8 && strncmp(name, "@restart", 8) == 0) {
+        slots[n].stopAll = 0;
+        // Akční slot poznáme podle toho, že jeho název začíná @. Ne podle
+        // toho, že obsahuje známou direktivu: překlep (@stopal) by se pak
+        // tich chápal jako název samplu a mapa by vypadala funkční, ale
+        // F by nedělal nic. Tady se na to zeptáme a pak vypíšeme chybu.
+        if (name[0] == '@') {
             if (!restartAllowed) {
                 fprintf(stderr,
-                        "Warning: map '%s' wants @restart, but "
-                        "--allow-restart was not given; code %lu is ignored\n",
+                        "Warning: map '%s' wants an action slot (@stopall/"
+                        "@restart), but --allow-restart was not given; "
+                        "code %lu is ignored\n",
                         path, code);
                 continue;
             }
             // "unit1 unit2" nebo "unit1,unit2" — obojí smí být.
-            std::string units = std::string(name + 8);
+            std::string units = std::string(name);
             for (size_t i = 0; i < units.size(); i++)
                 if (units[i] == ',') units[i] = ' ';
-            slots[n].restartUnits = units;
+            // Sloty v názvu rozsekat po mezerách. @stopall je samostatné
+            // slovo, @restart bere vše od sebe do konce.
+            size_t pos = 0;
+            while (pos < units.size()) {
+                while (pos < units.size() && units[pos] == ' ') pos++;
+                size_t end = pos;
+                while (end < units.size() && units[end] != ' ') end++;
+                if (end == pos) break;
+                std::string word = units.substr(pos, end - pos);
+                if (word == "@stopall") {
+                    slots[n].stopAll = 1;
+                } else if (word == "@restart") {
+                    std::string rest = units.substr(end);
+                    size_t b = rest.find_first_not_of(' ');
+                    slots[n].restartUnits =
+                        b == std::string::npos ? "" : rest.substr(b);
+                    // Zbytek patří jednotkám, ne dalším direktivám.
+                    break;
+                } else if (word[0] == '@') {
+                    // Samostatné @ slovo mimo seznam direktiv. Za @restart to
+                    // být nemůže — ten bere vše do konce — takže se to týká
+                    // jen @stopall nebo chybně opsané mapy.
+                    fprintf(stderr,
+                            "Warning: map '%s': unknown directive '%s' on "
+                            "code %lu (expected @stopall or @restart)\n",
+                            path, word.c_str(), code);
+                }
+                pos = end;
+            }
+            // Slot, jehož název začíná @, ale neobsahuje žádnou platnou
+            // direktivu (typicky překlep) — nehraje to vzorek, ale ani
+            // neudělá akci. Bez toho by tlačítko mlčelo, jako by nebylo.
+            if (!slots[n].stopAll && slots[n].restartUnits.empty()) {
+                fprintf(stderr,
+                        "Warning: map '%s': slot '%s' on code %lu is an action "
+                        "slot with no known directive; code %lu is ignored\n",
+                        path, name, code, code);
+                continue;
+            }
         }
 
         slots[n].code = (uint32_t)code;
@@ -289,6 +351,9 @@ static void loadMap(const char* path) {
         slots[n].file = name;
         slots[n].chunk = NULL;
         slots[n].lastUs = 0;
+        slots[n].fadeStartUs = 0;
+        slots[n].fadeFromVol = 0;
+        slots[n].fadingOut = 0;
         n++;
     }
     fclose(f);
@@ -379,6 +444,10 @@ static void learnCode(uint32_t code) {
     slots[numSlots].file = name;
     slots[numSlots].lastUs = 0;
     slots[numSlots].restartUnits.clear();
+    slots[numSlots].stopAll = 0;
+    slots[numSlots].fadeStartUs = 0;
+    slots[numSlots].fadeFromVol = 0;
+    slots[numSlots].fadingOut = 0;
     numSlots++;
     fprintf(stdout, "  zapsáno do %s (%d/%d)\n", mapPath, numSlots, MAX_BUTTONS);
     fflush(stdout);
@@ -442,6 +511,15 @@ static void doRestart(const std::string& units, int slotIdx) {
             if (WIFEXITED(status) && WEXITSTATUS(status) == 127) {
                 fprintf(stdout, "@restart %s: systemctl not found\n",
                         list[i].c_str());
+            } else if (WIFEXITED(status) && WEXITSTATUS(status) == EXIT_UNIT_NOT_FOUND) {
+                // Mapa je na obou boxech stejná a jednotky jsou rozdělené:
+                // tracker.service jen na A, sampler.service jen na B. Když F
+                // stiskneš na té špatné, systemctl nic nenajde — to není chyba,
+                // ten druhý box si to poslechl sám. Není to chyba ani tehdy,
+                // když je mapa špatně opsaná, proto bez ní tlak dál nedělá.
+                fprintf(stdout, "@restart %s: jednotka na tomhle boxu není "
+                                "(jednotka je na druhém boxu?)\n",
+                        list[i].c_str());
             } else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
                 fprintf(stdout, "@restart %s: rc=%d\n", list[i].c_str(),
                         WEXITSTATUS(status));
@@ -476,6 +554,34 @@ static void startLayer(int i) {
     Mix_Volume(slots[i].channel, fadeUs ? 0 : MIX_MAX_VOLUME);
     Mix_PlayChannel(slots[i].channel, slots[i].chunk, -1);
     slots[i].fadeStartUs = nowUs();
+    // Nový stisk zruší případné umčení (@stopall) — jinak by fadesTick
+    // dál ubíral hlasitost čerstvě spuštěné vrstvě.
+    slots[i].fadingOut = 0;
+    slots[i].fadeFromVol = 0;
+}
+
+// Umlčí všechny hrající vrstvy (@stopall). Mix_HaltChannel by je
+// usekl v půlce tónu a v sále to praskne, proto jim necháme dojet
+// krátký fade dolů (stopFadeUs) a umčí se až na nule. Vrací počet
+// skutečně ztlumených vrstev, aby se do journalu vešlo, co F zhaslo.
+static int stopAllLayers(void) {
+    if (!audioOk) return 0;
+    uint64_t t = nowUs();
+    int stopped = 0;
+    for (int i = 0; i < numSlots; i++) {
+        if (!Mix_Playing(slots[i].channel)) continue;
+        stopped++;
+        if (!stopFadeUs) {
+            Mix_HaltChannel(slots[i].channel);
+            slots[i].fadeStartUs = 0;
+            slots[i].fadingOut = 0;
+            continue;
+        }
+        slots[i].fadeFromVol = (uint64_t)Mix_Volume(slots[i].channel, -1);
+        slots[i].fadeStartUs = t;
+        slots[i].fadingOut = 1;
+    }
+    return stopped;
 }
 
 // Krátká lineární rampa na každém kanálu, který se právě rozfádívá.
@@ -489,9 +595,32 @@ static void fadesTick(void) {
         if (!slots[i].fadeStartUs) continue;              // tato vrstva zrovna nehraje
         if (!Mix_Playing(slots[i].channel)) {              // došla? (loops=-1, jen pro jistotu)
             slots[i].fadeStartUs = 0;
+            slots[i].fadingOut = 0;
             continue;
         }
         uint64_t el = t - slots[i].fadeStartUs;
+
+        // Umčení (@stopall): od hodnoty, na které vrstva byla, dolů.
+        if (slots[i].fadingOut) {
+            if (el >= stopFadeUs) {
+                Mix_Volume(slots[i].channel, 0);
+                Mix_HaltChannel(slots[i].channel);
+                // Potvrzení, že vrstva doopravdy došla do ticha. Na
+                // bezhlavém boxu je to jediná věc, podle čeho se v journalu
+                // pozná, že F zhasl všechno a ne jen spustil restart.
+                fprintf(stdout, "@stopall: S%02d (%s) ticho\n", i + 1,
+                        slots[i].file.c_str());
+                fflush(stdout);
+                slots[i].fadeStartUs = 0;
+                slots[i].fadingOut = 0;
+                continue;
+            }
+            uint64_t v = slots[i].fadeFromVol *
+                         (stopFadeUs - el) / stopFadeUs;
+            Mix_Volume(slots[i].channel, (int)v);
+            continue;
+        }
+
         if (el >= fadeUs) {
             Mix_Volume(slots[i].channel, MIX_MAX_VOLUME);  // dorazeno na konec
             slots[i].fadeStartUs = 0;
@@ -501,6 +630,13 @@ static void fadesTick(void) {
         int v = (int)((uint64_t)MIX_MAX_VOLUME * el / fadeUs);
         Mix_Volume(slots[i].channel, v);
     }
+}
+
+// Akční slot = nehraje vzorek. Buď něco umčuje (@stopall), nebo něco
+// restartuje (@restart), nebo obojí. Jedna podmínka na obou místech, kde
+// se to rozhoduje (dispatch a --eager), jinak se jedna věc zase rozsype.
+static bool isActionSlot(int i) {
+    return !slots[i].restartUnits.empty() || slots[i].stopAll;
 }
 
 static void onCode(uint32_t code) {
@@ -547,14 +683,24 @@ static void onCode(uint32_t code) {
             // vypisoval do journalu desítky řádků.
             slots[i].lastUs = t;
             pressCount++;
-            // Akční slot (@restart) nejprve, bez zvuku — přehrát sampl by
-            // tady nedával smysl a restart chvíli trvá.
-            if (!slots[i].restartUnits.empty()) {
-                fprintf(stdout, "code=%u -> @restart (%s, #%llu)\n",
-                        code, slots[i].restartUnits.c_str(),
-                        (unsigned long long)pressCount);
+            // Akční slot (@stopall / @restart) nejprve, bez zvuku — přehrát
+            // sampl by tady nedával smysl a restart chvíli trvá.
+            if (isActionSlot(i)) {
+                fprintf(stdout, "code=%u -> %s (S%02d, #%llu)\n", code,
+                        slots[i].stopAll ? "@stopall" : "@restart",
+                        i + 1, (unsigned long long)pressCount);
                 fflush(stdout);
-                doRestart(slots[i].restartUnits, i);
+                // Pořadí je důležité: nejdřív zhasnout, pak restartovat.
+                // Kdyby to bylo naopak, v sále by jednu až dvě sekundy
+                // hrálo všechno, co bylo rozfádované, a teprve pak to
+                // utichne — přesně v tom okamžiku, když se to spouští.
+                if (slots[i].stopAll) {
+                    int n = stopAllLayers();
+                    fprintf(stdout, "@stopall: %d vrstv(a) umlceno\n", n);
+                    fflush(stdout);
+                }
+                if (!slots[i].restartUnits.empty())
+                    doRestart(slots[i].restartUnits, i);
                 if (lcdEnabled) lcdStatusHit(i);
                 return;
             }
@@ -713,11 +859,15 @@ static void usage(const char* prog) {
         "                      window retriggers the sample several times per press)\n"
         "  --confirm N         in --listen, require the code N times in a row\n"
         "                      to print it (default: 1 = off; 3 filters noise)\n"
-        "  --allow-restart     honour @restart slots in the map (needs root;\n"
-        "                      off by default so --listen can't restart units)\n"
+        "  --allow-restart     honour action slots (@stopall/@restart) in the map\n"
+        "                      (needs root; off by default so --listen can't\n"
+        "                      silence samples or restart units)\n"
         "  --dry-run           with --allow-restart, print what would be run\n"
         "  --fade-ms N         fade-in time of a triggered layer (default: 2000).\n"
         "                      0 fades in instantly; layers loop until stopped\n"
+        "  --stop-fade-ms N    fade-out time for @stopall (default: 300). Short,\n"
+        "                      because it is a mute button; 0 cuts hard, which\n"
+        "                      clicks audibly\n"
         "  --eager            load every sample at start instead of on first\n"
         "                      press (costs RAM: all layers resident at once)\n"
         "  --no-audio          skip audio init; decode and act, but play nothing\n"
@@ -774,6 +924,10 @@ int main(int argc, char* argv[]) {
             int ms = std::atoi(argv[++i]);
             if (ms < 0) { fprintf(stderr, "Error: --fade-ms must be >= 0\n"); return -1; }
             fadeUs = (uint64_t)ms * 1000ull;
+        } else if (strcmp(argv[i], "--stop-fade-ms") == 0 && i + 1 < argc) {
+            int ms = std::atoi(argv[++i]);
+            if (ms < 0) { fprintf(stderr, "Error: --stop-fade-ms must be >= 0\n"); return -1; }
+            stopFadeUs = (uint64_t)ms * 1000ull;
         } else if (strcmp(argv[i], "--eager") == 0) {
             eagerLoad = 1;
         } else if (strcmp(argv[i], "--no-audio") == 0) {
@@ -826,12 +980,13 @@ int main(int argc, char* argv[]) {
     if (!listenMode)
         loadMap(map);
     if (!listenMode && !learnMode && !noAudio && eagerLoad) {
-        // Akční sloty (@restart) zvuk nemají, takže je přeskočit — jinak by
-        // se pokusil Mix_LoadWAV na "@restart tracker.service" a hlásil
-        // chybu na slot, který je v pořádku. Počítá se jen proti zvukovým.
+        // Akční sloty (@stopall/@restart) zvuk nemají, takže je přeskočit —
+        // jinak by se pokusil Mix_LoadWAV na "@stopall @restart
+        // tracker.service" a hlásil chybu na slot, který je v pořádku.
+        // Počítá se jen proti zvukovým.
         int loaded = 0, audio = 0;
         for (int i = 0; i < numSlots; i++) {
-            if (!slots[i].restartUnits.empty()) continue;
+            if (isActionSlot(i)) continue;
             audio++;
             if (loadSample(i)) loaded++;
         }

@@ -334,13 +334,16 @@ printf '%s\n' "$OUT" | grep -q 'sample: 2/2 loaded' \
 
 # Akční slot nemá zvuk, takže ho --eager nesmí zkusit načíst jako WAV.
 # Bez toho by to hlásilo "cannot load sample" na slot, který je v pořádku.
-MIXED="$(mktemp)"; printf '12200123, track1.wav\n99001122, @restart sampler.service\n' > "$MIXED"
+# Oba typy akčních slotů (@restart i @stopall samostatně) — podmínka je
+# jedna sdílená, jinak by se zase rozsypala jen na jednom z nich.
+MIXED="$(mktemp)"
+printf '12200123, track1.wav\n99001122, @restart sampler.service\n99001123, @stopall\n' > "$MIXED"
 OUT="$(smp --box b --lcd-addr off --allow-restart --eager --map "$MIXED" --simulate </dev/null 2>&1)"
 printf '%s\n' "$OUT" | grep -q 'sample: 1/1 loaded' \
-    && ok "--eager přeskočí @restart slot" \
-    || bad "--eager počítá @restart jako vzorek  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+    && ok "--eager přeskočí akční sloty" \
+    || bad "--eager počítá akční slot jako vzorek  [$(printf '%s' "$OUT" | tr '\n' '|')]"
 printf '%s\n' "$OUT" | grep -qi 'cannot load sample' \
-    && bad "--eager zkouší načíst @restart jako WAV" \
+    && bad "--eager zkouší načíst akční slot jako WAV" \
     || ok "--eager netýká akční slot"
 rm -f "$MIXED"
 
@@ -370,8 +373,130 @@ smp --box b --lcd-addr off --fade-ms -1 --map "$LAYERS" --simulate </dev/null >/
     && bad "--fade-ms -1 prošel" \
     || ok "--fade-ms -1 = chyba"
 
+# ── @stopall: tlačítko F umlčí všechny vrstvy ────────────────────────────
+#
+# F je jediné tlačítko, které nemá vzorek: umlčí, co hraje, a pak
+# restartuje. Tohle kryje pořadí (nejdřív ticho, pak restart), to že
+# bez --allow-restart slot vůbec neplatí, a to že se dá dostat zpět
+# stiskem uprostřed umčování.
+STOP="$(mktemp)"
+printf '12200123, track1.wav\n12200124, track2.wav\n5089457, @stopall @restart tracker.service sampler.service\n' > "$STOP"
+TYPED="$(mktemp)"
+# Překlep v direktivě, a to PŘED @stopall — kdyby byl až za @restart,
+# nikdo by ho nehlásil, protože ten bere vše do konce.
+printf '5089457, @stopal\n' > "$TYPED"
+
+# Pořadí je záměr: v sále musí zhasnout dřív, než se něco přestavuje.
+OUT="$(printf '5089457\n' | smp --box b --lcd-addr off --allow-restart --dry-run \
+        --no-audio --map "$STOP" --simulate 2>&1)"
+STOPLINE="$(printf '%s\n' "$OUT" | grep -n '@stopall' | head -1 | cut -d: -f1)"
+RSTLINE="$(printf '%s\n' "$OUT" | grep -n '@restart' | head -1 | cut -d: -f1)"
+[ -n "$STOPLINE" ] && [ -n "$RSTLINE" ] && [ "$STOPLINE" -lt "$RSTLINE" ] \
+    && ok "@stopall proběhne před restartem" \
+    || bad "pořadí je obrácené (stop=$STOPLINE restart=$RSTLINE)"
+
+# Oba směry v jednom slotu: mapa má @stopall i @restart zároveň.
+printf '%s\n' "$OUT" | grep -q '@restart tracker.service' \
+    && ok "@stopall a @restart v jednom slotu" \
+    || bad "@restart chybí vedle @stopall"
+printf '%s\n' "$OUT" | grep -q '@restart sampler.service' \
+    && ok "@restart zvládne víc jednotek" \
+    || bad "druhá jednotka vypadla"
+
+# Bez --allow-restaut to nesmí umlčet nikdo — jinak by jen poslechnutí
+# kódu vypnulo zvuk v sále.
+OUT="$(printf '5089457\n' | smp --box b --lcd-addr off --no-audio \
+        --map "$STOP" --simulate 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'not in map' \
+    && ok "bez --allow-restart slot neplatí" \
+    || bad "@stopal prošel bez --allow-restart  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+
+# Umčení musí dojít do ticha, ne jen začít. S reálným mixem (dummy driver)
+# se dá čekat na potvrzení "ticho" v logu.
+OUT="$( (printf '12200123\n12200124\n'; sleep 0.7; printf '5089457\n'; sleep 0.7) \
+        | SDL_AUDIODRIVER=dummy smp --box b --lcd-addr off --allow-restart \
+            --fade-ms 100 --stop-fade-ms 200 --map "$STOP" --simulate 2>&1 )"
+printf '%s\n' "$OUT" | grep -q '@stopall: 2 vrstv(a) umlceno' \
+    && ok "@stopall umlčí obě hrající vrstvy" \
+    || bad "@stopall neumlčil vše  [$(printf '%s\n' "$OUT" | tail -4 | tr '\n' '|')]"
+printf '%s\n' "$OUT" | grep -q '@stopall: S01 .* ticho' \
+    && ok "umčení dojede do ticha (S01)" \
+    || bad "S01 nedozněla do ticha"
+printf '%s\n' "$OUT" | grep -q '@stopall: S02 .* ticho' \
+    && ok "umčení dojede do ticha (S02)" \
+    || bad "S02 nedozněla do ticha"
+
+# Stisk uprostřed vlastního umčování: rozfádění muso umčení zrušit, jinak
+# by dotáhl fade a zhasl vrstvu, kterou člověk právě zapnul.
+OUT="$( (printf '12200123\n'; sleep 0.5; printf '5089457\n'; sleep 0.1; printf '12200123\n'; sleep 1.4) \
+        | SDL_AUDIODRIVER=dummy smp --box b --lcd-addr off --allow-restart \
+            --fade-ms 100 --stop-fade-ms 800 --debounce-ms 1 --map "$STOP" --simulate 2>&1 )"
+printf '%s\n' "$OUT" | grep -q 'code=12200123 -> track1.wav.*#3' \
+    && ok "stisk uprostřed umčování vrstvu znovu rozfádí" \
+    || bad "stisk uprostřed umčování prošel  [$(printf '%s\n' "$OUT" | tail -3 | tr '\n' '|')]"
+printf '%s\n' "$OUT" | grep -q '@stopall: S01 .* ticho' \
+    && bad "probíhající umčení zabilo nově spuštěnou vrstvu" \
+    || ok "umčení se stiskem zruší, vrstva hraje dál"
+
+smp --box b --lcd-addr off --stop-fade-ms -1 --map "$LAYERS" --simulate </dev/null >/dev/null 2>&1 \
+    && bad "--stop-fade-ms -1 prošel" \
+    || ok "--stop-fade-ms -1 = chyba"
+
+# Překlep v direktivě se nesmí projít tiše: mapa by vypadala funkční,
+# ale F by mlčel, jako by tlačítko nebylo. Slot musí spadnout z mapy
+# a říct to.
+OUT="$(printf '5089457\n' | smp --box b --lcd-addr off --allow-restart --no-audio \
+        --map "$TYPED" --simulate 2>&1)"
+printf '%s\n' "$OUT" | grep -qi "unknown directive" \
+    && ok "překlep v direktivě se hlásí" \
+    || bad "překlep prošel tiše  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+printf '%s\n' "$OUT" | grep -q 'not in map' \
+    && ok "slot s překlepem spadne z mapy" \
+    || bad "překlep vytvořil funkční slot  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+printf '%s\n' "$OUT" | grep -q 'map: 0 slot' \
+    && ok "mapa s překlepem nepočítá slot" \
+    || bad "slot s překlepem se počítá  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+rm -f "$TYPED"
+
+# Jednotka patřící druhému boxu (systemctl rc=5) není chyba — na A neexistuje
+# sampler.service, na B tracker.service. Kdyby to spadalo do "rc=1", člověk
+# by v journalu četl chybu při každém stisku F a netušil, že je všechno
+# v pořádku. doRestart je za root, takže tady potřebujeme falečného uživatele
+# v unshare -r a podvržený systemctl v PATH.
+if command -v unshare >/dev/null 2>&1 \
+        && unshare -r true >/dev/null 2>&1; then
+    FAKEBIN="$(mktemp -d)"
+    XBOX="$(mktemp)"
+    printf '5089457, @stopall @restart tracker.service sampler.service\n' > "$XBOX"
+    cat > "$FAKEBIN/systemctl" <<'SH'
+#!/bin/sh
+# Volá se jako: systemctl restart -- <jednotka>
+if [ "$3" = "tracker.service" ]; then exit 5; fi
+if [ "$3" = "sampler.service" ]; then echo "fake: restart $3"; exit 0; fi
+exit 1
+SH
+    chmod +x "$FAKEBIN/systemctl"
+    # unshare -r spustí čisté sh, takže si knihovny musí vzít s sebou jinak
+    # by sampler nenašel SDL2 z sysrootu. $SYS_LIBS přidává až smp().
+    OUT="$(printf '5089457\n' | unshare -r sh -c \
+            "PATH='$FAKEBIN':\"\$PATH\" \
+             LD_LIBRARY_PATH='${LD_LIBRARY_PATH:-}${LD_LIBRARY_PATH:+:}$SYS_LIBS' '$BIN' \
+             --box b --lcd-addr off --allow-restart --no-audio \
+             --map '$XBOX' --simulate" 2>&1)"
+    printf '%s\n' "$OUT" | grep -q '@restart tracker.service: jednotka na tomhle boxu není' \
+        && ok "rc=5 = jednotka na druhém boxu, ne chyba" \
+        || bad "rc=5 nerozpoznáno  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+    printf '%s\n' "$OUT" | grep -q 'fake: restart sampler.service' \
+        && ok "restart vlastní jednotky se pustí" \
+        || bad "vlastní jednotka se nerestartovala  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+    rm -rf "$FAKEBIN" "$XBOX"
+else
+    printf '    skip rc=5 test (unshare -r není dostupné)\n'
+fi
+rm -f "$STOP"
+
 # Chybějící vzorek se nesmí zkoušet znovu při každém stisku — bez debounce
-# by jeden stisk vypisoval do journalu desítkyřádků. mapa2.csv má oba kódy
+# by jeden stisk vypisoval do journalu desítky řádků. mapa2.csv má oba kódy
 # a $TMP/samples je prázdná, takže každý stisk je pokus o načtení.
 N="$(printf '12200123\n12200123\n' | smp --box b --lcd-addr off --debounce 0 \
         --map "$TMP/mapa2.csv" --samples-dir "$TMP/samples" --simulate 2>&1 \

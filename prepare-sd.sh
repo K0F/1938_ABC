@@ -1,7 +1,12 @@
 #!/bin/bash
 # prepare-sd.sh — offline prepare of a flashed Raspberry Pi OS SD card for a tracker box.
 #
-#   usage:  sudo ./prepare-sd.sh [DEVICE] [A|B]
+#   usage:  sudo ./prepare-sd.sh [DEVICE] [A|B] [--console-login]
+#
+#   --console-login  nainstaluje autologin na tty1 (login shell uživatele pi
+#                    bez hesla). Pro box B, kde je sampler headless: k přípravě
+#                    a ladění u TV s klávesnicí. X relace se NEinstaluje —
+#                    box B nemá binárku tracker (viz box-provision.sh).
 #
 #   A -> Tracker (webcam, headless): tracker.service, no X autostart
 #        (pro obraz na připojené TV až na boxu: sudo ./box-console.sh on)
@@ -24,8 +29,20 @@
 
 set -euo pipefail
 
+die() { echo "ERROR: $*" >&2; exit 1; }
+
 DEV="${1:-/dev/mmcblk0}"
 BOX="${2:-A}"
+# --console-login je až třetí poziční argument (případně mezi nimi), aby se
+# pořadí DEVICE BOX nepřepsalo.
+shift $(( $# >= 2 ? 2 : $# )) 2>/dev/null || true
+CONSOLE_LOGIN=0
+for a in "$@"; do
+    case "$a" in
+        --console-login) CONSOLE_LOGIN=1 ;;
+        *) die "unknown option: $a" ;;
+    esac
+done
 case "$BOX" in
     A|B) ;;
     C) echo "ERROR: Box C was removed — only A (tracker) or B (sampler) exists" >&2; exit 1 ;;
@@ -35,7 +52,6 @@ HOSTNAME="$BOX"
 USER="pi"
 PASS="raspberry"
 
-die() { echo "ERROR: $*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || die "Run with sudo"
 [ -b "$DEV" ] || die "$DEV is not a block device"
 
@@ -117,13 +133,23 @@ fi
 # NOTE: host-built binaries MUST NOT be copied. `sampler`/`tracker` are gitignored
 # but present in the working tree; rsync -a preserves their mtimes, so `make sampler`
 # on the Pi would report "up to date" and install the x86-64 host binary.
+# box-network.defaults je gitignorovaný, ale rsync -a ho bez výslovného
+# vyloučení přenese do image. WiFi heslo by pak leželo v /home/$USER/tracker,
+# čitelné uživatelem pi. Vzor (.example) v repu být smí.
 rsync -a --delete \
       --exclude=rom/ --exclude=.git/ \
       --exclude=/sampler --exclude=/tracker \
+      --exclude=/box-network.defaults \
       "$SCRIPT_DIR"/ "$ROOT/home/$USER/tracker/"
 chown -R 1000:1000 "$ROOT/home/$USER/tracker"
 if [ -e "$ROOT/home/$USER/tracker/sampler" ] || [ -e "$ROOT/home/$USER/tracker/tracker" ]; then
     die "host binary leaked into the image (rsync exclude broken)"
+fi
+# --exclude zabrání novému kopírování, ale starší image už v sobě ten soubor
+# mělo (rsync s --delete by ho sice uklidil, jen pro jistotu a aby to loudně
+# selhalo, kdyby se to změnilo).
+if [ -e "$ROOT/home/$USER/tracker/box-network.defaults" ]; then
+    die "WiFi heslo (box-network.defaults) prosaklo do image"
 fi
 echo "  source -> /home/$USER/tracker"
 
@@ -146,8 +172,20 @@ rm -f "$ROOT/etc/systemd/system/box-sound-restart.service" \
 rm -f "$ROOT/var/lib/box-provisioned" "$ROOT/var/lib/boxa-provisioned"
 echo "  removed stale autostart/provision/sampler/tracker files"
 
+# Autologin na tty1 se instaluje AZ tady — výše ho tenhle blok právě smazal
+# jako artefakt předchozího boxu. Bez posunu pořadí by si skript smazal to,
+# co před chvílí nainstaloval.
+if [ "$CONSOLE_LOGIN" = 1 ]; then
+    step "Autologin na tty1 (login shell bez hesla)"
+    install -d "$ROOT/etc/systemd/system/getty@tty1.service.d"
+    install -m 0644 "$SCRIPT_DIR/getty-tty1-autologin.conf" \
+        "$ROOT/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+    echo "  getty@tty1.service.d/autologin.conf -> autologin pi"
+    echo "  jen login shell: X relace se NEinstaluje, box B nemá tracker"
+fi
+
 step "Static IP + WiFi (NetworkManager keyfile)"
-ABC38_NET_ROOT="$ROOT" ABC38_NET_ROOT="$ROOT" ./box-network.sh "$BOX"
+ABC38_NET_ROOT="$ROOT" "$SCRIPT_DIR/box-network.sh" "$BOX"
 
 step "Headless autostart ($([ "$BOX" = A ] && echo 'tracker --headless' || echo "sampler --box $BOX"), systemd)"
 

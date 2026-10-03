@@ -237,9 +237,10 @@ make sampler
 | `--confirm N` | `1` (vypnuto) | V `--listen` vyžaduje N potvrzení kódu těsně po sobě, než se vypíše. Skutečné tlačítko vysílá opakovaně, šum občas vyplodí jeden rámec s unique id, který debounce nepotlačí — proto `--confirm 3` |
 | `--fade-ms N` | `2000` | Doba rozfádění vrstvy po stisku. Vrstva se rozjede z ticha, aby vkradla do toho, co už znějí. `0` = náběh okamžitý |
 | `--eager` | vypnuto | Načte všechny samply hned na startu místo až při prvním stisku. Stojí za to paměť — viz [Vrstvy](#vrstvy-fade-a-pamat) |
-| `--allow-restart` | vypnuto | Povolí akční sloty `@restart` v mapě (potřebuje root) |
+| `--stop-fade-ms N` | `300` | Doba umčení všeho na `@stopall`. Krátká, protože jde o tlačítko „zhasnout“. `0` usekne napočad, co v sále praskne |
+| `--allow-restart` | vypnuto | Povolí akční sloty `@stopall` a `@restart` v mapě (potřebuje root) |
 | `--dry-run` | — | Spolu s `--allow-restart` vypíše, co by se spustilo, ale neudělá to |
-| `--no-audio` | — | Přeskočí inicializaci zvuku; kódy se stále dekódují a akce vykonají, ale nic se nehraje. Na testování `@restart` boxem bez zvukové karty |
+| `--no-audio` | — | Přeskočí inicializaci zvuku; kódy se stále dekódují a akce vykonají, ale nic se nehraje. Na testování `@stopall`/`@restart` boxem bez zvukové karty |
 | `--rf-pin N` | `15` | BCM GPIO linka DATA přijímače (fyzický pin 33) |
 | `--listen` | — | Režim pouhého poslechu: vypíše každý detekovaný kód |
 | `--learn` | — | Interaktivní registrace tlačítek, zapisuje rovnou do mapy |
@@ -350,19 +351,35 @@ jinak přišel jeden zbytečný Opus s 11.6 minuty zvuku navíc.
 Do `map.csv` pak pište jména s `.wav`, jak je sampler hraje — stejně
 jako dřív, formát mapy se nemění.
 
-#### Speciální kláč: `@restart`
+#### Speciální kláč: `@stopall` a `@restart`
 
-Místo samplu může slot spustit `systemctl restart` na vybraných
-službách. Hodí se pro tlačítko, které má něco „resetovat“:
+Slot nemusí mít vzorek. Místo něj může řídit celý mix a služby — hodí se
+pro tlačítko, které má něco „resetovat“. Tlačítko F v `map.csv` dělá obojí:
 
 ```csv
-5089457, @restart tracker.service sampler.service
+5089457, @stopall @restart tracker.service sampler.service
 ```
 
-Jednotky odděl mezerou nebo čárkou. Bez `--allow-restart` se slot
-vynechá a kláč hlásí `not in map`, aby `--listen` nemohl omylem
-restartovat služby jen tím, že někdo poslouchá. `sampler.service` běží
-jako root a `--allow-restart` má zapnutý, takže tam to funguje.
+**`@stopall`** umlčí všechny právě hrající vrstvy. **Pořadí je záměrné a
+nemění se**: nejdřív zhasne, teprve pak se restartuje. Kdyby to bylo
+naopak, v sále by jednu až dvě sekundy hrálo všechno rozfádované a
+umlklo to až v okamžiku, kdy se to znovu spouští.
+
+**`@restart`** pustí `systemctl restart` na uvedených jednotkách;
+jednotky odděl mezerou nebo čárkou.
+
+Umčení není okamžité seknutí, ale krátký fade dolů (`--stop-fade-ms`,
+default 300 ms) — `Mix_HaltChannel` v půlce tónu v sále praskne. Vrstva
+začíná znovu od ticha, když během umčování zmáčkneš tlačítko, které ji
+rozjelo; rozfádění umčení zruší, jinak by dotáhlo a zhaslo právě
+zapnutou vrstvu.
+
+Bez `--allow-restart` se akční slot vynechá a kláč hlásí `not in map` —
+aby `--listen` nemohl omylem zhasnout zvuk jen tím, že někdo poslouchá.
+`@stopall` je pod stejným zámkem jako `@restart`, ačkoli je samotný
+mnohem méně nebezpečný: mapa je důvěryhodný vstup a obojí mění zvuk,
+který teď hraje. `sampler.service` běží jako root a `--allow-restart`
+má zapnutý, takže na boxu to funguje.
 
 Otestovat, aniž by se něco spustilo, lze přes `--dry-run`, na boxu bez
 zvukové karty i přes `--no-audio`:
@@ -370,6 +387,24 @@ zvukové karty i přes `--no-audio`:
 ```bash
 echo 5089457 | ./sampler --box b --no-audio --allow-restart --dry-run --simulate
 ```
+
+##### F na obou boxech
+V `map.csv` jsou obě jednotky, i když na každém boxu existuje jen jedna:
+`tracker.service` jen na A, `sampler.service` jen na B. Obě boxy slyší
+stejný vysílač, takže F umlčí a restartuje to, co je zrovna na něm —
+a na jednotku druhého boxu sampler jen vypíše, že tam není:
+
+```
+code=5089457 -> @stopall (S06, #3)
+@stopall: 2 vrstv(a) umlceno
+@stopall: S01 (Interactive_music_X-left-DRAMA.wav) ticho
+@stopall: S02 (Interactive_music_Y-up_WAR.wav) ticho
+code=5089457 -> @restart tracker.service
+@restart tracker.service: jednotka na tomhle boxu není (jednotka je na druhém boxu?)
+```
+
+Na bezhlavém boxu je právě tenhle zápis jediná věc, podle čeho se v
+journalu pozná, že F zhasl všechno, a ne že jen něco spustil.
 
 **Bezpečnost:** mapa je důvěryhodný vstup, ne data z boxu. Kdo může
 zapsat do `map.csv`, může nastartovat cokoliv, co je v mapě uvedeno.
@@ -400,9 +435,10 @@ sudo ./box-button-test.sh stop     # vrátí kartu a nastartuje tracker
 tail -f /home/pi/tracker/btn.log   # co se stisklo
 ```
 Režim není služba: běží jako transientní jednotka `box-button-test`, takže
-přežije zavření ssh relace a po `stop` po sobě nic nenechá. Kláč F (`@restart`)
-tu záměrně nefunguje — jde o systémovou akci a Box A má být jen na test
-tlačítek. Běží se s `--lcd-addr off`, protože A nemá displej.
+přežije zavření ssh relace a po `stop` po sobě nic nenechá. Kláč F tu
+záměrně nefunguje: tento režim zastavil `tracker.service`, aby uvolnil
+zvukovou kartu, a kdyby F přidal, zase ho nahodil a testovací sampler by
+zůstal bez karty. Běží se s `--lcd-addr off`, protože A nemá displej.
 
 Testy: `tests/test-box-button-test.sh` (31 případů nad falešnými příkazy, bez
 GPIO, zvuku a systemd).

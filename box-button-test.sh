@@ -137,12 +137,12 @@ Něco ho drží dál, nejvíc samotný tracker. Zkus:
 
     # --lcd-addr off: box A nemá I2C displej. --box b: sampler umí jen
     # b|c (A je v návrhu tracker) a je to jen nápis na LCD.
-    # Bez --allow-restart: kláč F je na boxu A nefunkční (viz README).
+    # Bez --allow-restart: kláč F je na boxu A nefunkční (viz README) —
+    # a to je tady dobře, protože tenhle režim záměrně ZASTAVIL tracker,
+    # aby uvolnil zvukovou kartu. Kdyby F přidal, F by ho zase nahodil
+    # a testovací sampler by se ocitl bez karty.
     # Transientní jednotka místo nohup/setsid: musí přežít zavření ssh
     # relace i sudo. Výstup jde do LOGu, aby šel číst i bez journalu.
-    # --lcd-addr off: box A nemá I2C displej. --box b: sampler umí jen
-    # b|c (A je v návrhu tracker) a je to jen nápis na LCD.
-    # Bez --allow-restart: kláč F je na boxu A nefunkční (viz README).
     # Log při startu přepisujeme, jinak se po několika pokusech v něm
     # hromadí startovní bannery a není poznat, který běží. (StandardOutput
     # =write: tu není, tenhle systemd umí jen append:/file:.)
