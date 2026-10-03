@@ -583,6 +583,21 @@ static int stopAllLayers(void) {
     }
     return stopped;
 }
+// Fade-out one playing layer (same as stopAllLayers but for a single slot).
+static void fadeOutLayer(int i) {
+    if (!audioOk) return;
+    uint64_t t = nowUs();
+    if (!Mix_Playing(slots[i].channel)) return;
+    if (!stopFadeUs) {
+        Mix_HaltChannel(slots[i].channel);
+        slots[i].fadeStartUs = 0;
+        slots[i].fadingOut = 0;
+        return;
+    }
+    slots[i].fadeFromVol = (uint64_t)Mix_Volume(slots[i].channel, -1);
+    slots[i].fadeStartUs = t;
+    slots[i].fadingOut = 1;
+}
 
 // Krátká lineární rampa na každém kanálu, který se právě rozfádívá.
 // Mix_Volume je per-kanál, takže vrstvy jedou nezávisle a i během fade
@@ -706,6 +721,17 @@ static void onCode(uint32_t code) {
             }
             // Každý stisk jde do journalu, i když nehraje — na bezhlavém boxu
             // je to jediné, podle čeho se pozná, že 433 MHz tlačítko funguje.
+            // Pokud už tato vrstva hraje, další stisk ji jen ztlumí (fadeout),
+            // místo aby se vzorek spustil znovu od začátku.
+            if (audioOk && Mix_Playing(slots[i].channel)) {
+                fadeOutLayer(i);
+                fprintf(stdout, "code=%u -> fadeout %s (S%02d, #%llu)\n",
+                        code, slots[i].file.c_str(), i + 1,
+                        (unsigned long long)pressCount);
+                fflush(stdout);
+                if (lcdEnabled) lcdStatusHit(i);
+                return;
+            }
             // Bez --eager se vzorek načítá tady, až když je opravdu potřeba.
             if (!loadSample(i)) {
                 fprintf(stdout, "code=%u -> %s (S%02d, #%llu) VZOREK NENACHRANY\n",
