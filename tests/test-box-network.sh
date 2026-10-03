@@ -193,6 +193,42 @@ else
     ok "qemu_raspi4.sh tu není, přeskočeno"
 fi
 
+echo "== 19) prázdné BOX_IP = DHCP (kavárna, kde neznáme subnet) =="
+F="$(gen dhcp B BOX_WIFI_SSID=kavarna BOX_IP=)"
+grep -q '^method=auto$'    "$F" && ok "method=auto"       || bad "prázdné BOX_IP nevyrobilo DHCP"
+grep -q '^addresses='     "$F" && bad "má statickou adresu" || ok "bez addresses="
+grep -q '^gateway='       "$F" && bad "má domácí gateway"  || ok "bez gateway= (DHCP si vezme svou)"
+
+echo "== 20) druhá síť bez BOX_WIFI2_IP = stejná adresa boxu, jinde než první =="
+F="$(gen net2 B BOX_WIFI_SSID=kavarna BOX_WIFI2_SSID=domacnost)"
+F2="${F%.nmconnection}-2.nmconnection"
+[ -f "$F2" ] && ok "druhý profil vznikl" || bad "druhý profil chybí"
+grep -q '^ssid=domacnost$'      "$F2" && ok "SSID druhé sítě"        || bad "SSID druhé sítě chybí"
+grep -q '^addresses=192\.168\.8\.103/24$' "$F2" && ok "adresa 192.168.8.103/24" || bad "druhá síť nemá adresu boxu"
+grep -q '^gateway=192\.168\.8\.1$' "$F2" && ok "gateway 192.168.8.1"    || bad "gateway chybí"
+rm -rf "$TMP/net2a"
+ABC38_NET_ROOT="$TMP/net2a" ABC38_NET_DEFAULTS= BOX_WIFI2_SSID=domacnost bash "$SCRIPT" A >/dev/null 2>&1
+grep -q '^addresses=192\.168\.8\.104/24$' \
+    "$TMP/net2a/etc/NetworkManager/system-connections/box-A-2.nmconnection" \
+    && ok "u A je to .104, ne adresa boxu B" || bad "A by si ve druhé síti vzalo adresu B"
+rm -rf "$TMP/net2dhcp"
+ABC38_NET_ROOT="$TMP/net2dhcp" ABC38_NET_DEFAULTS= BOX_WIFI2_SSID=hostap \
+    BOX_WIFI2_IP= bash "$SCRIPT" B >/dev/null 2>&1
+grep -q '^method=auto$' \
+    "$TMP/net2dhcp/etc/NetworkManager/system-connections/box-B-2.nmconnection" \
+    && ok "prázdné BOX_WIFI2_IP = DHCP" || bad "BOX_WIFI2_IP= nevyrobilo DHCP"
+
+echo "== 21) prázdné BOX_IP v defaults nepřepíše --ip z prostředí =="
+DEF2="$TMP/defaults-dhcp"
+printf 'BOX_WIFI_SSID=defaultniSit\nBOX_WIFI_PSK=heslo123\nBOX_IP=\n' > "$DEF2"
+rm -rf "$TMP/ovr2"
+ABC38_NET_ROOT="$TMP/ovr2" ABC38_NET_DEFAULTS="$DEF2" \
+    BOX_IP=10.0.0.50 bash "$SCRIPT" B >/dev/null 2>&1
+grep -q '^addresses=10\.0\.0\.50/24$' \
+    "$TMP/ovr2/etc/NetworkManager/system-connections/box-B.nmconnection" \
+    && ok "BOX_IP z prostředí má přednost" \
+    || bad "prázdné BOX_IP v defaults shodilo --ip na DHCP"
+
 echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

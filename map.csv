@@ -9,10 +9,10 @@
 # přehrávat v okruhu, dokud ji nevypne. Vrstvy se skládají — tlačítko B
 # nepřeruší A, jen přidá další. A-D jsou čtyři směry z jedné sady, proto
 # jsou X-ová dvojice vedle sebe (A, B) a Y-ová taky (C, D).
-3365153, Interactive_music_X-left-DRAMA.wav
-3478913, Interactive_music_X-right-INTIMACY.wav
-3387393, Interactive_music_Y-down_PEACE.wav
-3380993, Interactive_music_Y-up_WAR.wav
+3365153, Sokol.wav
+3478913, Teskno.wav
+3387393, GroTeskno.wav
+3380993, chybi_soubor.wav
 3382769, Teskno.wav
 # E dostal Teskno (83 s) — nejkratší ze zbytku, takže se v okruhu vrátí
 # nejdřív. Kdyby vadila opakovaná smyčka, je v gitu i Sokol (11.6 min),

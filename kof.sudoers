@@ -4,10 +4,10 @@
 #  - run the SD-card prep/burn scripts
 #
 # NOTE: the scripts must be invoked by ABSOLUTE path (e.g.
-#   sudo /home/kof/src/ABC_38/prepare-sd.sh /dev/mmcblk0 B
+#   sudo /home/kof/src/1938ABC/prepare-sd.sh /dev/mmcblk0 B
 # `sudo ./prepare-sd.sh` does not reliably match the rule below.
 #
 # SECURITY: these scripts live in a user-writable directory, so this rule is
 # equivalent to NOPASSWD ALL. Acceptable on a single-user build machine; do not
 # copy this file to a shared host.
-kof ALL=(root) NOPASSWD: /usr/bin/mount, /usr/bin/umount, /usr/bin/dd, /usr/bin/sync, /usr/bin/blockdev, /usr/bin/losetup, /usr/bin/eject, /usr/bin/systemctl, /home/kof/src/ABC_38/prepare-sd.sh, /home/kof/src/ABC_38/qemu_raspi4.sh
+kof ALL=(root) NOPASSWD: /usr/bin/mount, /usr/bin/umount, /usr/bin/dd, /usr/bin/sync, /usr/bin/blockdev, /usr/bin/losetup, /usr/bin/eject, /usr/bin/systemctl, /home/kof/src/1938ABC/prepare-sd.sh, /home/kof/src/1938ABC/qemu_raspi4.sh

@@ -14,3 +14,14 @@
 
 BOX_WIFI_SSID=HUAWEI-B310-C3A0
 BOX_WIFI_PSK=SEM-DOJDE-HESLO-WIFI
+
+# Druhá síť (domů/kavárna). Obě mají jiné SSID, takže NetworkManager připojí
+# tu, která je v dosahu; druhý profil se vypíše, když BOX_WIFI2_SSID je prázdné.
+# Adresa: prázdné BOX_IP = DHCP, neuvedené BOX_WIFI2_IP = adresa boxu
+# (192.168.8.103 pro B, .104 pro A) v síti druhého profilu.
+#
+#BOX_IP=
+#BOX_WIFI2_SSID=cafe
+#BOX_WIFI2_PSK=SEM-DOJDE-HESLO-KAVARNY
+#BOX_GATEWAY=192.168.8.1
+#BOX_DNS=192.168.8.1

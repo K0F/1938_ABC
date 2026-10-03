@@ -442,6 +442,18 @@ nmcli con show box-B && ip -4 addr show wlan0
 ```
 Výchozí: box B `192.168.8.103/24`, box A `192.168.8.104`, gateway i DNS `192.168.8.1`. Přepnout jde proměnnými `BOX_IP`, `BOX_PREFIX`, `BOX_GATEWAY`, `BOX_DNS`. Adresa `.102` patří notebooku, ze kterého se image připravuje — nedávat ji boxu.
 
+Prázdné `BOX_IP=` je jiné zadání než nedané: znamená DHCP (`method=auto`), takže se profil vejde i do cizí sítě, kde neznáme subnet. S tímhle zápisem jde mít v `box-network.defaults` obě sítě bez znalosti subnetu kavárny:
+
+```bash
+BOX_WIFI_SSID=cafe        # první profil: DHCP, adresu si vezme kavárna
+BOX_WIFI_PSK=...
+BOX_IP=
+BOX_WIFI2_SSID=HUAWEI-B310-C3A0   # druhý profil: statická adresa boxu
+BOX_WIFI2_PSK=...                 # (neuvedené BOX_WIFI2_IP = .103 B / .104 A)
+```
+
+Obě sítě mají jiné SSID, takže NetworkManager připojí tu, která je v dosahu — box nemusí nikdo přepínat. Druhý profil má vlastní `BOX_WIFI2_IP`, `BOX_WIFI2_GATEWAY` a `BOX_WIFI2_DNS`; když je `BOX_WIFI2_IP` prázdné, jede i druhá síť na DHCP.
+
 #### WiFi profil bez hesla na příkazce
 WiFi heslo do repa nepatří (GitHub je veřejný), takže ho `box-network.sh` umí číst z vedlejšího souboru `box-network.defaults`, který je v `.gitignore`:
 ```bash

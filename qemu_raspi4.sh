@@ -356,9 +356,18 @@ prepare() {
     fi
     echo "  Source synced to /home/$RPI_USER/tracker"
 
-    step "Installing alsa-utils (aplay, speaker-test)"
-    echo "  (guest v QEMU nemá síť, instalujeme přes chroot z hostu — chvíli to trvá)"
-    chroot_apt "$MOUNT_ROOT" alsa-utils
+    # alsa-utils (aplay, speaker-test) instalujeme přes chroot z hostu, protože
+    # guest v QEMU nemá síť. Když už v image jsou, přeskočíme: chroot navíc
+    # potřebuje binfmt pro aarch64 (qemu-user-static na hostu), který nemusí být
+    # nainstalovaný, a apt by stejně skončil u "already the newest version".
+    if [ -x "$MOUNT_ROOT/usr/bin/aplay" ] && [ -x "$MOUNT_ROOT/usr/bin/speaker-test" ]; then
+        step "alsa-utils (aplay, speaker-test)"
+        echo "  Už v image jsou — chroot přeskočen (binfmt pro aarch64 není potřeba)"
+    else
+        step "Installing alsa-utils (aplay, speaker-test)"
+        echo "  (guest v QEMU nemá síť, instalujeme přes chroot z hostu — chvíli to trvá)"
+        chroot_apt "$MOUNT_ROOT" alsa-utils
+    fi
 
     prepare_box
 
