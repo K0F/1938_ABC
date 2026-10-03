@@ -31,15 +31,8 @@
 # případnému 6. tlačítku. Šestého kódu zatím neznáme.
 #
 # F (speciální klíč): vypadá jako ostatní, ale vysílá jiný kód (id 318091).
-# Místo samplu nejdřív umlčí všechny hrající vrstvy (@stopall) a pak
-# restartuje služby, které hlídají signál (@restart) — pořadí je záměrné,
-# v sále se zhasne dřív, než se něco začne přestavovat. Akční slot je
-# neaktivní, dokud sampler nedostane --allow-restart (a root); v
-# sampler.service je zapnutý. Bez něj mapa slot vynechá a tlačítko
+# Místo samplu umlčí všechny hrající vrstvy (@stopall). Služby běží dál.
+# Akční slot je neaktivní, dokud sampler nedostane --allow-restart (a root);
+# v sampler.service je zapnutý. Bez něj mapa slot vynechá a tlačítko
 # hlásí "not in map".
-#
-# Jednotky jsou vypsané obě, i když na každém boxu existuje jen jedna:
-# tracker.service jen na A, sampler.service jen na B. Obě boxy slyší
-# stejný vysílač, takže F umlčí a restartuje to, co je na něm —
-# sampler si na jednotku druhého boxu jen vypíše, že tam není.
-5089457, @stopall @restart tracker.service sampler.service
+5089457, @stopall
