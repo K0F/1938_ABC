@@ -203,7 +203,7 @@ QEMU má dvě omezení, která nejsou chyba testu: neemuluje `bcm2835` audio kod
 Sampler funguje jako samostatná bezdrátová spouštěcí jednotka. Využívá 433 MHz RF přijímač pro příjem signálů z 10 bezdrátových tlačítek (Solight 1L67T, protokol EV1527) a přehrává jednorázové zvukové samply přes `SDL2_mixer`. Také může volitelně aktualizovat stav úderů na 16×2 I2C displeji.
 
 - RF kódy jsou dekódovány nativně na **GPIO15** (fyzický pin 33) pomocí interního EV1527 dekodéru přes `libgpiod` (není potřeba rc-switch/wiringPi).
-- Samply jsou jednorázové a spouští se znovu při každém stisknutí.
+- Samply jsou jednorázové: spouští se při každém stisknutí, přehrají se jednou a samy se zastaví.
 
 > **Než připojíš tlačítko:** pin CS (4) SRX882S patří na 3V3. Volně ponechaný
 > nebo na GND uspí modul — DATA pak trvale nízká, na GPIO žádné hrany a
@@ -278,12 +278,13 @@ Umístěte příslušné soubory (`sample_b_*.wav`) do složky `samples/`.
 
 #### Vrstvy, fade a paměť
 
-Každý slot v mapě je **vrstva**: stisk ji rozfádí od ticha a nechá
-přehrávat v okruhu, dokud ji nevypnete. Vrstvy se skládají — stisk
+Každý slot v mapě je **vrstva**: stisk ji rozfádí od ticha a vzorek se
+přehraje **jednou** — pak se sám zastaví. Vrstvy se skládají — stisk
 tlačítka B nepřeruší vrstvu A, jen přidá další. Každá má vlastní
 `--fade-ms` průběh na vlastním kanálu, takže pět tlačítek dělá
-skladbu, která se mění podle toho, co právě zmáčknete. Každý stisk
-dané vrstvy ji rozfádí znovu od začátku.
+skladbu, která se mění podle toho, co právě zmáčknete. Stisk tlačítka,
+jehož vzorek ještě hraje, vrstvu ztlumí (fade-out); tlačítko F pak
+zastaví všechno, co právě hraje (`@stopall`).
 
 Kanálů je 20 (`MAX_BUTTONS`), reálně se používá tolik, kolik je slotů
 v mapě.
@@ -354,19 +355,18 @@ jako dřív, formát mapy se nemění.
 #### Speciální kláč: `@stopall` a `@restart`
 
 Slot nemusí mít vzorek. Místo něj může řídit celý mix a služby — hodí se
-pro tlačítko, které má něco „resetovat“. Tlačítko F v `map.csv` dělá obojí:
+pro tlačítko, které má něco „resetovat“. Tlačítko F v `map.csv` zastaví
+všechno, co právě hraje:
 
 ```csv
-5089457, @stopall @restart tracker.service sampler.service
+5089457, @stopall
 ```
 
-**`@stopall`** umlčí všechny právě hrající vrstvy. **Pořadí je záměrné a
-nemění se**: nejdřív zhasne, teprve pak se restartuje. Kdyby to bylo
-naopak, v sále by jednu až dvě sekundy hrálo všechno rozfádované a
-umlklo to až v okamžiku, kdy se to znovu spouští.
+**`@stopall`** umlčí všechny právě hrající vrstvy.
 
 **`@restart`** pustí `systemctl restart` na uvedených jednotkách;
-jednotky odděl mezerou nebo čárkou.
+jednotky odděl mezerou nebo čárkou. V aktuální mapě F `@restart`
+nemá — jen zastavuje.
 
 Umčení není okamžité seknutí, ale krátký fade dolů (`--stop-fade-ms`,
 default 300 ms) — `Mix_HaltChannel` v půlce tónu v sále praskne. Vrstva
@@ -389,18 +389,14 @@ echo 5089457 | ./sampler --box b --no-audio --allow-restart --dry-run --simulate
 ```
 
 ##### F na obou boxech
-V `map.csv` jsou obě jednotky, i když na každém boxu existuje jen jedna:
-`tracker.service` jen na A, `sampler.service` jen na B. Obě boxy slyší
-stejný vysílač, takže F umlčí a restartuje to, co je zrovna na něm —
-a na jednotku druhého boxu sampler jen vypíše, že tam není:
+Obě boxy slyší stejný vysílač, takže F zhasne to, co je zrovna na nich —
+každý box má svůj mix a svoje vrstvy:
 
 ```
-code=5089457 -> @stopall (S06, #3)
+code=5089457 -> @stopall (S11, #3)
 @stopall: 2 vrstv(a) umlceno
-@stopall: S01 (Interactive_music_X-left-DRAMA.wav) ticho
-@stopall: S02 (Interactive_music_Y-up_WAR.wav) ticho
-code=5089457 -> @restart tracker.service
-@restart tracker.service: jednotka na tomhle boxu není (jednotka je na druhém boxu?)
+@stopall: S01 (Kuchyn_A.wav) ticho
+@stopall: S02 (Kuchyn_B.wav) ticho
 ```
 
 Na bezhlavém boxu je právě tenhle zápis jediná věc, podle čeho se v

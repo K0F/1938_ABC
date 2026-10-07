@@ -97,9 +97,9 @@ static int audioOk = 0;
 // restartovalo.
 static int dryRun = 0;
 static int noAudio = 0;
-// Doba rozfádění vrstvy po stisku. Vrstva se prehraje v loopu, takže pak
-// zní, dokud ji někdo nevypne; stisk rozfádí od ticha, aby se pěkně
-// vkradla do současně znějících vrstev.
+// Doba rozfádění vrstvy po stisku. Vrstva se přehraje jednou a sama
+// zastaví; stisk rozfádí od ticha, aby se pěkně vkradla do současně
+// znějících vrstev.
 static uint64_t fadeUs = 2000000ull;
 // Doba umčení všeho (@stopall). Krátká: je to tlačítko "zhasnout", ne
 // fade do jiné skladby, takže 300 ms — rychle, ale bez prasknutí v sále.
@@ -546,13 +546,14 @@ static bool loadSample(int i) {
 }
 
 // Rozjede vrstvu daného slotu a začne ji rozfádívat. Mix_PlayChannel s
-// loops = -1 hraje v okruhu, takže vrstva zní, dokud ji někdo nevypne —
-// stisk dalšího tlačítka ji neodpojí, jen přidá další.
+// loops = 0 přehraje vzorek jednou a sám se zastaví — jednorázově, ne
+// v okruhu. Stisk dalšího tlačítka vrstvu neodpojí, jen přidá další;
+// stejný stisk uprostřed přehrávání ji ztlumí (viz onCode).
 static void startLayer(int i) {
     Mix_HaltChannel(slots[i].channel);
     // 0 = potichu, pak to odtud odtiká fadesTick().
     Mix_Volume(slots[i].channel, fadeUs ? 0 : MIX_MAX_VOLUME);
-    Mix_PlayChannel(slots[i].channel, slots[i].chunk, -1);
+    Mix_PlayChannel(slots[i].channel, slots[i].chunk, 0);
     slots[i].fadeStartUs = nowUs();
     // Nový stisk zruší případné umčení (@stopall) — jinak by fadesTick
     // dál ubíral hlasitost čerstvě spuštěné vrstvě.
@@ -608,7 +609,7 @@ static void fadesTick(void) {
     uint64_t t = nowUs();
     for (int i = 0; i < numSlots; i++) {
         if (!slots[i].fadeStartUs) continue;              // tato vrstva zrovna nehraje
-        if (!Mix_Playing(slots[i].channel)) {              // došla? (loops=-1, jen pro jistotu)
+        if (!Mix_Playing(slots[i].channel)) {              // došla? (one-shot, jen pro jistotu)
             slots[i].fadeStartUs = 0;
             slots[i].fadingOut = 0;
             continue;
@@ -722,8 +723,12 @@ static void onCode(uint32_t code) {
             // Každý stisk jde do journalu, i když nehraje — na bezhlavém boxu
             // je to jediné, podle čeho se pozná, že 433 MHz tlačítko funguje.
             // Pokud už tato vrstva hraje, další stisk ji jen ztlumí (fadeout),
-            // místo aby se vzorek spustil znovu od začátku.
-            if (audioOk && Mix_Playing(slots[i].channel)) {
+            // místo aby se vzorek spustil znovu od začátku. Výjimka je vrstva,
+            // kterou právě zhasíná fade-out (@stopall, nebo předchozí stisk):
+            // tam by fade dotáhl a zhasl i právě zapnutou vrstvu, proto se
+            // stiskem zruší a vzorek se rozjede znovu (startLayer vynuluje
+            // fadingOut).
+            if (audioOk && Mix_Playing(slots[i].channel) && !slots[i].fadingOut) {
                 fadeOutLayer(i);
                 fprintf(stdout, "code=%u -> fadeout %s (S%02d, #%llu)\n",
                         code, slots[i].file.c_str(), i + 1,
@@ -749,7 +754,7 @@ static void onCode(uint32_t code) {
                 return;
             }
             startLayer(i);
-            fprintf(stdout, "code=%u -> %s (S%02d, #%llu) fade %llums, loop\n", code,
+            fprintf(stdout, "code=%u -> %s (S%02d, #%llu) fade %llums, one-shot\n", code,
                     slots[i].file.c_str(), i + 1,
                     (unsigned long long)pressCount,
                     (unsigned long long)(fadeUs / 1000ull));
@@ -890,7 +895,7 @@ static void usage(const char* prog) {
         "                      silence samples or restart units)\n"
         "  --dry-run           with --allow-restart, print what would be run\n"
         "  --fade-ms N         fade-in time of a triggered layer (default: 2000).\n"
-        "                      0 fades in instantly; layers loop until stopped\n"
+        "                      0 fades in instantly; samples play once and stop\n"
         "  --stop-fade-ms N    fade-out time for @stopall (default: 300). Short,\n"
         "                      because it is a mute button; 0 cuts hard, which\n"
         "                      clicks audibly\n"

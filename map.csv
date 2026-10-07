@@ -2,43 +2,25 @@
 # Odečteno z reálného SRX882S na GPIO15 (box A, sampler --listen
 # --debounce-ms 5000 --confirm 3), 2026-09-29.
 # Kódy A-E jsou tlačítka (A=3365153, B=3478913, C=3387393, D=3380993,
-# E=3382769). F je speciální klíč: vypadá jako ostatní, ale vysílá jiný
-# kód — id 318091, mimo rodinu A-E (210322-217432).
+# E=3382769). Sampler čte jen WAV (opus převádí samples-decode.sh,
+# `make samples`).
 #
-# Každý slot je vrstva: stisk ji rozfádí od ticha (--fade-ms) a nechá
-# přehrávat v okruhu, dokud ji nevypne. Vrstvy se skládají — tlačítko B
-# nepřeruší A, jen přidá další. A-D jsou čtyři směry z jedné sady, proto
-# jsou X-ová dvojice vedle sebe (A, B) a Y-ová taky (C, D).
-3365153, Sokol.wav
-3478913, Teskno.wav
-3387393, GroTeskno.wav
-3380993, chybi_soubor.wav
-3382769, Teskno.wav
-1002161, track1.wav
-1269233, track2.wav
-1124401, track3.wav
-1274993, track4.wav
-979281, track1.wav
+# Každý slot je vrstva: stisk ji rozfádí od ticha (--fade-ms), vzorek se
+# přehraje jednou a sám se zastaví. Vrstvy se skládají — tlačítko B
+# nepřeruší A, jen přidá další.
+3365153, Kuchyn_A.wav
+3478913, Kuchyn_B.wav
+3387393, Kuchyn_C.wav
+3380993, Kuchyn_D.wav
+3382769, Kuchyn_E.wav
+1002161, Sokol.wav
+1269233, Sokol_B.wav
+1124401, Sokol_C.wav
+1274993, Sokol_D.wav
+979281, Sokol_E.wav
 
-# E dostal Teskno (83 s) — nejkratší ze zbytku, takže se v okruhu vrátí
-# nejdřív. Kdyby vadila opakovaná smyčka, je v gitu i Sokol (11.6 min),
-# Gro Teskno (2.8 min) a Sokol(2).
-#
-# V samples/ jsou tyhle samply uložené jako samples/*.opus (mono 24 kHz,
-# 32 kbit/s); tady se píší .wav, protože sampler čte jen WAV. WAV
-# vyrobí samples-decode.sh (přes `make samples`) a prepare-sd.sh ho
-# pustí ještě před rsyncem do SD karty, takže na boxu ffmpeg není.
-# Bez nich sampler při startu vypíše "cannot load sample" a tlačítko
-# skončí na "VZOREK NENACHRANY".
-#
-# V gitu leží i samply bez tlačítka: Sokol.wav, Gro Teskno.wav a
-# Sokol(2).wav. Sokol(2) je prokazatelně prvních 20.7 s ze Sokolu
-# (shodné bajty PCM), tedy výřez, ne jiná skladba — zůstává jen kvůli
-# případnému 6. tlačítku. Šestého kódu zatím neznáme.
-#
-# F (speciální klíč): vypadá jako ostatní, ale vysílá jiný kód (id 318091).
-# Místo samplu umlčí všechny hrající vrstvy (@stopall). Služby běží dál.
-# Akční slot je neaktivní, dokud sampler nedostane --allow-restart (a root);
-# v sampler.service je zapnutý. Bez něj mapa slot vynechá a tlačítko
-# hlásí "not in map".
+# F (speciální klíč, jiný kód: id 318091): místo samplu umlčí všechny
+# hrající vrstvy (@stopall). Služby běží dál. Slot je neaktivní bez
+# --allow-restart (a root) — v sampler.service je zapnutý, bez něj
+# tlačítko hlásí "not in map".
 5089457, @stopall

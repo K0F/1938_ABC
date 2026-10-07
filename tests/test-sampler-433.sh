@@ -312,8 +312,9 @@ else
 fi
 
 echo
-echo "== 9) vrstvy: líné načítání, loop a nezávislost kanálů =="
-# Vrstva se po stisku rozfádí a hraje v okruhu, ne jednou. Používá se
+echo "== 9) vrstvy: líné načítání, one-shot a nezávislost kanálů =="
+# Vrstva se po stisku rozfádí a přehraje se jednou — pak se sama zastaví,
+# ne hraje v okruhu. Používá se
 # track1-4.wav, což jsou jediné WAV v repu (2 s, mono) — test tak nemusí
 # generovat žádný fixture a funguje i v čistém checkoutu.
 LAYERS="$TMP/layers.csv"
@@ -356,18 +357,28 @@ OUT="$(printf '12200123\n12200124\n' | smp --box b --lcd-addr off --fade-ms 10 \
 printf '%s\n' "$OUT" | grep -q 'layers still playing: 2' \
     && ok "dvě vrstvy hrají současně, druhá druhou neutne" \
     || bad "vrstvy se navzájem ruší  [$(printf '%s' "$OUT" | tr '\n' '|')]"
-printf '%s\n' "$OUT" | grep -q 'code=12200123 -> track1.wav.*loop' \
-    && ok "vrstva hraje v okruhu, ne jednou" \
-    || bad "vrstva nehlásí loop  [$(printf '%s' "$OUT" | tr '\n' '|')]"
+printf '%s\n' "$OUT" | grep -q 'code=12200123 -> track1.wav.*one-shot' \
+    && ok "vrstva hraje jednou (one-shot), ne v okruhu" \
+    || bad "vrstva nehlásí one-shot  [$(printf '%s' "$OUT" | tr '\n' '|')]"
 
 OUT="$(smp --box b --lcd-addr off --fade-ms 1500 --map "$LAYERS" --simulate </dev/null 2>&1)"
 printf '%s\n' "$OUT" | grep -q 'fade=1500ms' \
     && ok "--fade-ms se propíše do hlavičky" \
     || bad "--fade-ms v hlavičce chybí  [$(printf '%s' "$OUT" | tr '\n' '|')]"
 printf '12200123\n' | smp --box b --lcd-addr off --fade-ms 1500 \
-    --map "$LAYERS" --simulate 2>&1 | grep -q 'fade 1500ms, loop' \
+    --map "$LAYERS" --simulate 2>&1 | grep -q 'fade 1500ms, one-shot' \
     && ok "stisk hlásí délku fade" \
     || bad "stisk nehlásí délku fade"
+
+# Jednorázovost: vzorek (track1 = 2 s) se přehraje jednou a sám se
+# zastaví, bez dalšího stisku a bez @stopall. Trubka zůstává otevřená
+# (sleep drží stdin), takže sampler skončí až po dohrání a jeho závěrečný
+# výpis "layers still playing" nesmí obsahovat žádnou vrstvu.
+OUT="$( (printf '12200123\n'; sleep 2.6) | SDL_AUDIODRIVER=dummy \
+        smp --box b --lcd-addr off --fade-ms 10 --map "$LAYERS" --simulate 2>&1)"
+printf '%s\n' "$OUT" | grep -q 'layers still playing' \
+    && bad "vzorek se po dohrání nezastavil  [$(printf '%s\n' "$OUT" | tr '\n' '|')]" \
+    || ok "vzorek se přehrál jednou a sám zastavil"
 
 smp --box b --lcd-addr off --fade-ms -1 --map "$LAYERS" --simulate </dev/null >/dev/null 2>&1 \
     && bad "--fade-ms -1 prošel" \
@@ -379,6 +390,18 @@ smp --box b --lcd-addr off --fade-ms -1 --map "$LAYERS" --simulate </dev/null >/
 # restartuje. Tohle kryje pořadí (nejdřív ticho, pak restart), to že
 # bez --allow-restart slot vůbec neplatí, a to že se dá dostat zpět
 # stiskem uprostřed umčování.
+
+# Nejdřív konfigurace v repu: F (5089457) musí být v map.csv poslední
+# položkou a musí mít @stopall — "poslední tlačítko v configu zastaví
+# všechno". Komentáře a prázdné řádky se nepočítají.
+FENTRY="$(grep -v '^#' "$ROOT/map.csv" | grep -v '^[[:space:]]*$' | tail -1)"
+printf '%s' "$FENTRY" | grep -q '^5089457,.*@stopall' \
+    && ok "map.csv: poslední položka je F (5089457) s @stopall" \
+    || bad "map.csv: poslední položka není F s @stopall  [$FENTRY]"
+grep -v '^#' "$ROOT/map.csv" | grep -v '^[[:space:]]*$' | grep -q '@restart' \
+    && bad "map.csv: F pořád restartuje služby, má jen zastavit" \
+    || ok "map.csv: F jen zastavuje, nerestartuje"
+
 STOP="$(mktemp)"
 printf '12200123, track1.wav\n12200124, track2.wav\n5089457, @stopall @restart tracker.service sampler.service\n' > "$STOP"
 TYPED="$(mktemp)"

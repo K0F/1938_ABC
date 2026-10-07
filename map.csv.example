@@ -7,10 +7,10 @@
 # - '#' starts a comment
 #
 # Každý slot je VRSTVA: stisk ji rozfádí od ticha (--fade-ms, default
-# 2000 ms) a nechá přehrávat v okruhu, dokud ji nevypne. Vrstvy se
+# 2000 ms) a vzorek se přehraje jednou, pak se sám zastaví. Vrstvy se
 # skládají — stisk tlačítka B nepřeruší vrstvu A, jen přidá další, tak
-#že z pěti tlačítek vzniká proměnlivá skladba. Každý stisk dané vrstvy
-# ji rozfádí znovu od začátku.
+# že z pěti tlačítek vzniká proměnlivá skladba. Stisk tlačítka, jehož
+# vzorek ještě hraje, vrstvu ztlumí (fade-out).
 #
 # Jméno v mapě musí být to, co sampler načítá: WAV v samples/.
 # samples/*.opus se na WAV převádí skriptem samples-decode.sh
