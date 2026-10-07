@@ -16,10 +16,12 @@ Feature ideas and planned work for the tracker.
       (příp. 3,5 mm ↔ 2× RCA), viz `HW.md` §5.3.
 - [ ] **Dokončit zesilovač v Boxu B** — CA-3110S + interní reproduktor, stejné
       zapojení jako Box A.
-- [ ] **Zapojit přijímač v Boxu B** — SRX882S 433 MHz na GPIO (viz `docs/SCH.md`),
+- [x] **Zapojit přijímač v Boxu B** — SRX882S 433 MHz na GPIO (viz `docs/SCH.md`),
       VCC/GND/Data proti pinům RPi, anténa drát cca λ/4. Bez přijímače tlačítka
-      neslyší sampler.
-- [ ] **Vyzkoušet asociaci tlačítek u B** — párování Solight 1L67T probíhá na
+      neslyší sampler. Ověřeno: kódy chodí do journalu (`code=... -> file.wav`).
+- [ ] **Namapovat kód `11183491`** — v journalu boxu B se opakovaně objevuje
+      `code=11183491 not in map`, tlačítko hraje nic. Přidat do `map.csv`.
+- [x] **Vyzkoušet asociaci tlačítek u B** — párování Solight 1L67T probíhá na
       samotném tlačítku (learning-code EV1527, držet PAIR na ovladači), kódy se pak
       namapují na samply. Postup: `sudo ./sampler --box b --listen` vypíše kód
       každého stisku, z nich se sestaví `mapa.csv` (kód,vzorek). Bez `mapa.csv`
@@ -63,6 +65,16 @@ Feature ideas and planned work for the tracker.
 
 ## Done
 
+- [x] **Box B dokončen (2026-10-07)** — one-shot nasazení: repo `1dada3f`
+      (vzorek se přehraje jednou a sám se zastaví, `@stopall` i tisk během
+      fade-outu restartuje vrstvu, 59/59 testů `tests/test-sampler-433.sh`).
+      Na boxu B (192.168.1.105): `~/1938_ABC` = git checkout + build přímo
+      na Pi, binárka nainstalovaná do `/usr/local/bin/sampler`, vzorek
+      všech 10 WAV md5-ověřen proti laptopu. `sampler.service` enabled,
+      `WorkingDirectory=/home/pi/1938_ABC` (opraveno z `/home/pi/tracker`,
+      který je obsolete a smazán — 4 staré soubory přesunuty do
+      `~/1938_ABC/samples/`). Ověřeno rebootem: služba se sama zvedne,
+      běží latest kód, journal `fade 2000ms, one-shot`.
 - [x] v0.5.1 — HDMI konzole pro Box A: autologin na `tty1` + okno trackeru na
       celou TV (`box-console.sh on|off|status`, `box-console.xinit`,
       `getty-tty1-autologin.conf`). Snímek 640x480 se v okně 1920x1080 vejde
