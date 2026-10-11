@@ -18,6 +18,19 @@
 1124401, Sokol_C.wav
 1274993, Sokol_D.wav
 979281, Sokol_E.wav
+#
+# 9 nových tlačítek (Solight) registrováno 2026-10-11 z boxu A, GPIO15
+# (`sampler --learn`), ověřeno listenem `--confirm 3`: každý kód ≥3
+# dekódování. Výchozí názvy — nahraď skutečnými WAV ze samples/ dle potřeby.
+3458897, sample_b_11.wav
+3526481, sample_b_12.wav
+3447841, sample_b_13.wav
+3458577, sample_b_14.wav
+3449809, sample_b_15.wav
+3452049, sample_b_16.wav
+3451937, sample_b_17.wav
+3447665, sample_b_18.wav
+3458721, sample_b_19.wav
 
 # F (speciální klíč, jiný kód: id 318091): místo samplu umlčí všechny
 # hrající vrstvy (@stopall). Služby běží dál. Slot je neaktivní bez
