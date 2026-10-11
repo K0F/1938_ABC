@@ -10,12 +10,14 @@
 #undef GRAY
 #endif
 #include <opencv2/tracking.hpp>
+#include <opencv2/video.hpp>
 #include "raylib.h"
 #include "rlgl.h"   // rlPushMatrix/rlScalef — škálování snímku na celý monitor
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 #include <iostream>
 #include <vector>
+#include <iterator>
 #include <fstream>
 #include <string>
 #include <cstdlib>
@@ -23,21 +25,23 @@
 #include <csignal>
 
 #define CALIB_FILE "calib.txt"
-#define MAX_BALLS 16
+#define MAX_PEOPLE 16
+#define DEFAULT_MAX_PEOPLE 8
 #define HANDLE_RADIUS 20.0f
 #define GRID_DIV 8
-#define BLOB_MIN_AREA 500
+#define PERSON_MIN_AREA 800
+#define PERSON_MAX_AREA_FRAC 0.60f
+#define PERSON_MIN_SOLIDITY 0.12f
+#define WARMUP_FRAMES 30
+#define DETECT_INTERVAL 12
+#define LOST_FRAMES 5
+#define STALE_TTL 120
+#define VOL_SMOOTH_ALPHA 0.30f
+#define MATCH_MARGIN 0.55f
 
 static volatile sig_atomic_t g_quit = 0;
 
 static void onSignal(int) { g_quit = 1; }
-
-static cv::Scalar HSV_RED_LO(0, 100, 100);
-static cv::Scalar HSV_RED_HI(10, 255, 255);
-static cv::Scalar HSV_RED2_LO(160, 100, 100);
-static cv::Scalar HSV_RED2_HI(180, 255, 255);
-static cv::Scalar HSV_GREEN_LO(35, 100, 100);
-static cv::Scalar HSV_GREEN_HI(85, 255, 255);
 
 static cv::Point2f corners[4];
 
@@ -97,35 +101,60 @@ static void loadCalib(int w, int h) {
     }
 }
 
-static int detectBallCount(const cv::Mat& frame) {
-    cv::Mat hsv, mask;
-    cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
+// Maska hrací plochy = polygon z kalibrovaných rohů. Mimo něj pohyb nehraje.
+static void buildFloorMask(int w, int h, cv::Mat& mask) {
+    mask = cv::Mat::zeros(h, w, CV_8UC1);
+    std::vector<cv::Point> pts;
+    for (int i = 0; i < 4; i++) pts.push_back(cv::Point((int)corners[i].x, (int)corners[i].y));
+    cv::fillPoly(mask, std::vector<std::vector<cv::Point>>{pts}, cv::Scalar(255));
+}
 
-    cv::Mat maskR1, maskR2, maskG;
-    cv::inRange(hsv, HSV_RED_LO, HSV_RED_HI, maskR1);
-    cv::inRange(hsv, HSV_RED2_LO, HSV_RED2_HI, maskR2);
-    cv::inRange(hsv, HSV_GREEN_LO, HSV_GREEN_HI, maskG);
+struct Person {
+    bool tracking = true;      // live (CSRT běží) vs. stale (čeká na re-acquire)
+    int lost = 0;              // po sobě jdoucí neúspěšné update()
+    int stale = 0;             // kolik detekčních cyklů je stale
+    cv::Rect bbox;             // aktuální / poslední známá pozice
+    cv::Rect lastBbox;
+    cv::Ptr<cv::TrackerCSRT> tracker;
+};
 
-    mask = maskR1 | maskR2 | maskG;
+static bool sameRegion(const cv::Rect& a, const cv::Rect& b, float margin) {
+    float cax = (float)a.x + (float)a.width / 2.0f;
+    float cay = (float)a.y + (float)a.height / 2.0f;
+    float cbx = (float)b.x + (float)b.width / 2.0f;
+    float cby = (float)b.y + (float)b.height / 2.0f;
+    float sx = (float)(a.width + b.width) / 2.0f;
+    float sy = (float)(a.height + b.height) / 2.0f;
+    return std::abs(cax - cbx) < sx * margin && std::abs(cay - cby) < sy * margin;
+}
 
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, {7, 7});
-    cv::dilate(mask, mask, kernel, cv::Point(-1, -1), 2);
-    cv::erode(mask, mask, kernel, cv::Point(-1, -1), 1);
+// Detekce pohybu (bloby z MOG2) v už rozmorfovaném fgmasku -> kandidáti lidé.
+static void detectPeople(const cv::Mat& frame, const cv::Mat& fgmask, std::vector<cv::Rect>& dets) {
+    cv::Mat fg;
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, {9, 9});
+    cv::morphologyEx(fgmask, fg, cv::MORPH_OPEN, kernel);
+    cv::morphologyEx(fg, fg, cv::MORPH_CLOSE, kernel);
 
     std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    cv::findContours(fg, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    int count = 0;
+    int maxArea = (int)(frame.cols * frame.rows * PERSON_MAX_AREA_FRAC);
     for (auto& c : contours) {
-        if (cv::contourArea(c) >= BLOB_MIN_AREA) count++;
+        double a = cv::contourArea(c);
+        if (a < PERSON_MIN_AREA || a > maxArea) continue;
+        cv::Rect r = cv::boundingRect(c);
+        // Obrys musí být slušně vyplněný — světelný záblesk/ring má bbox přes
+        // půl scany, ale minimum výplně. Lidé zhora jsou plné bloby.
+        if (r.empty() || (double)(r.width * r.height) <= 0) continue;
+        double solidity = a / (double)(r.width * r.height);
+        if (solidity < PERSON_MIN_SOLIDITY) continue;
+        dets.push_back(r);
     }
-    if (count > MAX_BALLS) count = MAX_BALLS;
-    if (count < 1) count = 1;
-    return count;
 }
 
 int main(int argc, char* argv[]) {
     bool headless = false;
+    int maxPeople = DEFAULT_MAX_PEOPLE;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
@@ -134,21 +163,26 @@ int main(int argc, char* argv[]) {
         }
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             std::cout << "tracker " << VERSION_STRING << std::endl;
-            std::cout << "usage: tracker [options] [balls 1-" << MAX_BALLS << "]" << std::endl;
-            std::cout << "  --headless, -H  run without a window (systemd / Box A)" << std::endl;
-            std::cout << "  --version, -v   print version" << std::endl;
+            std::cout << "usage: tracker [options] [max-people 1-" << MAX_PEOPLE << "]" << std::endl;
+            std::cout << "  --headless, -H   run without a window (systemd / Box A)" << std::endl;
+            std::cout << "  --max-people N   max concurrently tracked people (default "
+                      << DEFAULT_MAX_PEOPLE << ")" << std::endl;
+            std::cout << "  --version, -v    print version" << std::endl;
             return 0;
         }
         if (strcmp(argv[i], "--headless") == 0 || strcmp(argv[i], "-H") == 0) {
             headless = true;
         }
+        if (strcmp(argv[i], "--max-people") == 0 && i + 1 < argc) {
+            int n = std::atoi(argv[i + 1]);
+            if (n >= 1 && n <= MAX_PEOPLE) { maxPeople = n; i++; }
+        }
     }
-
-    int numBalls = 1;
+    // Bývalý počet míčků = nyní maximální počet lidí (zpětná kompatibilita CLI).
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] == '-') continue;
         int n = std::atoi(argv[i]);
-        if (n >= 1 && n <= MAX_BALLS) { numBalls = n; break; }
+        if (n >= 1 && n <= MAX_PEOPLE) { maxPeople = n; break; }
     }
 
     std::signal(SIGINT, onSignal);
@@ -202,7 +236,7 @@ int main(int argc, char* argv[]) {
         int outW = GetScreenWidth();
         int outH = GetScreenHeight();
         // 4:3 snímek na 16:9 monitor natáhnout na plnou šířku by zkreslilo
-        // míče na elipsy, takže se vejde svisle a do stran zbude pillarbox.
+        // lidi na hady, takže se vejde svisle a do stran zbude pillarbox.
         if (outW > 0 && outH > 0) {
             scale = (float)outW / (float)frameWidth;
             if ((float)outH / (float)frameHeight < scale) {
@@ -230,8 +264,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: audio open failed: " << Mix_GetError() << std::endl;
         return -1;
     }
-    int mixCh = 4 * numBalls;
-    if (mixCh > 8) mixCh = 8;
+    int mixCh = 4;                              // 4 nálady, součet přes všechny lidi
     Mix_AllocateChannels(mixCh);
 
     Mix_Chunk* tracks[8] = {0};
@@ -259,19 +292,14 @@ int main(int argc, char* argv[]) {
     std::cerr << "tracker " VERSION_STRING << " start: "
               << (headless ? "headless" : "window") << ", "
               << frameWidth << "x" << frameHeight << ", "
-              << numBalls << " ball(s), " << mixCh << " audio channel(s)"
+              << "people, max " << maxPeople << ", " << mixCh << " audio channel(s)"
               << std::endl;
 
-    std::vector<cv::Rect> bboxes(numBalls, cv::Rect(100, 100, 80, 80));
-    std::vector<cv::Ptr<cv::TrackerCSRT>> trackers(numBalls);
-    std::vector<bool> ok(numBalls, false);
-    for (int i = 0; i < numBalls; i++) {
-        bboxes[i].x = 100 + (i * 90) % (frameWidth - 200);
-        bboxes[i].y = 100 + (i * 70) % (frameHeight - 200);
-        trackers[i] = cv::TrackerCSRT::create();
-        trackers[i]->init(frame, bboxes[i]);
-        ok[i] = true;
-    }
+    cv::Ptr<cv::BackgroundSubtractor> bg = cv::createBackgroundSubtractorMOG2(500, 16, false);
+    cv::Mat fgmask;
+    std::vector<Person> people;
+    std::vector<cv::Rect> dets;
+    unsigned long frameNo = 0;
 
     Image raylibImage = {
         .data = frame.data,
@@ -288,62 +316,147 @@ int main(int argc, char* argv[]) {
     while (headless ? !g_quit : (!WindowShouldClose() && !g_quit)) {
         cap >> frame;
         if (frame.empty()) break;
+        frameNo++;
 
         cv::Point2f src[4] = {corners[0], corners[1], corners[2], corners[3]};
         cv::Point2f dst[4] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
         cv::Mat H = cv::getPerspectiveTransform(src, dst);
         cv::Mat Hinv = H.inv();
 
-        for (int i = 0; i < numBalls; i++) {
-            ok[i] = trackers[i]->update(frame, bboxes[i]);
-            int ch = 4 * i;
-            if (ok[i]) {
-                float cx = (float)bboxes[i].x + (float)bboxes[i].width / 2.0f;
-                float cy = (float)bboxes[i].y + (float)bboxes[i].height / 2.0f;
-                cv::Point2f p(cx, cy);
-                std::vector<cv::Point2f> srcPts = {p};
-                std::vector<cv::Point2f> dstPts;
-                cv::perspectiveTransform(srcPts, dstPts, H);
-                double u = dstPts[0].x;
-                double v = dstPts[0].y;
-                if (u < 0) u = 0; if (u > 1) u = 1;
-                if (v < 0) v = 0; if (v > 1) v = 1;
-                if (ch < mixCh)     Mix_Volume(ch,     (int)((1.0 - v) * 128));
-                if (ch + 1 < mixCh) Mix_Volume(ch + 1, (int)(v * 128));
-                if (ch + 2 < mixCh) Mix_Volume(ch + 2, (int)((1.0 - u) * 128));
-                if (ch + 3 < mixCh) Mix_Volume(ch + 3, (int)(u * 128));
-            } else {
-                if (ch < mixCh)     Mix_Volume(ch,     0);
-                if (ch + 1 < mixCh) Mix_Volume(ch + 1, 0);
-                if (ch + 2 < mixCh) Mix_Volume(ch + 2, 0);
-                if (ch + 3 < mixCh) Mix_Volume(ch + 3, 0);
+        // ── aktualizace trackerů (každý snímek) ────────────────────────────
+        for (auto& p : people) {
+            if (!p.tracking) continue;          // stale nesledujeme, jen hledáme
+            bool ok = p.tracker->update(frame, p.bbox);
+            if (ok) {
+                cv::Rect fr(0, 0, frameWidth, frameHeight);
+                p.bbox &= fr;
+                if (!p.bbox.empty()) {
+                    p.lost = 0;
+                    p.lastBbox = p.bbox;
+                } else {
+                    ok = false;
+                }
             }
+            if (!ok) {
+                p.lost++;
+                if (p.lost >= LOST_FRAMES) {
+                    p.tracking = false;         // ztracen -> čeká na re-acquire
+                    p.stale = 0;
+                    std::cerr << "people -: P" << (&p - &people[0]) + 1
+                              << " (lost at " << p.lastBbox.x << "," << p.lastBbox.y << ")"
+                              << std::endl;
+                }
+            }
+        }
+
+        // ── detekce nových lidí (každých DETECT_INTERVAL snímků) ──────────
+        // MOG2 model se krmí každým snímkem; prvních WARMUP_FRAMES nehlásíme,
+        // aby počáteční záběr celé scény nebyl brán jako člověk.
+        bg->apply(frame, fgmask, -1);
+        if (frameNo % DETECT_INTERVAL == 0 && frameNo >= WARMUP_FRAMES) {
+            cv::Mat floorMask;
+            buildFloorMask(frameWidth, frameHeight, floorMask);
+            cv::Mat masked;
+            cv::bitwise_and(fgmask, floorMask, masked);
+            dets.clear();
+            detectPeople(frame, masked, dets);
+
+            for (auto& d : dets) {
+                bool claimed = false;
+                // Už sledovaný živý člověk — detekce nad ním, nic nezakládám.
+                for (auto& p : people) {
+                    if (p.tracking && sameRegion(p.bbox, d, MATCH_MARGIN)) {
+                        claimed = true;
+                        break;
+                    }
+                }
+                if (claimed) continue;
+
+                // Re-acquire ztraceného člověka poblíž detekce.
+                for (size_t pi = 0; pi < people.size(); pi++) {
+                    Person& p = people[pi];
+                    if (!p.tracking && sameRegion(p.lastBbox, d, MATCH_MARGIN * 1.5f)) {
+                        p.bbox = d;
+                        p.lastBbox = d;
+                        p.tracker = cv::TrackerCSRT::create();
+                        p.tracker->init(frame, p.bbox);
+                        p.tracking = true;
+                        p.lost = 0;
+                        p.stale = 0;
+                        std::cerr << "people re-acq: P" << pi + 1
+                                  << " @" << d.x << "," << d.y
+                                  << " " << d.width << "x" << d.height
+                                  << std::endl;
+                        claimed = true;
+                        break;
+                    }
+                }
+                if (claimed) continue;
+
+                // Nový člověk.
+                if ((int)people.size() < maxPeople) {
+                    Person p;
+                    p.bbox = d;
+                    p.lastBbox = d;
+                    p.tracker = cv::TrackerCSRT::create();
+                    p.tracker->init(frame, p.bbox);
+                    p.tracking = true;
+                    people.push_back(p);
+                    std::cerr << "people +: P" << people.size()
+                              << " @" << d.x << "," << d.y
+                              << " " << d.width << "x" << d.height
+                              << std::endl;
+                }
+            }
+
+            // Stale lidé bez návratu přes odpočet vyhodit.
+            for (auto it = people.begin(); it != people.end(); ) {
+                if (!it->tracking) {
+                    if (it->stale >= STALE_TTL) {
+                        std::cerr << "people -: P" << (std::distance(people.begin(), it)) + 1
+                                  << " (gone)" << std::endl;
+                        it = people.erase(it);
+                        continue;
+                    }
+                    it->stale++;
+                }
+                ++it;
+            }
+        }
+
+        // ── hlasitost: součet všech lidí do 4 stop, clamp + vyhlazení ──────
+        float tgt[4] = {0, 0, 0, 0};
+        for (auto& p : people) {
+            if (!p.tracking || p.lost > 0) continue;
+            float cx = (float)p.bbox.x + (float)p.bbox.width / 2.0f;
+            float cy = (float)p.bbox.y + (float)p.bbox.height / 2.0f;
+            cv::Point2f pt(cx, cy);
+            std::vector<cv::Point2f> srcPts = {pt};
+            std::vector<cv::Point2f> dstPts;
+            cv::perspectiveTransform(srcPts, dstPts, H);
+            double u = dstPts[0].x;
+            double v = dstPts[0].y;
+            if (u < 0) u = 0; if (u > 1) u = 1;
+            if (v < 0) v = 0; if (v > 1) v = 1;
+            tgt[0] += (float)(1.0 - v);   // Y nahoře
+            tgt[1] += (float)v;           // Y dole
+            tgt[2] += (float)(1.0 - u);   // X vlevo
+            tgt[3] += (float)u;           // X vpravo
+        }
+        for (int ch = 0; ch < mixCh; ch++) {
+            if (tgt[ch] > 1.0f) tgt[ch] = 1.0f;
+            int target = (int)(tgt[ch] * 128.0f);
+            int cur = Mix_Volume(ch, -1);
+            int next = (int)(cur + (float)(target - cur) * VOL_SMOOTH_ALPHA);
+            if (target == 0 && cur < 2) next = 0;   // bez šumu v tichu
+            if (next > 128) next = 128;
+            if (next < 0) next = 0;
+            Mix_Volume(ch, next);
         }
 
         if (!headless) {
             if (IsKeyPressed(KEY_S)) saveCalib();
             if (IsKeyPressed(KEY_R)) loadCalib(frameWidth, frameHeight);
-
-            if (IsKeyPressed(KEY_C)) {
-                int detected = detectBallCount(frame);
-                if (detected != numBalls) {
-                    numBalls = detected;
-                    mixCh = 4 * numBalls;
-                    if (mixCh > 8) mixCh = 8;
-                    Mix_AllocateChannels(mixCh);
-                    bboxes.resize(numBalls, cv::Rect(100, 100, 80, 80));
-                    trackers.resize(numBalls);
-                    ok.resize(numBalls, false);
-                    for (int i = 0; i < numBalls; i++) {
-                        bboxes[i].x = 100 + (i * 90) % (frameWidth - 200);
-                        bboxes[i].y = 100 + (i * 70) % (frameHeight - 200);
-                        trackers[i] = cv::TrackerCSRT::create();
-                        trackers[i]->init(frame, bboxes[i]);
-                        ok[i] = true;
-                    }
-                    for (int i = 0; i < mixCh; i++) Mix_Volume(i, 0);
-                }
-            }
 
             // Myš je v souřadnicích okna, kalibrace v souřadnicích snímku.
             Vector2 mouse = GetMousePosition();
@@ -372,9 +485,6 @@ int main(int argc, char* argv[]) {
 
             BeginDrawing();
             ClearBackground(BLACK);
-            // Všechno kreslíme v souřadnicích snímku; matrix je zvedne na
-            // monitor (nejdřív posun, pak scale — obráceně by to bylo
-            // posunutí * scale a obraz by skočil mimo obrazovku).
             rlPushMatrix();
             rlTranslatef(offX, offY, 0.0f);
             rlScalef(scale, scale, 1.0f);
@@ -385,18 +495,20 @@ int main(int argc, char* argv[]) {
                 DrawCircle((int)corners[i].x, (int)corners[i].y, 8, c);
             }
 
-            for (int i = 0; i < numBalls; i++) {
+            for (size_t i = 0; i < people.size(); i++) {
                 Color c = (i % 2 == 0) ? RED : GREEN;
-                if (ok[i]) {
+                bool live = people[i].tracking && people[i].lost <= 0;
+                if (live) {
                     DrawRectangleLinesEx(
-                        (Rectangle){(float)bboxes[i].x, (float)bboxes[i].y, (float)bboxes[i].width, (float)bboxes[i].height},
+                        (Rectangle){(float)people[i].bbox.x, (float)people[i].bbox.y,
+                                    (float)people[i].bbox.width, (float)people[i].bbox.height},
                         3.0f, c
                     );
-                    DrawTextEx(font, TextFormat("B%d", i + 1),
-                        {(float)bboxes[i].x, (float)bboxes[i].y - 20}, 18, 0.0f, c);
+                    DrawTextEx(font, TextFormat("P%zu", i + 1),
+                        {(float)people[i].bbox.x, (float)people[i].bbox.y - 20}, 18, 0.0f, c);
                 } else {
-                    DrawTextEx(font, TextFormat("B%d Lost", i + 1),
-                        {20, 20 + i * 30.0f}, 18, 0.0f, c);
+                    DrawTextEx(font, TextFormat("P%zu Lost", i + 1),
+                        {20, 20 + (float)i * 30.0f}, 18, 0.0f, c);
                 }
             }
 
@@ -408,7 +520,7 @@ int main(int argc, char* argv[]) {
                 float fill = (float)vol / 128.0f;
                 int bx = i * barW + 5;
                 int bw = barW - 10;
-                Color c = ((i / 4) % 2 == 0) ? RED : GREEN;
+                Color c = (i % 2 == 0) ? RED : BLUE;
                 DrawRectangle(bx, barY, bw, barH, (Color){c.r, c.g, c.b, 40});
                 DrawRectangle(bx, barY + barH - (int)(fill * barH), bw, (int)(fill * barH), c);
                 DrawRectangleLines(bx, barY, bw, barH, WHITE);
@@ -416,9 +528,9 @@ int main(int argc, char* argv[]) {
                     {(float)(bx + 4), (float)(barY + 2)}, 14, 0.0f, WHITE);
             }
 
-            DrawTextEx(font, "Drag corners | S save | R reset | C calibrate",
+            DrawTextEx(font, "Drag corners | S save | R reset",
                 {10, 10}, 16, 0.0f, RAYWHITE);
-            DrawTextEx(font, TextFormat("Balls: %d", numBalls),
+            DrawTextEx(font, TextFormat("People: %zu/%d", people.size(), maxPeople),
                 {10, (float)(frameHeight - 80)}, 16, 0.0f, RAYWHITE);
 
             rlPopMatrix();

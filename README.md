@@ -1,7 +1,7 @@
 # Multi-Track Audio Tracker & RF Sampler
 
 Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní zvukovou instalaci:
-1. **Tracker (Box A)**: Přehrávač s amplitudovou modulací více stop založený na webkameře. Sledované barevné míčky ovládají hlasitost zvukových smyček s korekcí perspektivy.
+1. **Tracker (Box A)**: Přehrávač s amplitudovou modulací více stop založený na webkameře. Sledované pohyby lidí ovládají hlasitost zvukových smyček s korekcí perspektivy.
 2. **Sampler (Box B)**: Bezdrátový sampler, ve kterém 433 MHz RF tlačítka spouští jednorázové zvukové samply.
 
 **Režie:** Barbora Jeřábková  
@@ -12,14 +12,14 @@ Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní z
 
 ## 1. Tracker (Box A)
 
-Tracker používá webkameru k detekci polohy fyzických míčků (až 16) a mapuje jejich X/Y souřadnice na hlasitost neustále hrajících zvukových stop.
+Tracker používá webkameru k detekci pohybu lidí (až 16, výchozí 8) nad hrací plochou a mapuje jejich X/Y souřadnice na hlasitost neustále hrajících zvukových stop.
 
 ### Jak to funguje
-Každý sledovaný míček ovládá čtyři zvukové smyčky:
-- **Míček 1 (červený)**: Osa Y (nahoře) -> Stopa 1, Osa Y (dole) -> Stopa 2, Osa X (vlevo) -> Stopa 3, Osa X (vpravo) -> Stopa 4
-- **Míček 2 (zelený)**: Ovládá stopy 5-8 podle stejného vzoru, a tak dále.
-- Všechny stopy se neustále opakují a hlasitost je modulována v reálném čase podle polohy míčku.
-- Pokud míček není detekován (je ztracen), jeho stopy **ztichnou** (hlasitost = 0). Ztracené trackery se automaticky pokusí znovu cíl zaměřit.
+Každý detekovaný člověk přispívá do čtyř zvukových smyček podle své polohy; příspěvky všech lidí se **sčítají** (a případně omezí) do hlasitosti čtyř stop:
+- **Osa Y (nahoře)** -> Stopa 1, **Osa Y (dole)** -> Stopa 2, **Osa X (vlevo)** -> Stopa 3, **Osa X (vpravo)** -> Stopa 4
+- Všechny stopy se neustále opakují a hlasitost je modulována v reálném čase podle pozic lidí.
+- Lidé se detekují pohybem (MOG2, pozadí z webkamery) a každý se pak sleduje vlastním CSRT trackerem; když někdo vejde do záběru, přidá se, když odejde, jeho příspěvek ztichne a tracker se uvolní.
+- Kdo se přestane hýbat, zůstane hlasitý (CSRT sleduje dál), ale kdo vstoupí už stojící, ten se nepozná — detekce potřebuje pohyb.
 
 ### Korekce perspektivy
 Pokud je webkamera nakloněna, může být sledovaná plocha zkreslená. Software to koriguje pomocí homografické projekce.
@@ -50,16 +50,16 @@ bash build_termux.sh # Jednorázová instalace a sestavení
 *(Pro manuální kroky a řešení problémů na Termuxu viz sekci [Řešení problémů](#řešení-problémů))*
 
 ### Spuštění Trackeru
-Umístěte své WAV soubory jako `samples/track1.wav` až `samples/track8.wav` do složky `samples`, poté spusťte tracker:
+Umístěte své WAV soubory jako `samples/track1.wav` až `samples/track4.wav` do složky `samples`, poté spusťte tracker:
 ```bash
-# ./tracker [počet_míčků]
-./tracker 2  # Sleduje 2 míčky, ovládá stopy 1-8
+# ./tracker [max_počet_lidí]
+./tracker --max-people 8  # až 8 lidí; probehne-li jich plochou víc, vejde se jen prvních 8
 ```
 
 ### Headless režim (Box A v produkci)
 Box A běží bez okna a bez X — grafiku nepotřebuje, jen kameru a zvuk. Služba běží jako uživatel `pi`:
 ```bash
-./tracker --headless 1  # bez okna, 1 míček; vstup přes systemd
+./tracker --headless --max-people 8  # bez okna; vstup přes systemd
 ```
 ```bash
 sudo cp tracker.service /etc/systemd/system/
@@ -73,7 +73,8 @@ Okenný režim zůstává pro kalibraci (přetáhnutí rohů, klávesa `S`). Bez
 ```bash
 systemctl is-enabled tracker              # enabled
 systemctl status tracker
-journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, 640x480, ..."
+journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, 640x480, people, max 8, 4 audio channel(s)"
+journalctl -u tracker -b | grep 'people'  # "+: P3 …" / "-: P2 (lost|gone)" / "re-acq" — kdo právě hraje
 ```
 
 #### Přehodí USB zvukové karty
@@ -103,7 +104,7 @@ fyzického zásahu nepoužívej unbind, ale přepojuj vlastní USB rozbočovač.
 Když u boxu není monitor, ale je připojená TV, jde tracker spustit oknem, které
 zaplní celou obrazovku: autologin na `tty1` → `xinit` → okno trackeru na celý
 displej. Snímek kamery 640x480 se v něm vejde svisle a do stran je pillarbox
-(4:3 na 16:9 bez zkreslení míčů) — řeší to tracker sám, viz `main.c`.
+(4:3 na 16:9 bez zkreslení lidí) — řeší to tracker sám, viz `main.c`.
 
 ```bash
 cd /home/pi/tracker
@@ -568,7 +569,7 @@ sudo systemctl start tracker
 ---
 
 ## Struktura projektu
-- `main.c` — Zdrojový kód aplikace Tracker
+- `main.c` — Zdrojový kód aplikace Tracker (detekce lidí pohybem MOG2 + CSRT, kalibrace perspektivy, 4 stopy)
 - `sampler.c` — Zdrojový kód aplikace Sampler (EV1527 RF + SDL2_mixer + volitelně LCD)
 - `Makefile` — Systém sestavení
 - `map.csv.example` — Šablona pro mapování RF kódů na zvukové stopy
