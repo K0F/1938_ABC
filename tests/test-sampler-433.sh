@@ -392,12 +392,12 @@ smp --box b --lcd-addr off --fade-ms -1 --map "$LAYERS" --simulate </dev/null >/
 # stiskem uprostřed umčování.
 
 # Nejdřív konfigurace v repu: F (5089457) musí být v map.csv poslední
-# položkou a musí mít @stopall — "poslední tlačítko v configu zastaví
-# všechno". Komentáře a prázdné řádky se nepočítají.
+# položkou a musí to být akční slot (na boxu A dnes @interact, dřív
+# @stopall). Komentáře a prázdné řádky se nepočítají.
 FENTRY="$(grep -v '^#' "$ROOT/map.csv" | grep -v '^[[:space:]]*$' | tail -1)"
-printf '%s' "$FENTRY" | grep -q '^5089457,.*@stopall' \
-    && ok "map.csv: poslední položka je F (5089457) s @stopall" \
-    || bad "map.csv: poslední položka není F s @stopall  [$FENTRY]"
+printf '%s' "$FENTRY" | grep -q '^5089457,.*@\(stopall\|interact\)' \
+    && ok "map.csv: poslední položka je F (5089457) s akcí" \
+    || bad "map.csv: poslední položka není F s akcí  [$FENTRY]"
 grep -v '^#' "$ROOT/map.csv" | grep -v '^[[:space:]]*$' | grep -q '@restart' \
     && bad "map.csv: F pořád restartuje služby, má jen zastavit" \
     || ok "map.csv: F jen zastavuje, nerestartuje"
