@@ -103,9 +103,10 @@ static const char* bedFiles[N_BED] = {
 // ── 433 MHz přijímač SRX882S na GPIO15 ────────────────────────────────
 // Dřív měl tracker vlastní miniaturní dekodér jen pro tlačítko F (restart).
 // Teď je sampler sloučený do trackera: buttons.c přebírá celý EV1527 dekodér,
-// map.csv a přehrávání vzorků. Tlačítko F je v mapě jako @stopall (umlčí
-// přehrávané vzorky); volitelně ho lze přes --reset-code nechat restartovat
-// službu (původní chování). Pin přes --rf-pin, RF vypne --no-rf.
+// map.csv a přehrávání vzorků. Tlačítko F je v mapě jako @interact (umlčí
+// přehrávané vzorky a přepne interaction = smyčky); volitelně ho lze přes
+// --reset-code nechat restartovat službu (původní chování). Pin přes --rf-pin,
+// RF vypne --no-rf.
 #define RF_GPIO_LINE 15
 #define RF_CHIP "gpiochip0"
 
@@ -432,7 +433,7 @@ int main(int argc, char* argv[]) {
     int reqWidth = CAM_W_DEFAULT;
     int reqHeight = CAM_H_DEFAULT;
     int detectMs = DETECT_MS_DEFAULT;
-    uint32_t resetCode = 0;      // 0 = off; map.csv wins (F = @stopall)
+    uint32_t resetCode = 0;      // 0 = off; map.csv wins (F = @interact)
     bool allowRestart = false;
     bool dryRun = false;
 
@@ -454,7 +455,7 @@ int main(int argc, char* argv[]) {
                          "  --debounce-ms N  per-button debounce window (default 2000)\n"
                          "  --te-us N        EV1527 base timing in microseconds (default 320)\n";
             std::cout << "  --reset-code N   RF code that restarts the service (default off;\n"
-                         "                   0 = map.csv decides, e.g. F = @stopall)" << std::endl;
+                         "                   0 = map.csv decides, e.g. F = @interact)" << std::endl;
             std::cout << "  --rf-pin N       BCM line of the 433 MHz receiver (default "
                       << RF_GPIO_LINE << ")" << std::endl;
             std::cout << "  --width N        capture width (default " << CAM_W_DEFAULT << ")\n"

@@ -1,8 +1,8 @@
 # Multi-Track Audio Tracker & RF Sampler
 
 Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní zvukovou instalaci:
-1. **Tracker (Box A)**: Přehrávač s amplitudovou modulací více stop založený na webkameře. Sledované pohyby lidí ovládají hlasitost zvukových smyček s korekcí perspektivy.
-2. **Sampler (Box B)**: Bezdrátový sampler, ve kterém 433 MHz RF tlačítka spouští jednorázové zvukové samply.
+1. **Tracker (Box A)**: Přehrávač osmi synchronních smyček řízený webkamerou. Dvě barevné koule (zelená/červená) modulují hlasitost podle polohy nad hrací plochou (s korekcí perspektivy). Do stejné binárky je vložený i sampler: 433 MHz RF tlačítka přes `map.csv` přidávají jednorázové vzorky a tlačítko F (`@interact`) pouští/zastavuje smyčky.
+2. **Sampler (Box B/C)**: Samostatný bezdrátový sampler, ve kterém 433 MHz RF tlačítka spouští jednorázové zvukové samply.
 
 **Režie:** Barbora Jeřábková  
 **Realizace:** Pavel Sterec, Matouš Hakela, Kryštof Pešek  
@@ -12,21 +12,24 @@ Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní z
 
 ## 1. Tracker (Box A)
 
-Tracker používá webkameru k detekci pohybu lidí (až 4, výchozí 1) nad hrací plochou a mapuje jejich X/Y souřadnice na hlasitost neustále hrajících zvukových stop.
+Tracker používá webkameru k detekci dvou barevných koulí nad hrací plochou a mapuje jejich polohu (rektifikované X/Y) na hlasitost neustále hrajících zvukových smyček. Všech **8 smyček** se nahraje a spustí naráz; znějí ale jen když je zapnutá **interaction** (tlačítko F na 433 MHz). RF tlačítka z `map.csv` přidávají do mixu jednorázové vzorky.
 
 ### Jak to funguje
-Každý detekovaný člověk přispívá do čtyř zvukových smyček podle své polohy; příspěvky všech lidí se **sčítají** (a případně omezí) do hlasitosti čtyř stop:
-- **Osa Y (nahoře)** -> Stopa 1, **Osa Y (dole)** -> Stopa 2, **Osa X (vlevo)** -> Stopa 3, **Osa X (vpravo)** -> Stopa 4
-- Všechny stopy se neustále opakují a hlasitost je modulována v reálném čase podle pozic lidí.
-- Lidé se detekují pohybem (MOG2, pozadí z webkamery) a každý se pak sleduje vlastním **KCF trackerem** (CSRT je na Raspberry Pi 4 příliš pomalý, vrátí se přes `--tracker csrt`); když někdo vejde do záběru, přidá se, když odejde, jeho příspěvek ztichne a tracker se uvolní.
-- Kdo se přestane hýbat, zůstane hlasitý (KCF sleduje dál), ale kdo vstoupí už stojící, ten se nepozná — detekce potřebuje pohyb.
+- **Zelená koule** míchá 4 náladové stopy `Interactive_music_*` podle kvadrantu (rektifikované X/Y): `Y-up_WAR`, `Y-down_PEACE`, `X-left_DRAMA`, `X-right_INTIMACY`.
+- **Červená koule** míchá 3 intermezza `Inter_*` podle polohy vlevo/vpravo (trojice pásem).
+- Osmou smyčkou je podklad `samples/track9.wav` („bed“), který hraje konstantní hlasitostí, dokud je interaction zapnutá.
+- Detekce je barevná (HSV blob) — žádný MOG2 ani KCF, jen převod do HSV a pár prahů na snímek, což je na Raspberry Pi 4 zanedbatelné. Barvy koulí se „naučí“ kliknutím do okna (viz [Ovládání](#ovládání-tracker)); dokud naučené nejsou, použijí se pevné prahy (zelená/červená).
+- Když je interaction vypnutá, jsou všechny smyčky ztlumené (ticho). RF tlačítka hrají navrch bez ohledu na to.
 
-### Korekce perspektivy
+### Korekce perspektivy a učení barev
 Pokud je webkamera nakloněna, může být sledovaná plocha zkreslená. Software to koriguje pomocí homografické projekce.
 - **Táhnutím** 4 rohových bodů (červené kruhy = osa X, modré kruhy = osa Y) ohraničíte reálnou sledovanou plochu.
-- **S** – uloží kalibraci do `calib.txt` (automaticky se načte při dalším spuštění).
+- **S** – uloží kalibraci do `calib.txt` (rohy, naučené barvy i tolerance; automaticky se načte při dalším spuštění).
 - **R** – resetuje rohy na plný snímek.
-Pro snazší vizualizaci rektifikace je přes obraz překryta perspektivní mřížka.
+- **Klik do koule** – naučí barvu: levé tlačítko naučí zelenou (nálady), pravé tlačítko červenou (intermezza). Klik mimo rohový bod učí, na rohu táhne kalibraci.
+- **`C`** – zapomene naučené barvy (zpět na pevné prahy). **`[`** / **`]`** – zúží/rozšíří toleranci odstínu (`hueTol`, uloží se).
+
+Barvy i rohy se ukládají do `calib.txt` včetně rozlišení, pro které platí — když se později změní `--width/--height`, rohy se automaticky přepočítají (`calib: rohy přepočítány z … na …`). Pro snazší vizualizaci rektifikace je přes obraz překryta perspektivní mřížka.
 
 ### Závislosti (Tracker)
 | Knihovna | Verze | Poznámky |
@@ -50,46 +53,46 @@ bash build_termux.sh # Jednorázová instalace a sestavení
 *(Pro manuální kroky a řešení problémů na Termuxu viz sekci [Řešení problémů](#řešení-problémů))*
 
 ### Spuštění Trackeru
-Umístěte své WAV soubory jako `samples/track1.wav` až `samples/track4.wav` do složky `samples`, poté spusťte tracker:
+Vložte smyčky do složky `samples/` pod jmény, která tracker očekává:
+`samples/Interactive_music_{Y-up_WAR,Y-down_PEACE,X-left-DRAMA,X-right-INTIMACY}.wav`,
+`samples/Inter_{Mobilizace_Cisla,Emil_Hacha,Mobilizace_Emoce}.wav` a podklad `samples/track9.wav`. Chybějící vzorek tracker jen zaloguje (`audio: missing …`) a jede dál.
+
 ```bash
-# ./tracker [max_počet_lidí]
-./tracker --max-people 1  # výchozí je 1 člověk; s N až N lidí (max 4)
+./tracker                  # okenní režim (kalibrace, naučení barev), 1280x720
+./tracker --headless       # bez okna (Box A v produkci)
+./tracker --width 1920 --height 1080   # jiné rozlišení kamery
+./tracker --detect-ms 0    # detekce v každém snímku (bez throttlingu)
 ```
+Přehled voleb: `--min-area N` (min. plocha blobu koule), `--detect-ms N` (max. frekvence CV detekce v ms, `0` = každý snímek), `--width/--height`, `--map FILE`, `--samples-dir D`, `--no-rf`, `--allow-restart`, `--simulate`; celý výpis `./tracker --help`.
 
 ### Headless režim (Box A v produkci)
-Box A běží bez okna a bez X — grafiku nepotřebuje, jen kameru a zvuk. Služba běží jako uživatel `pi`:
+Box A běží bez okna a bez X — grafiku nepotřebuje, jen kameru a zvuk. Služba běží jako **root** (kvůli akcím z `map.csv`, které volají `systemctl restart`):
 ```bash
-./tracker --headless --max-people 1  # bez okna; vstup přes systemd
+./tracker --headless --allow-restart --map map.csv   # bez okna; vstup přes systemd
 ```
 ```bash
 sudo cp tracker.service /etc/systemd/system/
 sudo systemctl enable --now tracker
 journalctl -t tracker -f   # logy do journalu
 ```
-Okenný režim zůstává pro kalibraci (přetáhnutí rohů, klávesa `S`). Bez `calib.txt` tracker používá celý snímek, takže první kalibraci udělejte ještě s monitorem přes HDMI.
+Okenný režim zůstává pro kalibraci (přetáhnutí rohů, klávesa `S`) a naučení barev klikem. Bez `calib.txt` tracker používá celý snímek, takže první kalibraci udělejte ještě s monitorem přes HDMI (nebo přes VNC, viz níže).
 
 #### Autostart po restartu
 `tracker.service` je `enabled` — po každém restartu boxu se tracker rozjede sám, bez monitoru a bez přihlášení. Když při startu ještě není kamera, služba zkusí znovu po 2 s; limit restartu je vypnutý (`StartLimitIntervalSec=0`), jinak by ji po pěti rychlých pokusech systemd zabil a tracker by zůstal tichý do ručního zásahu.
 ```bash
 systemctl is-enabled tracker              # enabled
 systemctl status tracker
-journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, 640x480, people, max 1, tracker kcf, 4 audio channel(s)"
-journalctl -u tracker -b | grep 'people'  # "+: P3 …" / "-: P2 (lost|gone)" / "re-acq" — kdo právě hraje
-journalctl -u tracker -b | grep '^rf:'    # "rf: listening..." — 433 MHz restart je aktivní
+journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, no camera yet, … 1280x720 capture, 15Hz detect"
+journalctl -u tracker -b | grep -iE 'camera|calib'  # otevření kamery, přepočet rohů při změně rozlišení
+journalctl -u tracker -b | grep -i 'interaction'    # "interaction: on/off" — F přepnul smyčky
+journalctl -u tracker -b | grep -i 'audio:'         # chybějící vzorky ("audio: missing …")
+journalctl -u tracker -b | grep 'code='             # dekódované RF kódy z map.csv
 ```
 
-#### Restart tlačítkem F (433 MHz)
-Box A má na GPIO15 přijímač SRX882S a tracker ho čte kvůli tlačítku **F** (kód
-`5089457`): když se u instalace zasekne sledování, obsluha zmáčkne F a tracker
-se čistě ukončí, `Restart=always` ho znovu zvedne. Restart jde vidět v journalu
-(`tracker: RF button F (code 5089457) -> restart`). Bez přijímače (nebo když
-link obsadí sampler) tracker běží dál bez restartu — loguje to jako
-`rf: receiver unavailable`. Kód i pin se nastaví přes `--reset-code N` a
-`--rf-pin N`; `--no-rf` RF vypne.
+#### Tlačítko F (433 MHz) — interaction
+Box A má na GPIO15 přijímač SRX882S a tracker ho čte přes `map.csv`. Tlačítko **F** (kód `5089457`) je v mapě jako **`@interact`**: přepíná `interaction` — dokud je vypnutá, je všech osm smyček ztlumených (ticho), při zapnutí se rozejdou. V journalu to jde vidět jako `interaction: on` / `interaction: off`.
 
-Na společné instalaci, kde na boxu A běží i sampler, drží RF link sampler a
-tracker se spouští s `--no-rf` (viz `tracker.service`); tlačítko F pak přes
-mapu umlčí hrající vrstvy (`@stopall`), místo aby restartovalo tracker.
+Tracker i sampler jsou sloučené do jedné binárky (RF dekodér je v `buttons.c`), takže RF link drží tracker sám a `tracker.service` běží bez `--no-rf` (používá `--map map.csv`). Původní chování (F restartuje službu) lze vrátit přes `--reset-code 5089457` — kód mimo mapu pak tracker čistě ukončí a `Restart=always` ho zvedne; v journalu je to `RF button F (code 5089457) -> restart`. Pin se nastaví `--rf-pin N`; `--no-rf` RF úplně vypne. Bez přijímače tracker běží dál a loguje `rf: receiver unavailable`.
 
 #### Přehodí USB zvukové karty
 Zvuková karta v boxu sedí za hubem a občas se přehodí. Starý PCM v trackeru přitom umře (`ALSA write failed (unrecoverable): No such device`) a SDL ho už znovu neotevře — služba by běžela dál potichá, hodiny bez zvuku. Proto tu běží `box-sound-restart.service`: udev pravidlo `99-box-sound.rules` ho probudí, jakmile se objeví nová zvuková karta, přenastaví `/etc/asound.conf` a restartuje tracker.
@@ -117,8 +120,9 @@ fyzického zásahu nepoužívej unbind, ale přepojuj vlastní USB rozbočovač.
 ### HDMI konzole (Box A — obraz na TV)
 Když u boxu není monitor, ale je připojená TV, jde tracker spustit oknem, které
 zaplní celou obrazovku: autologin na `tty1` → `xinit` → okno trackeru na celý
-displej. Snímek kamery 640x480 se v něm vejde svisle a do stran je pillarbox
-(4:3 na 16:9 bez zkreslení lidí) — řeší to tracker sám, viz `main.c`.
+displej. Snímek kamery se do něj vpasuje se zachováním poměru stran (1280x720
+na 16:9 TV sedí 1:1; jiné rozlišení se pillarbox/letterboxuje, bez zkreslení) —
+řeší to tracker sám, viz `main.c`.
 
 ```bash
 cd /home/pi/tracker
@@ -137,9 +141,11 @@ GLFW**: X server přitom GLX nabízí normálně (`glxinfo` vidí 144 vizuálů,
 3.1 přes V3D), jen samotné okno skončí na
 `GLX: Failed to create context: GLXBadFBConfig` a neobjeví se. Relace proto
 běží na Mesa softwarovém GL (`LIBGL_ALWAYS_SOFTWARE=1`), který kontext vytvoří
-vždy a přežije i restarty trackera. Stojí to zhruba dvě jádra CPU (kamera,
-OpenCV i kreslení) — na boxu, kde má grafika vykonávat práci, to vypnout lze
-proměnnou:
+vždy a přežije i restarty trackera. Je to nejdražší část: okenní běh v 1280x720
+bere ~**1,5 jádra** (z toho většina je softwarové GL/llvmpipe), zatímco bezhlavý
+`tracker.service` (bez kreslení) jen ~**0,8 jádra** — proto je produkce bezhlavá
+a okno se pouští jen na kalibraci přes `tracker-view.sh`. Na boxu, kde má
+grafika vykonávat práci, to vypnout lze proměnnou:
 ```bash
 BOX_CONSOLE_SOFTGL=0   # v box-console.xinit, kdyby box hardwarový GL uměl
 ```
@@ -152,7 +158,7 @@ argumentu `xinit` nebo v `xorg.conf`. Proto se režim výstupu v konzoli vůbec
 nemění: X běží v nativním režimu TV a okno má velikost monitoru.
 ```bash
 journalctl -t box-console -b -n 20    # co relace dělá a proč něco selhalo
-cat /tmp/box-console-tracker.log      # výstup trackera (začátek: "okno 1920x1080, snímek 640x480 x2.25 na (240,0)")
+cat /tmp/box-console-tracker.log      # výstup trackera (začátek: "okno 1280x720, snímek 1280x720 x1 na (0,0)")
 ```
 Relace běží, dokud tracker jede; když spadne dvakrát po sobě za dvě sekundy,
 zvedne ho cyklus v `box-console.xinit`. Když se nedaří (chybí binárka, X bez
@@ -160,6 +166,19 @@ GLX), relace skončí a na TV zůstane login prompt, ať u něj člověk může 
 jinak by TV blikala bez zjevu. Stejně po třech rychlých restartech skončí
 profil: `box-console: X relace padá pořád dokola`. Po opravě `rm
 /tmp/.box-console.fails` nebo `box-console.sh off && on`.
+
+### Vzdálený náhled (VNC)
+Produkce je bezhlavá (`tracker.service`), ale na kalibraci, naučení barev nebo kontrolu detekce se hodí vidět obraz. `tracker-view.sh` k tomu zvedne okenní session bez monitoru — Xvfb `:99` + tracker v okně + x11vnc na portu 5900:
+```bash
+sudo ./tracker-view.sh start    # zastaví tracker.service, nastartuje Xvfb+tracker+x11vnc
+./tracker-view.sh status
+sudo ./tracker-view.sh stop     # zabije view a vrátí zpět bezhlavý tracker.service
+```
+Připojení z notebooku (TigerVNC, heslo `tracker`):
+```bash
+vncviewer -passwd vnc.passwd -Shared <boxa>::5900
+```
+Kameru a zvukovku smí držet jen jeden proces, proto jde view a headless služba jen střídavě (start/stop se navzájem vylučují). Obalem je `tracker-view.service`; jde tedy i `systemctl start tracker-view`.
 
 ### Ověření zvuku (Box A / Box B)
 Box má USB zvukovou kartu i vestavěný jack Pi. `/etc/asound.conf` generuje skript `box-alsa-setup.sh`, který zařízení pojmenuje **podle typu**:
@@ -208,9 +227,13 @@ QEMU má dvě omezení, která nejsou chyba testu: neemuluje `bcm2835` audio kod
 | Vstup | Akce |
 |-------|--------|
 | Tažení myší / Dotyk | Přesun nejbližšího rohového bodu |
-| `S` | Uloží kalibraci do `calib.txt` |
+| Levé tlačítko mimo roh | Naučí **zelenou** kouli (4 náladové stopy) |
+| Pravé tlačítko | Naučí **červenou** kouli (3 intermezza) |
+| `S` | Uloží kalibraci (rohy + barvy + tolerance) do `calib.txt` |
 | `R` | Resetuje rohy na celý obraz |
-| RF tlačítko `F` | Restartuje tracker (kód `5089457`, viz `--reset-code`) |
+| `C` | Zapomene naučené barvy (zpět na pevné prahy) |
+| `[` / `]` | Zúží / rozšíří toleranci odstínu (`hueTol`) a uloží |
+| RF tlačítko `F` | `@interact` — zapne/vypne smyčky (kód `5089457`; viz též `--reset-code`) |
 
 ---
 
@@ -368,21 +391,22 @@ jinak přišel jeden zbytečný Opus s 11.6 minuty zvuku navíc.
 Do `map.csv` pak pište jména s `.wav`, jak je sampler hraje — stejně
 jako dřív, formát mapy se nemění.
 
-#### Speciální kláč: `@stopall` a `@restart`
+#### Speciální kláč: `@stopall`, `@interact` a `@restart`
 
-Slot nemusí mít vzorek. Místo něj může řídit celý mix a služby — hodí se
-pro tlačítko, které má něco „resetovat“. Tlačítko F v `map.csv` zastaví
-všechno, co právě hraje:
+Slot nemusí mít vzorek. Místo něj může řídit mix, smyčky nebo služby — hodí se
+pro tlačítko, které má něco „resetovat“ nebo přepnout:
 
 ```csv
-5089457, @stopall
+5089457, @interact
 ```
 
-**`@stopall`** umlčí všechny právě hrající vrstvy.
-
-**`@restart`** pustí `systemctl restart` na uvedených jednotkách;
-jednotky odděl mezerou nebo čárkou. V aktuální mapě F `@restart`
-nemá — jen zastavuje.
+- **`@stopall`** umlčí všechny právě hrající vzorky (one-shot vrstvy). Na boxu A
+  je teď na F `@interact`, ale `@stopall` je dál k dispozici.
+- **`@interact`** (jen tracker) umlčí hrající vzorky a **přepne `interaction`** —
+  osmičku smyček zapne/vypne. Na rozdíl od `@stopall`/`@restart` **nepotřebuje
+  root** ani `--allow-restart`, protože sahá jen na vlastní mixer trackera.
+- **`@restart`** pustí `systemctl restart` na uvedených jednotkách; jednotky
+  odděl mezerou nebo čárkou. V aktuální mapě F `@restart` nemá.
 
 Umčení není okamžité seknutí, ale krátký fade dolů (`--stop-fade-ms`,
 default 300 ms) — `Mix_HaltChannel` v půlce tónu v sále praskne. Vrstva
@@ -390,8 +414,8 @@ začíná znovu od ticha, když během umčování zmáčkneš tlačítko, kter�
 rozjelo; rozfádění umčení zruší, jinak by dotáhlo a zhaslo právě
 zapnutou vrstvu.
 
-Bez `--allow-restart` se akční slot vynechá a kláč hlásí `not in map` —
-aby `--listen` nemohl omylem zhasnout zvuk jen tím, že někdo poslouchá.
+Bez `--allow-restart` se `@stopall`/`@restart` vynechá a kláč hlásí `not in map`
+— aby `--listen` nemohl omylem zhasnout zvuk jen tím, že někdo poslouchá.
 `@stopall` je pod stejným zámkem jako `@restart`, ačkoli je samotný
 mnohem méně nebezpečný: mapa je důvěryhodný vstup a obojí mění zvuk,
 který teď hraje. `sampler.service` běží jako root a `--allow-restart`
@@ -405,8 +429,9 @@ echo 5089457 | ./sampler --box b --no-audio --allow-restart --dry-run --simulate
 ```
 
 ##### F na obou boxech
-Obě boxy slyší stejný vysílač, takže F zhasne to, co je zrovna na nich —
-každý box má svůj mix a svoje vrstvy:
+Obě boxy slyší stejný vysílač, takže F udělá to, co má daný box v mapě —
+každý box má svůj mix a své sloty. Na boxu A je F `@interact` (přepne smyčky),
+na sampleru (Box B/C) obvykle `@stopall` (zhasne hrající vzorky):
 
 ```
 code=5089457 -> @stopall (S11, #3)
@@ -577,14 +602,15 @@ Webkamera (V4L2) má single-open: `/dev/video0` drží právě jeden proces. Bě
 služba, ruční spuštění trackeru selže. Před ručním během službu zastavte:
 ```bash
 sudo systemctl stop tracker
-./tracker            # nebo ./tracker --headless 1
+./tracker            # nebo ./tracker --headless
 sudo systemctl start tracker
 ```
 
 ---
 
 ## Struktura projektu
-- `main.c` — Zdrojový kód aplikace Tracker (detekce lidí pohybem MOG2 + KCF/CSRT, kalibrace perspektivy, 4 stopy, restart tlačítkem F)
+- `main.c` — Zdrojový kód aplikace Tracker (barevné HSV blob sledování dvou koulí, kalibrace perspektivy + učení barev, 8 smyček s přepínačem `@interact`, sloučený RF sampler)
+- `buttons.c` / `buttons.h` — RF engine: EV1527 dekodér, `map.csv`, vrstvy vzorků, akce `@stopall`/`@interact`/`@restart` (sdílí tracker i sampler)
 - `sampler.c` — Zdrojový kód aplikace Sampler (EV1527 RF + SDL2_mixer + volitelně LCD)
 - `Makefile` — Systém sestavení
 - `map.csv.example` — Šablona pro mapování RF kódů na zvukové stopy
