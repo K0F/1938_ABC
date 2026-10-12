@@ -12,12 +12,17 @@ GIT_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 # ── Platform detection ──
 PLATFORM ?= $(shell [ -d /data/data/com.termux/files/usr ] && echo termux || echo desktop)
 
+# Bez -O by se tracker i OpenCV glue kód přeložily na -O0. Per-frame smyčka
+# (CSRT/KCF update, MOG2, perspektiva) je čistě CPU vázaná, takže -O2 je na
+# Pi nejlevnější zrychlení. -march=native je bezpečné: binárka se staví přímo na
+# boxu (prepare-sd.sh host binaries nekopíruje), takže cílí na A72, na kterém běží.
+# Termux (Android) zůstává bez -march, ať je binárka přenositelná.
 ifeq ($(PLATFORM),termux)
     PREFIX  ?= /data/data/com.termux/files/usr
-    CXXFLAGS += -I$(PREFIX)/include
+    CXXFLAGS += -O2 -pipe -I$(PREFIX)/include
     LDFLAGS  += -L$(PREFIX)/lib
 else
-    CXXFLAGS +=
+    CXXFLAGS += -O2 -pipe -march=native
     LDFLAGS  +=
 endif
 

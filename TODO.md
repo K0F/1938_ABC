@@ -34,7 +34,7 @@ Feature ideas and planned work for the tracker.
 
 ## Upcoming
 
-- [x] **Re-acquire lost trackers** — tracker hlídá lidi CSRT; ztracený člověk přejde na „stale“ a při opětovném pohybu poblíž se tracker znovu inicializuje (`people re-acq:`)
+- [x] **Re-acquire lost trackers** — tracker hlídá lidi KCF; ztracený člověk přejde na „stale“ a při opětovném pohybu poblíž se tracker znovu inicializuje (`people re-acq:`)
 - [x] **433 MHz button decoding** — `sampler.c` for box B: EV1527 decoder over libgpiod (GPIO15) → SDL2_mixer one-shot, mapa.csv code→sample map, LCD 16×2 status, `--listen`/`--simulate` modes
 - [ ] **Volume smoothing** — ramp volume over a few frames on loss/gain to avoid clicks
 - [ ] **Quadrant fill highlight** — tint the active rectified quadrant for each ball (currently only grid/crosshair drawn)
@@ -61,7 +61,7 @@ Feature ideas and planned work for the tracker.
 - [ ] Preset/crossfade between loop sets
 - [ ] Per-track pan control from a third axis
 - [ ] Record automation of trajectories (people)
-- [x] **Track people instead of balls** — MOG2 motion blobs (overhead C920, floor-polygon mask) + per-person CSRT, dynamic add/drop/re-acquire, all people summed into the 4 mood tracks with clamping + volume smoothing
+- [x] **Track people instead of balls** — MOG2 motion blobs (overhead C920, floor-polygon mask) + per-person KCF, dynamic add/drop/re-acquire, all people summed into the 4 mood tracks with clamping + volume smoothing
 
 ## Done
 

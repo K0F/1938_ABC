@@ -25,8 +25,8 @@
 #include <csignal>
 
 #define CALIB_FILE "calib.txt"
-#define MAX_PEOPLE 16
-#define DEFAULT_MAX_PEOPLE 8
+#define MAX_PEOPLE 4
+#define DEFAULT_MAX_PEOPLE 1
 #define HANDLE_RADIUS 20.0f
 #define GRID_DIV 8
 #define PERSON_MIN_AREA 800
@@ -44,6 +44,10 @@ static volatile sig_atomic_t g_quit = 0;
 static void onSignal(int) { g_quit = 1; }
 
 static cv::Point2f corners[4];
+// Rohy se mění jen kalibrací (loadCalib) nebo tažením myší. Homografie i maska
+// hrací plochy jsou na rohách závislé, ale počítat je každý snímek je zbytečné —
+// přepočítají se jen když tenhle příznak nastaví změna kalibrace.
+static bool calibDirty = true;
 
 static int nearestCorner(cv::Point2f p) {
     float bestD = HANDLE_RADIUS;
@@ -99,6 +103,7 @@ static void loadCalib(int w, int h) {
         for (int i = 0; i < 4; i++) f >> corners[i].x >> corners[i].y;
         f.close();
     }
+    calibDirty = true;
 }
 
 // Maska hrací plochy = polygon z kalibrovaných rohů. Mimo něj pohyb nehraje.
@@ -110,12 +115,12 @@ static void buildFloorMask(int w, int h, cv::Mat& mask) {
 }
 
 struct Person {
-    bool tracking = true;      // live (CSRT běží) vs. stale (čeká na re-acquire)
+    bool tracking = true;      // live (KCF běží) vs. stale (čeká na re-acquire)
     int lost = 0;              // po sobě jdoucí neúspěšné update()
     int stale = 0;             // kolik detekčních cyklů je stale
     cv::Rect bbox;             // aktuální / poslední známá pozice
     cv::Rect lastBbox;
-    cv::Ptr<cv::TrackerCSRT> tracker;
+    cv::Ptr<cv::TrackerKCF> tracker;
 };
 
 static bool sameRegion(const cv::Rect& a, const cv::Rect& b, float margin) {
@@ -131,7 +136,7 @@ static bool sameRegion(const cv::Rect& a, const cv::Rect& b, float margin) {
 // Detekce pohybu (bloby z MOG2) v už rozmorfovaném fgmasku -> kandidáti lidé.
 static void detectPeople(const cv::Mat& frame, const cv::Mat& fgmask, std::vector<cv::Rect>& dets) {
     cv::Mat fg;
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, {9, 9});
+    static const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, {9, 9});
     cv::morphologyEx(fgmask, fg, cv::MORPH_OPEN, kernel);
     cv::morphologyEx(fg, fg, cv::MORPH_CLOSE, kernel);
 
@@ -312,16 +317,25 @@ int main(int argc, char* argv[]) {
     cv::Mat rgbFrame;
     bool dragging = false;
     int dragIdx = -1;
+    Texture2D videoTex = {0};   // trvalá textura snímku (UpdateTexture místo reallocu)
+
+    // Kalibrací vázané pomocné matice — přepočítají se jen při calibDirty.
+    cv::Mat H, Hinv;      // homografie plocha -> jednotkový čtverec
+    cv::Mat floorMask;    // maska hrací plochy pro MOG2 bloby
 
     while (headless ? !g_quit : (!WindowShouldClose() && !g_quit)) {
         cap >> frame;
         if (frame.empty()) break;
         frameNo++;
 
-        cv::Point2f src[4] = {corners[0], corners[1], corners[2], corners[3]};
-        cv::Point2f dst[4] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
-        cv::Mat H = cv::getPerspectiveTransform(src, dst);
-        cv::Mat Hinv = H.inv();
+        if (calibDirty) {
+            cv::Point2f src[4] = {corners[0], corners[1], corners[2], corners[3]};
+            cv::Point2f dst[4] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
+            H = cv::getPerspectiveTransform(src, dst);
+            Hinv = H.inv();
+            buildFloorMask(frameWidth, frameHeight, floorMask);
+            calibDirty = false;
+        }
 
         // ── aktualizace trackerů (každý snímek) ────────────────────────────
         for (auto& p : people) {
@@ -354,8 +368,6 @@ int main(int argc, char* argv[]) {
         // aby počáteční záběr celé scény nebyl brán jako člověk.
         bg->apply(frame, fgmask, -1);
         if (frameNo % DETECT_INTERVAL == 0 && frameNo >= WARMUP_FRAMES) {
-            cv::Mat floorMask;
-            buildFloorMask(frameWidth, frameHeight, floorMask);
             cv::Mat masked;
             cv::bitwise_and(fgmask, floorMask, masked);
             dets.clear();
@@ -378,7 +390,7 @@ int main(int argc, char* argv[]) {
                     if (!p.tracking && sameRegion(p.lastBbox, d, MATCH_MARGIN * 1.5f)) {
                         p.bbox = d;
                         p.lastBbox = d;
-                        p.tracker = cv::TrackerCSRT::create();
+                        p.tracker = cv::TrackerKCF::create();
                         p.tracker->init(frame, p.bbox);
                         p.tracking = true;
                         p.lost = 0;
@@ -398,7 +410,7 @@ int main(int argc, char* argv[]) {
                     Person p;
                     p.bbox = d;
                     p.lastBbox = d;
-                    p.tracker = cv::TrackerCSRT::create();
+                    p.tracker = cv::TrackerKCF::create();
                     p.tracker->init(frame, p.bbox);
                     p.tracking = true;
                     people.push_back(p);
@@ -470,7 +482,7 @@ int main(int argc, char* argv[]) {
                 } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                     dragging = false;
                 }
-                if (dragging && dragIdx >= 0) corners[dragIdx] = mp;
+                if (dragging && dragIdx >= 0) { corners[dragIdx] = mp; calibDirty = true; }
             } else {
                 dragging = false;
             }
@@ -481,14 +493,17 @@ int main(int argc, char* argv[]) {
             gridLines(rgbFrame, Hinv);
             raylibImage.data = rgbFrame.data;
 
-            Texture2D texture = LoadTextureFromImage(raylibImage);
+            // Texturu vytvoříme jednou a dál do ní jen nahráváme pixely.
+            // LoadTextureFromImage každý snímek by znovu alokoval GPU texturu.
+            if (videoTex.id == 0) videoTex = LoadTextureFromImage(raylibImage);
+            else UpdateTexture(videoTex, rgbFrame.data);
 
             BeginDrawing();
             ClearBackground(BLACK);
             rlPushMatrix();
             rlTranslatef(offX, offY, 0.0f);
             rlScalef(scale, scale, 1.0f);
-            DrawTexture(texture, 0, 0, WHITE);
+            DrawTexture(videoTex, 0, 0, WHITE);
 
             for (int i = 0; i < 4; i++) {
                 Color c = (i < 2) ? (Color){255, 80, 80, 255} : (Color){80, 80, 255, 255};
@@ -535,12 +550,12 @@ int main(int argc, char* argv[]) {
 
             rlPopMatrix();
             EndDrawing();
-            UnloadTexture(texture);
         }
     }
 
     std::cerr << "tracker " VERSION_STRING << " stop" << std::endl;
     if (!headless) {
+        if (videoTex.id != 0) UnloadTexture(videoTex);
         UnloadFont(font);
         CloseWindow();
     }

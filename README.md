@@ -12,14 +12,14 @@ Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní z
 
 ## 1. Tracker (Box A)
 
-Tracker používá webkameru k detekci pohybu lidí (až 16, výchozí 8) nad hrací plochou a mapuje jejich X/Y souřadnice na hlasitost neustále hrajících zvukových stop.
+Tracker používá webkameru k detekci pohybu lidí (až 4, výchozí 4) nad hrací plochou a mapuje jejich X/Y souřadnice na hlasitost neustále hrajících zvukových stop.
 
 ### Jak to funguje
 Každý detekovaný člověk přispívá do čtyř zvukových smyček podle své polohy; příspěvky všech lidí se **sčítají** (a případně omezí) do hlasitosti čtyř stop:
 - **Osa Y (nahoře)** -> Stopa 1, **Osa Y (dole)** -> Stopa 2, **Osa X (vlevo)** -> Stopa 3, **Osa X (vpravo)** -> Stopa 4
 - Všechny stopy se neustále opakují a hlasitost je modulována v reálném čase podle pozic lidí.
-- Lidé se detekují pohybem (MOG2, pozadí z webkamery) a každý se pak sleduje vlastním CSRT trackerem; když někdo vejde do záběru, přidá se, když odejde, jeho příspěvek ztichne a tracker se uvolní.
-- Kdo se přestane hýbat, zůstane hlasitý (CSRT sleduje dál), ale kdo vstoupí už stojící, ten se nepozná — detekce potřebuje pohyb.
+- Lidé se detekují pohybem (MOG2, pozadí z webkamery) a každý se pak sleduje vlastním KCF trackerem; když někdo vejde do záběru, přidá se, když odejde, jeho příspěvek ztichne a tracker se uvolní.
+- Kdo se přestane hýbat, zůstane hlasitý (KCF sleduje dál), ale kdo vstoupí už stojící, ten se nepozná — detekce potřebuje pohyb.
 
 ### Korekce perspektivy
 Pokud je webkamera nakloněna, může být sledovaná plocha zkreslená. Software to koriguje pomocí homografické projekce.
@@ -53,13 +53,13 @@ bash build_termux.sh # Jednorázová instalace a sestavení
 Umístěte své WAV soubory jako `samples/track1.wav` až `samples/track4.wav` do složky `samples`, poté spusťte tracker:
 ```bash
 # ./tracker [max_počet_lidí]
-./tracker --max-people 8  # až 8 lidí; probehne-li jich plochou víc, vejde se jen prvních 8
+./tracker --max-people 1  # výchozí je 1 člověk; s N až N lidí (max 4)
 ```
 
 ### Headless režim (Box A v produkci)
 Box A běží bez okna a bez X — grafiku nepotřebuje, jen kameru a zvuk. Služba běží jako uživatel `pi`:
 ```bash
-./tracker --headless --max-people 8  # bez okna; vstup přes systemd
+./tracker --headless --max-people 1  # bez okna; vstup přes systemd
 ```
 ```bash
 sudo cp tracker.service /etc/systemd/system/
@@ -73,7 +73,7 @@ Okenný režim zůstává pro kalibraci (přetáhnutí rohů, klávesa `S`). Bez
 ```bash
 systemctl is-enabled tracker              # enabled
 systemctl status tracker
-journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, 640x480, people, max 8, 4 audio channel(s)"
+journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, 640x480, people, max 1, 4 audio channel(s)"
 journalctl -u tracker -b | grep 'people'  # "+: P3 …" / "-: P2 (lost|gone)" / "re-acq" — kdo právě hraje
 ```
 

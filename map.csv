@@ -22,11 +22,11 @@
 # 9 nových tlačítek (Solight) registrováno 2026-10-11 z boxu A, GPIO15
 # (`sampler --learn`), ověřeno listenem `--confirm 3`: každý kód ≥3
 # dekódování. Výchozí názvy — nahraď skutečnými WAV ze samples/ dle potřeby.
-3458897, sample_b_11.wav
-3526481, sample_b_12.wav
-3447841, sample_b_13.wav
-3458577, sample_b_14.wav
-3449809, sample_b_15.wav
+3458897, Sokol.wav
+3526481, Sokol_B.wav
+3447841, Sokol_C.wav
+3458577, Sokol_D.wav
+3449809, Sokol_E.wav
 3452049, sample_b_16.wav
 3451937, sample_b_17.wav
 3447665, sample_b_18.wav
