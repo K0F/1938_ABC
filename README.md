@@ -147,7 +147,7 @@ běží na Mesa softwarovém GL (`LIBGL_ALWAYS_SOFTWARE=1`), který kontext vytv
 vždy a přežije i restarty trackera. Je to nejdražší část: okenní běh v 1280x720
 bere ~**1,5 jádra** (z toho většina je softwarové GL/llvmpipe), zatímco bezhlavý
 `tracker.service` (bez kreslení) jen ~**0,8 jádra** — proto je produkce bezhlavá
-a okno se pouští jen na kalibraci přes `tracker-view.sh`. Na boxu, kde má
+a okno se pouští jen na kalibraci (VNC, viz [Vzdálený náhled](#vzdálený-náhled-vnc)). Na boxu, kde má
 grafika vykonávat práci, to vypnout lze proměnnou:
 ```bash
 BOX_CONSOLE_SOFTGL=0   # v box-console.xinit, kdyby box hardwarový GL uměl
@@ -171,17 +171,19 @@ profil: `box-console: X relace padá pořád dokola`. Po opravě `rm
 /tmp/.box-console.fails` nebo `box-console.sh off && on`.
 
 ### Vzdálený náhled (VNC)
-Produkce je bezhlavá (`tracker.service`), ale na kalibraci, naučení barev nebo kontrolu detekce se hodí vidět obraz. `tracker-view.sh` k tomu zvedne okenní session bez monitoru — Xvfb `:99` + tracker v okně + x11vnc na portu 5900:
+Produkce je bezhlavá (`tracker.service`), ale na kalibraci, naučení barev nebo kontrolu detekce se hodí vidět obraz. V repu je trojice jednotek, které zvednou okenní session bez monitoru — Xvfb `:99` + tracker v okně + x11vnc na portu 5900. Jsou **jen pro debug** a nezapínají se při bootu; spouští se ručně (klidně z openbox menu na boxu):
 ```bash
-sudo ./tracker-view.sh start    # zastaví tracker.service, nastartuje Xvfb+tracker+x11vnc
-./tracker-view.sh status
-sudo ./tracker-view.sh stop     # zabije view a vrátí zpět bezhlavý tracker.service
+sudo systemctl start tracker-vnc   # vytáhne i Xvfb + x11vnc; zastaví tracker.service
+systemctl status tracker-vnc
+sudo systemctl stop tracker-vnc    # ukončí view; `systemctl enable --now tracker` vrátí bezhlavou produkci
 ```
+Jednotky se instalují při provisioningu Boxu A (`box-provision.sh`), ale zůstávají *disabled*. Alternativně totéž umí `./tracker-view.sh start|stop|status`.
+
 Připojení z notebooku (TigerVNC, heslo `tracker`):
 ```bash
 vncviewer -passwd vnc.passwd -Shared <boxa>::5900
 ```
-Kameru a zvukovku smí držet jen jeden proces, proto jde view a headless služba jen střídavě (start/stop se navzájem vylučují). Obalem je `tracker-view.service`; jde tedy i `systemctl start tracker-view`.
+Kameru a zvukovku smí držet jen jeden proces, proto se okenní (`tracker-vnc`) a bezhlavá (`tracker.service`) služba vzájemně vylučují přes `Conflicts=` (start jedné zastaví druhou).
 
 ### Ověření zvuku (Box A / Box B)
 Box má USB zvukovou kartu i vestavěný jack Pi. `/etc/asound.conf` generuje skript `box-alsa-setup.sh`, který zařízení pojmenuje **podle typu**:

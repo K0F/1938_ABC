@@ -1,0 +1,28 @@
+[Unit]
+Description=Tracker Box A (okenní přes Xvfb :99 + x11vnc)
+After=xvfb99.service x11vnc99.service sound.target multi-user.target
+Wants=xvfb99.service x11vnc99.service sound.target
+# Kameru a zvukovku smí držet jen jeden tracker, proto se okenní (VNC) a
+# bezhlavá služba vzájemně vylučují.
+Conflicts=tracker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# root kvůli @restart akcím z map.csv (systemctl restart), stejně jako tracker.service.
+User=root
+Group=root
+WorkingDirectory=/home/pi/tracker
+# Okno kreslí na Xvfb :99; kalibrace a učení barev tak jdou přes VNC.
+Environment=DISPLAY=:99
+ExecStart=/home/pi/tracker/tracker --allow-restart --map map.csv
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tracker-vnc
+
+[Install]
+WantedBy=multi-user.target

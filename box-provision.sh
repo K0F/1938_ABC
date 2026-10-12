@@ -81,6 +81,13 @@ if [ "$BOX" = "A" ]; then
     install -m 0755 tracker.service "$R/etc/systemd/system/tracker.service"
     UNIT=tracker.service
     START=1
+    # Debug VNC náhled (Xvfb :99 + x11vnc + okenní tracker). Jen pro ladění
+    # přes VNC — instalují se, ale NEzapínají (spouští se ručně, např. z
+    # openbox menu: `systemctl start tracker-vnc`). S tracker.service se
+    # vylučují přes Conflicts= (kameru drží jen jeden proces).
+    install -m 0644 xvfb99.service "$R/etc/systemd/system/xvfb99.service"
+    install -m 0644 x11vnc99.service "$R/etc/systemd/system/x11vnc99.service"
+    install -m 0644 tracker-vnc.service "$R/etc/systemd/system/tracker-vnc.service"
 fi
 
 # ── Box B: sampler ────────────────────────────────────────────────

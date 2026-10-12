@@ -1,0 +1,17 @@
+[Unit]
+Description=Xvfb display :99 (Box A — okenní tracker pro VNC)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1280x720x24 -ac -nolisten tcp
+Restart=always
+RestartSec=1
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xvfb99
+
+[Install]
+WantedBy=multi-user.target

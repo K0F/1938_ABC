@@ -2,6 +2,9 @@
 Description=Tracker Box A (headless: camera tracking + audio)
 After=sound.target
 Wants=sound.target
+# Kameru a zvukovku smí držet jen jeden tracker, proto se bezhlavá a okenní
+# (VNC) služba vzájemně vylučují.
+Conflicts=tracker-vnc.service
 # Tracker + sampler sloučené do jednoho procesu: 8 smyček (4 nálady + 3
 # intermezza + podklad track9) hraje jen když je zapnutá interaction,
 # RF tlačítka (GPIO15) přes map.csv pouští vzorky navrch (one-shot vrstvy),
