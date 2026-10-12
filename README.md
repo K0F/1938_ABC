@@ -12,13 +12,13 @@ Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní z
 
 ## 1. Tracker (Box A)
 
-Tracker používá webkameru k detekci pohybu lidí (až 16, výchozí 8) nad hrací plochou a mapuje jejich X/Y souřadnice na hlasitost neustále hrajících zvukových stop.
+Tracker používá webkameru k detekci pohybu lidí (až 4) nad hrací plochou a mapuje jejich X/Y souřadnice na hlasitost neustále hrajících zvukových stop.
 
 ### Jak to funguje
 Každý detekovaný člověk přispívá do čtyř zvukových smyček podle své polohy; příspěvky všech lidí se **sčítají** (a případně omezí) do hlasitosti čtyř stop:
 - **Osa Y (nahoře)** -> Stopa 1, **Osa Y (dole)** -> Stopa 2, **Osa X (vlevo)** -> Stopa 3, **Osa X (vpravo)** -> Stopa 4
 - Všechny stopy se neustále opakují a hlasitost je modulována v reálném čase podle pozic lidí.
-- Lidé se detekují pohybem (MOG2, pozadí z webkamery) a každý se pak sleduje vlastním CSRT trackerem; když někdo vejde do záběru, přidá se, když odejde, jeho příspěvek ztichne a tracker se uvolní.
+- Lidé se detekují pohybem (MOG2, pozadí z webkamery) a každý se pak sleduje vlastním **KCF trackerem** (CSRT je na Raspberry Pi 4 příliš pomalý, vrátí se přes `--tracker csrt`); když někdo vejde do záběru, přidá se, když odejde, jeho příspěvek ztichne a tracker se uvolní.
 - Kdo se přestane hýbat, zůstane hlasitý (CSRT sleduje dál), ale kdo vstoupí už stojící, ten se nepozná — detekce potřebuje pohyb.
 
 ### Korekce perspektivy
@@ -53,13 +53,13 @@ bash build_termux.sh # Jednorázová instalace a sestavení
 Umístěte své WAV soubory jako `samples/track1.wav` až `samples/track4.wav` do složky `samples`, poté spusťte tracker:
 ```bash
 # ./tracker [max_počet_lidí]
-./tracker --max-people 8  # až 8 lidí; probehne-li jich plochou víc, vejde se jen prvních 8
+./tracker --max-people 4  # až 4 lidé; probehne-li jich plochou víc, vejde se jen prvních 4
 ```
 
 ### Headless režim (Box A v produkci)
 Box A běží bez okna a bez X — grafiku nepotřebuje, jen kameru a zvuk. Služba běží jako uživatel `pi`:
 ```bash
-./tracker --headless --max-people 8  # bez okna; vstup přes systemd
+./tracker --headless --max-people 4  # bez okna; vstup přes systemd
 ```
 ```bash
 sudo cp tracker.service /etc/systemd/system/
@@ -73,9 +73,19 @@ Okenný režim zůstává pro kalibraci (přetáhnutí rohů, klávesa `S`). Bez
 ```bash
 systemctl is-enabled tracker              # enabled
 systemctl status tracker
-journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, 640x480, people, max 8, 4 audio channel(s)"
+journalctl -u tracker -b | head           # "tracker vX.Y.Z start: headless, 640x480, people, max 4, tracker kcf, 4 audio channel(s)"
 journalctl -u tracker -b | grep 'people'  # "+: P3 …" / "-: P2 (lost|gone)" / "re-acq" — kdo právě hraje
+journalctl -u tracker -b | grep '^rf:'    # "rf: listening..." — 433 MHz restart je aktivní
 ```
+
+#### Restart tlačítkem F (433 MHz)
+Box A má na GPIO15 přijímač SRX882S a tracker ho čte kvůli tlačítku **F** (kód
+`5089457`): když se u instalace zasekne sledování, obsluha zmáčkne F a tracker
+se čistě ukončí, `Restart=always` ho znovu zvedne. Restart jde vidět v journalu
+(`tracker: RF button F (code 5089457) -> restart`). Bez přijímače (nebo když
+link obsadí sampler) tracker běží dál bez restartu — loguje to jako
+`rf: receiver unavailable`. Kód i pin se nastaví přes `--reset-code N` a
+`--rf-pin N`; `--no-rf` RF vypne.
 
 #### Přehodí USB zvukové karty
 Zvuková karta v boxu sedí za hubem a občas se přehodí. Starý PCM v trackeru přitom umře (`ALSA write failed (unrecoverable): No such device`) a SDL ho už znovu neotevře — služba by běžela dál potichá, hodiny bez zvuku. Proto tu běží `box-sound-restart.service`: udev pravidlo `99-box-sound.rules` ho probudí, jakmile se objeví nová zvuková karta, přenastaví `/etc/asound.conf` a restartuje tracker.
@@ -196,6 +206,7 @@ QEMU má dvě omezení, která nejsou chyba testu: neemuluje `bcm2835` audio kod
 | Tažení myší / Dotyk | Přesun nejbližšího rohového bodu |
 | `S` | Uloží kalibraci do `calib.txt` |
 | `R` | Resetuje rohy na celý obraz |
+| RF tlačítko `F` | Restartuje tracker (kód `5089457`, viz `--reset-code`) |
 
 ---
 
@@ -569,7 +580,7 @@ sudo systemctl start tracker
 ---
 
 ## Struktura projektu
-- `main.c` — Zdrojový kód aplikace Tracker (detekce lidí pohybem MOG2 + CSRT, kalibrace perspektivy, 4 stopy)
+- `main.c` — Zdrojový kód aplikace Tracker (detekce lidí pohybem MOG2 + KCF/CSRT, kalibrace perspektivy, 4 stopy, restart tlačítkem F)
 - `sampler.c` — Zdrojový kód aplikace Sampler (EV1527 RF + SDL2_mixer + volitelně LCD)
 - `Makefile` — Systém sestavení
 - `map.csv.example` — Šablona pro mapování RF kódů na zvukové stopy

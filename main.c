@@ -23,10 +23,18 @@
 #include <cstdlib>
 #include <cstring>
 #include <csignal>
+#include <ctime>
+#include <thread>
+#if HAVE_GPIOD
+#include <gpiod.h>
+#endif
 
 #define CALIB_FILE "calib.txt"
-#define MAX_PEOPLE 16
-#define DEFAULT_MAX_PEOPLE 8
+// Hrací plocha je malá a na Raspberry Pi 4 je sledování drahé (jeden CSRT/KCF
+// tracker na člověka a snímek). Čtyři lidé jsou maximum, které box utáhne
+// plynule; víc lidí by jen zpomalilo celý běh.
+#define MAX_PEOPLE 4
+#define DEFAULT_MAX_PEOPLE 4
 #define HANDLE_RADIUS 20.0f
 #define GRID_DIV 8
 #define PERSON_MIN_AREA 800
@@ -39,7 +47,21 @@
 #define VOL_SMOOTH_ALPHA 0.30f
 #define MATCH_MARGIN 0.55f
 
+// ── 433 MHz tlačítko F: restart služby ze sálu ────────────────────────
+// Box A má na GPIO15 přijímač SRX882S (stejný jako sampler na boxu B), ale
+// tracker ho dosud nečetl. Tlačítko F (kód 5089457) má tracker restartovat,
+// aby se z něj dalo zprovoznit, když se zasekne sledování — obsluha u
+// instalace nemusí na box lézt přes ssh. Dekodér EV1527 je převzatý ze
+// sampler.c; kód jde přepsat přes --reset-code, pin přes --rf-pin.
+#define RF_GPIO_LINE 15
+#define RF_CHIP "gpiochip0"
+#define EV1527_BITS 24
+#define RF_RESTART_CODE 5089457u
+
 static volatile sig_atomic_t g_quit = 0;
+// Nastaví RF vlákno, když přijde kód pro restart. Hlavní smyčka ho
+// zkontroluje a ukončí se; tracker.service (Restart=always) ho zvedne znovu.
+static volatile sig_atomic_t g_restart = 0;
 
 static void onSignal(int) { g_quit = 1; }
 
@@ -115,7 +137,7 @@ struct Person {
     int stale = 0;             // kolik detekčních cyklů je stale
     cv::Rect bbox;             // aktuální / poslední známá pozice
     cv::Rect lastBbox;
-    cv::Ptr<cv::TrackerCSRT> tracker;
+    cv::Ptr<cv::Tracker> tracker;   // druh určuje --tracker (default KCF)
 };
 
 static bool sameRegion(const cv::Rect& a, const cv::Rect& b, float margin) {
@@ -152,9 +174,151 @@ static void detectPeople(const cv::Mat& frame, const cv::Mat& fgmask, std::vecto
     }
 }
 
+// ── sledovač: KCF místo CSRT ─────────────────────────────────────────
+// CSRT je přesný, ale na Raspberry Pi 4 je drahý (desítky ms na snímek a
+// člověka; se čtyřmi lidmi to shodí běh na jednotky FPS). KCF je řádově
+// rychlejší a na zhora snímané plné bloby stačí. --tracker csrt vrátí
+// původní chování. (MOSSE v OpenCV 4.6 není, jen v legacy API.)
+enum TrackerKind { TRACKER_KCF, TRACKER_CSRT };
+
+static cv::Ptr<cv::Tracker> makeTracker(TrackerKind kind) {
+    switch (kind) {
+        case TRACKER_CSRT:  return cv::TrackerCSRT::create();
+        case TRACKER_KCF:
+        default:            return cv::TrackerKCF::create();
+    }
+}
+
+static const char* trackerKindName(TrackerKind kind) {
+    switch (kind) {
+        case TRACKER_CSRT:  return "csrt";
+        case TRACKER_KCF:
+        default:            return "kcf";
+    }
+}
+
+// ── 433 MHz EV1527 dekodér (převzatý ze sampler.c) ───────────────────
+// Tracker ho používá jen na jedno: tlačítko F (kód 5089457) restartuje
+// službu, když se u instalace zasekne sledování a nikdo u toho není.
+static int rfTeUs = 320;
+static uint32_t rfRestartCode = RF_RESTART_CODE;
+static int rfPinOverride = RF_GPIO_LINE;
+static bool rfEnabled = true;
+
+struct RfDecoder {
+    int state = 0;
+    int bitCount = 0;
+    uint32_t code = 0;
+    uint64_t lastUs = 0;
+    int highUs = 0;
+    int haveHigh = 0;
+};
+
+static int rfClassifyShort(int us) {
+    return us >= 6 * rfTeUs / 10 && us <= 16 * rfTeUs / 10;
+}
+
+static int rfClassifyBit(int us) {
+    if (us >= 6 * rfTeUs / 10 && us <= 16 * rfTeUs / 10) return 0;
+    if (us >= 20 * rfTeUs / 10 && us <= 40 * rfTeUs / 10) return 1;
+    return -1;
+}
+
+static void rfOnCode(uint32_t code) {
+    if (code != rfRestartCode) return;
+    std::cerr << "tracker: RF button F (code " << code
+              << ") -> restart" << std::endl;
+    g_restart = 1;
+}
+
+static void rfDecoderPush(RfDecoder& d, uint64_t evUs, int rising) {
+    if (d.lastUs && evUs > d.lastUs) {
+        int durn = (int)(evUs - d.lastUs);
+        if (rising) {
+            if (durn >= 15 * rfTeUs) {
+                if (d.haveHigh && rfClassifyShort(d.highUs)) {
+                    d.state = 1;
+                    d.bitCount = 0;
+                    d.code = 0;
+                } else {
+                    d.state = 0;
+                }
+                d.haveHigh = 0;
+            } else if (durn >= 4 * rfTeUs) {
+                d.state = 0;
+                d.bitCount = 0;
+                d.haveHigh = 0;
+            } else if (d.state == 1 && d.haveHigh) {
+                int b = rfClassifyBit(d.highUs);
+                if (b >= 0) {
+                    d.code = (d.code << 1) | (uint32_t)b;
+                    d.bitCount++;
+                    d.haveHigh = 0;
+                    if (d.bitCount == EV1527_BITS) {
+                        rfOnCode(d.code);
+                        d.state = 0;
+                        d.bitCount = 0;
+                    }
+                } else {
+                    d.state = 0;
+                    d.bitCount = 0;
+                    d.haveHigh = 0;
+                }
+            }
+        } else {
+            d.highUs = durn;
+            d.haveHigh = 1;
+        }
+    }
+    d.lastUs = evUs;
+}
+
+#if HAVE_GPIOD
+static struct gpiod_chip* rfChip = NULL;
+static struct gpiod_line* rfLine = NULL;
+
+static int rfInit() {
+    rfChip = gpiod_chip_open_by_name(RF_CHIP);
+    if (!rfChip) return -1;
+    rfLine = gpiod_chip_get_line(rfChip, rfPinOverride);
+    if (!rfLine) {
+        gpiod_chip_close(rfChip);
+        rfChip = NULL;
+        return -1;
+    }
+    if (gpiod_line_request_both_edges_events(rfLine, "tracker") < 0) {
+        gpiod_chip_close(rfChip);
+        rfChip = NULL;
+        rfLine = NULL;
+        return -1;
+    }
+    return 0;
+}
+
+// Necítí proud: čeká na hranu s 20ms timeoutem, takže při klidovém
+// přijímači jen spí a nekonkuruje trackerům o CPU.
+static void rfThreadMain() {
+    RfDecoder dec;
+    while (!g_quit && !g_restart) {
+        struct timespec timeout = { 0, 20000000 };
+        int ret = gpiod_line_event_wait(rfLine, &timeout);
+        if (ret < 0) break;
+        if (ret == 0) continue;
+        struct gpiod_line_event ev;
+        if (gpiod_line_event_read(rfLine, &ev) < 0) break;
+        uint64_t t = (uint64_t)ev.ts.tv_sec * 1000000ull +
+                     (uint64_t)ev.ts.tv_nsec / 1000ull;
+        rfDecoderPush(dec, t, ev.event_type == GPIOD_LINE_EVENT_RISING_EDGE);
+    }
+    if (rfLine) { gpiod_line_release(rfLine); rfLine = NULL; }
+    if (rfChip) { gpiod_chip_close(rfChip); rfChip = NULL; }
+}
+#endif
+
 int main(int argc, char* argv[]) {
     bool headless = false;
     int maxPeople = DEFAULT_MAX_PEOPLE;
+    TrackerKind trackerKind = TRACKER_KCF;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
@@ -167,6 +331,13 @@ int main(int argc, char* argv[]) {
             std::cout << "  --headless, -H   run without a window (systemd / Box A)" << std::endl;
             std::cout << "  --max-people N   max concurrently tracked people (default "
                       << DEFAULT_MAX_PEOPLE << ")" << std::endl;
+            std::cout << "  --tracker KIND   csrt | kcf (default kcf; kcf is much\n"
+                         "                   lighter on the Pi, csrt is slow)" << std::endl;
+            std::cout << "  --reset-code N   RF button code that restarts the service\n"
+                         "                   (default " << RF_RESTART_CODE << " = button F)" << std::endl;
+            std::cout << "  --rf-pin N       BCM line of the 433 MHz receiver (default "
+                      << RF_GPIO_LINE << ")" << std::endl;
+            std::cout << "  --no-rf          do not read the 433 MHz receiver" << std::endl;
             std::cout << "  --version, -v    print version" << std::endl;
             return 0;
         }
@@ -176,6 +347,22 @@ int main(int argc, char* argv[]) {
         if (strcmp(argv[i], "--max-people") == 0 && i + 1 < argc) {
             int n = std::atoi(argv[i + 1]);
             if (n >= 1 && n <= MAX_PEOPLE) { maxPeople = n; i++; }
+        }
+        if (strcmp(argv[i], "--tracker") == 0 && i + 1 < argc) {
+            trackerKind = (strcmp(argv[i + 1], "csrt") == 0) ? TRACKER_CSRT
+                                                             : TRACKER_KCF;
+            i++;
+        }
+        if (strcmp(argv[i], "--reset-code") == 0 && i + 1 < argc) {
+            rfRestartCode = (uint32_t)strtoul(argv[i + 1], NULL, 10);
+            i++;
+        }
+        if (strcmp(argv[i], "--rf-pin") == 0 && i + 1 < argc) {
+            rfPinOverride = std::atoi(argv[i + 1]);
+            i++;
+        }
+        if (strcmp(argv[i], "--no-rf") == 0) {
+            rfEnabled = false;
         }
     }
     // Bývalý počet míčků = nyní maximální počet lidí (zpětná kompatibilita CLI).
@@ -187,6 +374,26 @@ int main(int argc, char* argv[]) {
 
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
+
+    // 433 MHz přijímač: vlákno, které restartuje službu tlačítkem F. Když
+    // knihovna chybí nebo link obsadil sampler, tracker jede dál bez RF.
+    std::thread rfThread;
+#if HAVE_GPIOD
+    if (rfEnabled) {
+        if (rfInit() == 0) {
+            rfThread = std::thread(rfThreadMain);
+            std::cerr << "rf: listening on " << RF_CHIP << " line " << rfPinOverride
+                      << ", restart code " << rfRestartCode << std::endl;
+        } else {
+            std::cerr << "rf: receiver unavailable (" << RF_CHIP << " line "
+                      << rfPinOverride << " busy or missing); no button restart"
+                      << std::endl;
+        }
+    }
+#else
+    if (rfEnabled)
+        std::cerr << "rf: built without libgpiod; no button restart" << std::endl;
+#endif
 
     cv::VideoCapture cap(0);
     if (!cap.isOpened()) {
@@ -292,7 +499,9 @@ int main(int argc, char* argv[]) {
     std::cerr << "tracker " VERSION_STRING << " start: "
               << (headless ? "headless" : "window") << ", "
               << frameWidth << "x" << frameHeight << ", "
-              << "people, max " << maxPeople << ", " << mixCh << " audio channel(s)"
+              << "people, max " << maxPeople << ", "
+              << "tracker " << trackerKindName(trackerKind) << ", "
+              << mixCh << " audio channel(s)"
               << std::endl;
 
     cv::Ptr<cv::BackgroundSubtractor> bg = cv::createBackgroundSubtractorMOG2(500, 16, false);
@@ -313,15 +522,28 @@ int main(int argc, char* argv[]) {
     bool dragging = false;
     int dragIdx = -1;
 
+    // Homografie i maska podlahy závisí jen na rozích kalibrace, takže se
+    // přepočítají jen když je kalibrace "špinavá" — ne na každém snímku.
+    cv::Mat H, Hinv, floorMask;
+    bool calibDirty = true;
+
     while (headless ? !g_quit : (!WindowShouldClose() && !g_quit)) {
+        if (g_restart) {
+            std::cerr << "tracker: restarting on RF button F" << std::endl;
+            break;
+        }
         cap >> frame;
         if (frame.empty()) break;
         frameNo++;
 
-        cv::Point2f src[4] = {corners[0], corners[1], corners[2], corners[3]};
-        cv::Point2f dst[4] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
-        cv::Mat H = cv::getPerspectiveTransform(src, dst);
-        cv::Mat Hinv = H.inv();
+        if (calibDirty) {
+            cv::Point2f src[4] = {corners[0], corners[1], corners[2], corners[3]};
+            cv::Point2f dst[4] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
+            H = cv::getPerspectiveTransform(src, dst);
+            Hinv = H.inv();
+            buildFloorMask(frameWidth, frameHeight, floorMask);
+            calibDirty = false;
+        }
 
         // ── aktualizace trackerů (každý snímek) ────────────────────────────
         for (auto& p : people) {
@@ -354,8 +576,6 @@ int main(int argc, char* argv[]) {
         // aby počáteční záběr celé scény nebyl brán jako člověk.
         bg->apply(frame, fgmask, -1);
         if (frameNo % DETECT_INTERVAL == 0 && frameNo >= WARMUP_FRAMES) {
-            cv::Mat floorMask;
-            buildFloorMask(frameWidth, frameHeight, floorMask);
             cv::Mat masked;
             cv::bitwise_and(fgmask, floorMask, masked);
             dets.clear();
@@ -378,7 +598,7 @@ int main(int argc, char* argv[]) {
                     if (!p.tracking && sameRegion(p.lastBbox, d, MATCH_MARGIN * 1.5f)) {
                         p.bbox = d;
                         p.lastBbox = d;
-                        p.tracker = cv::TrackerCSRT::create();
+                        p.tracker = makeTracker(trackerKind);
                         p.tracker->init(frame, p.bbox);
                         p.tracking = true;
                         p.lost = 0;
@@ -398,7 +618,7 @@ int main(int argc, char* argv[]) {
                     Person p;
                     p.bbox = d;
                     p.lastBbox = d;
-                    p.tracker = cv::TrackerCSRT::create();
+                    p.tracker = makeTracker(trackerKind);
                     p.tracker->init(frame, p.bbox);
                     p.tracking = true;
                     people.push_back(p);
@@ -456,7 +676,7 @@ int main(int argc, char* argv[]) {
 
         if (!headless) {
             if (IsKeyPressed(KEY_S)) saveCalib();
-            if (IsKeyPressed(KEY_R)) loadCalib(frameWidth, frameHeight);
+            if (IsKeyPressed(KEY_R)) { loadCalib(frameWidth, frameHeight); calibDirty = true; }
 
             // Myš je v souřadnicích okna, kalibrace v souřadnicích snímku.
             Vector2 mouse = GetMousePosition();
@@ -470,7 +690,10 @@ int main(int argc, char* argv[]) {
                 } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                     dragging = false;
                 }
-                if (dragging && dragIdx >= 0) corners[dragIdx] = mp;
+                if (dragging && dragIdx >= 0) {
+                    corners[dragIdx] = mp;
+                    calibDirty = true;
+                }
             } else {
                 dragging = false;
             }
@@ -540,6 +763,10 @@ int main(int argc, char* argv[]) {
     }
 
     std::cerr << "tracker " VERSION_STRING << " stop" << std::endl;
+    // RF vlákno končí na g_quit/g_restart, proto se g_quit nastaví i tady —
+    // při break z g_restart to zrovna není 1.
+    g_quit = 1;
+    if (rfThread.joinable()) rfThread.join();
     if (!headless) {
         UnloadFont(font);
         CloseWindow();

@@ -12,7 +12,10 @@ Type=simple
 User=pi
 Group=pi
 WorkingDirectory=/home/pi/tracker
-ExecStart=/home/pi/tracker/tracker --headless --max-people 8
+# --max-people 4: hrací plocha je malá a víc CSRT/KCF trackerů by Pi 4
+# zpomalilo. Tlačítko F (RF na GPIO15) restartuje službu; Restart=always
+# plus StartLimitIntervalSec=0 to zvedne po čistém i divokém exit.
+ExecStart=/home/pi/tracker/tracker --headless --max-people 4 --tracker kcf
 Restart=always
 RestartSec=2
 KillSignal=SIGTERM
