@@ -19,7 +19,8 @@ Tracker používá webkameru k detekci dvou barevných koulí nad hrací plochou
 - **Červená koule** míchá 3 intermezza `Inter_*` podle polohy vlevo/vpravo (trojice pásem).
 - Osmou smyčkou je podklad `samples/track9.wav` („bed“), který hraje konstantní hlasitostí, dokud je interaction zapnutá.
 - Detekce je barevná (HSV blob) — žádný MOG2 ani KCF, jen převod do HSV a pár prahů na snímek, což je na Raspberry Pi 4 zanedbatelné. Barvy koulí se „naučí“ kliknutím do okna (viz [Ovládání](#ovládání-tracker)); dokud naučené nejsou, použijí se pevné prahy (zelená/červená).
-- Sledování je odolnější: střed bere z `minEnclosingCircle` (ne z bboxu, který posouvá odlesk), tvar filtruje kruhovostí (`--min-roundness`) a mezemi plochy (`--min-area`/`--max-area`). Zamčená koule se hledá jen v úzkém okně kolem predikce a přijímá se pouze blob blíž než `--gate-px` (zamezí přeskočení na jiný objekt); ztracená hledá globálně. Polohu hlazuje drobný 1D Kalman s konstantní rychlostí (plynulý pohyb, krátké výpadky předpoví). Naučená saturace/jas se pomalu přizpůsobují změně osvětlení (`--adapt-alpha`), odstín zůstává naučený; `--lock-exposure` navíc vypne auto-expozici/WB kamery.
+- Sledování je odolnější: střed bere z `minEnclosingCircle` (ne z bboxu, který posouvá odlesk), tvar filtruje kruhovostí (`--min-roundness`) a mezemi plochy (`--min-area`/`--max-area`). Zamčená koule se hledá v úzkém okně kolem predikce (okno roste s rychlostí), ztracená nejdřív v okruhu `--reacquire-px` kolem poslední polohy a teprve pak globálně — koule tak „nepřeskočí“ na jiný objekt; blob blíž k druhé kouli se zahodí (záměna koulí). Polohu hlazuje drobný 1D Kalman s konstantní rychlostí (plynulý pohyb, krátké výpadky předpoví). Naučená saturace/jas se pomalu přizpůsobují změně osvětlení (`--adapt-alpha`), odstín zůstává naučený; `--lock-exposure` navíc vypne auto-expozici/WB kamery.
+- **Odstranění pozadí**: na prázdné ploše (koule mimo stůl) se změří referenční snímek (klávesa `B`, soubor `--bg`, default `bg.bin`); detekce pak bere jen pixely, které se od reference liší (`--bg-diff`, `--no-bg` vypne). Zmizí statické odlesky a barevné předměty v pozadí, ale koule zůstane detekovaná i když se nehýbe (na rozdíl od MOG2). S `--lock-exposure` zůstává reference platná i při změnách světla.
 - Když je interaction vypnutá, jsou všechny smyčky ztlumené (ticho). RF tlačítka hrají navrch bez ohledu na to.
 
 ### Korekce perspektivy a učení barev
@@ -28,7 +29,7 @@ Pokud je webkamera nakloněna, může být sledovaná plocha zkreslená. Softwar
 - **S** – uloží kalibraci do `calib.txt` (rohy, naučené barvy i tolerance; automaticky se načte při dalším spuštění).
 - **R** – resetuje rohy na plný snímek.
 - **Klik do koule** – naučí barvu: levé tlačítko naučí zelenou (nálady), pravé tlačítko červenou (intermezza). Klik mimo rohový bod učí, na rohu táhne kalibraci.
-- **`C`** – zapomene naučené barvy (zpět na pevné prahy). **`[`** / **`]`** – zúží/rozšíří toleranci odstínu (`hueTol`, uloží se).
+- **`C`** – zapomene naučené barvy (zpět na pevné prahy). **`B`** – změří referenci prázdné plochy (drž koule mimo stůl). **`[`** / **`]`** – zúží/rozšíří toleranci odstínu (`hueTol`, uloží se).
 
 Barvy i rohy se ukládají do `calib.txt` včetně rozlišení, pro které platí — když se později změní `--width/--height`, rohy se automaticky přepočítají (`calib: rohy přepočítány z … na …`). Pro snazší vizualizaci rektifikace je přes obraz překryta perspektivní mřížka.
 
@@ -65,7 +66,7 @@ Vložte smyčky do složky `samples/` pod jmény, která tracker očekává:
 ./tracker --width 1920 --height 1080   # jiné rozlišení kamery
 ./tracker --detect-ms 0    # detekce v každém snímku (bez throttlingu)
 ```
-Přehled voleb: `--min-area N` (min. plocha blobu koule), `--max-area N` (max. plocha, `0` = bez limitu), `--min-roundness F` (kruhovitost blobu 0..1), `--gate-px N` (poloměr zámku kolem predikce v px, `0` = vypnuto), `--adapt-alpha F` (rychlost adaptace naučené saturace/jasu), `--lock-exposure` (vypne auto-expozici/WB kamery), `--detect-ms N` (max. frekvence CV detekce v ms, `0` = každý snímek), `--width/--height`, `--map FILE`, `--samples-dir D`, `--no-rf`, `--allow-restart`, `--simulate`; celý výpis `./tracker --help`.
+Přehled voleb: `--min-area N` (min. plocha blobu koule), `--max-area N` (max. plocha, `0` = bez limitu), `--min-roundness F` (kruhovitost blobu 0..1), `--gate-px N` (poloměr zámku kolem predikce v px, `0` = vypnuto), `--reacquire-px N` (poloměr hledání ztracené koule v px), `--adapt-alpha F` (rychlost adaptace naučené saturace/jasu), `--bg FILE`/`--bg-diff N`/`--no-bg` (reference prázdné plochy a její prah), `--lock-exposure` (vypne auto-expozici/WB kamery), `--detect-ms N` (max. frekvence CV detekce v ms, `0` = každý snímek), `--width/--height`, `--map FILE`, `--samples-dir D`, `--no-rf`, `--allow-restart`, `--simulate`; celý výpis `./tracker --help`.
 
 ### Headless režim (Box A v produkci)
 Box A běží bez okna a bez X — grafiku nepotřebuje, jen kameru a zvuk. Služba běží jako **root** (kvůli akcím z `map.csv`, které volají `systemctl restart`):
@@ -234,6 +235,7 @@ QEMU má dvě omezení, která nejsou chyba testu: neemuluje `bcm2835` audio kod
 | `S` | Uloží kalibraci (rohy + barvy + tolerance) do `calib.txt` |
 | `R` | Resetuje rohy na celý obraz |
 | `C` | Zapomene naučené barvy (zpět na pevné prahy) |
+| `B` | Změří referenci prázdné plochy pro odstranění pozadí (drž koule mimo stůl) |
 | `[` / `]` | Zúží / rozšíří toleranci odstínu (`hueTol`) a uloží |
 | RF tlačítko `F` | `@interact` — zapne/vypne smyčky (kód `5089457`; viz též `--reset-code`) |
 

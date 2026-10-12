@@ -120,6 +120,21 @@ static Color hsvToRgb(int h, int s, int v, unsigned char a = 255) {
 #define KF_MEAS_NOISE 9.0f
 #define KF_POS_NOISE 0.2f
 #define KF_VEL_NOISE 2.0f
+// Ztracená koule (present, ale mimo gate) se hledá nejdřív v tomhle okruhu
+// kolem poslední známé polohy, a až pak globálně (největší blob). Zamezí to
+// přeskočení na jiný stejně barevný objekt; 0 = rovnou globálně.
+#define BALL_REACQUIRE_PX 420.0f
+
+// ── Odstranění pozadí (clean plate) ──────────────────────────────────
+// Prázdná plocha (koule mimo stůl) se uloží jako referenční snímek; detekce
+// pak bere jen pixely, které se od reference liší (a zároveň mají barvu
+// koule). Zmizí statické odlesky a barevné předměty v pozadí, ale koule
+// zůstane detekovaná i když se nehýbe (na rozdíl od MOG2). Srovnáváme
+// maximální rozdíl kanálu (ne šedotón), aby barva podobného jasu (červená na
+// dřevě) nezmizela; dilatace toleruje drobné posuny/šum.
+#define BG_DIFF_DEFAULT 25
+#define BG_FRAMES 15
+#define BG_FILE_DEFAULT "bg.bin"
 
 // Výchozí rozlišení kamery. 1280x720 dá menší kouli víc pixelů (lepší
 // detekce) za cenu vyššího CPU; jde přebít --width/--height.
@@ -205,7 +220,15 @@ static int ballMaxArea = BALL_MAX_AREA;   // --max-area, 0 = bez limitu
 static float ballMinRoundness = BALL_MIN_ROUNDNESS;  // --min-roundness
 static float ballGatePx = BALL_GATE_PX;   // --gate-px, 0 = bez gate
 static float ballAdaptAlpha = BALL_ADAPT_ALPHA;      // --adapt-alpha
+static float ballReacquirePx = BALL_REACQUIRE_PX;    // --reacquire-px
 static const char* camDevice = "/dev/video0";        // --device
+
+// Referenční snímek prázdné plochy pro odstranění pozadí (bg.bin, RGB).
+static std::vector<unsigned char> bgRefRgb;   // w*h*3, R8G8B8
+static bool bgRefOn = false;      // je platná reference načtená?
+static bool bgEnabled = true;     // --no-bg vypne odstranění pozadí úplně
+static int bgDiffThresh = BG_DIFF_DEFAULT;   // --bg-diff, práh (max kanál)
+static bool bgWarned = false;     // už jsme hlásili chybějící referenci?
 
 // ── homografie (nahrazuje cv::getPerspectiveTransform/perspectiveTransform) ──
 // 3x3 matice zobrazení snímek -> jednotkový čtverec (a zpět). Počítá se jen při
@@ -379,6 +402,91 @@ static void buildFloorMask(int w, int h) {
     floorROI = Box{minx, miny, maxx - minx + 1, maxy - miny + 1};
 }
 
+// ── odstranění pozadí: reference prázdné plochy ──────────────────────
+// Formát: "P6\n<w> <h>\n255\n" + w*h*3 bajtů RGB (binární PPM). Psaní/čtení
+// přes ofstream/ifstream, bez OpenCV. Ukládáme RGB (ne šedotón), aby rozdíl
+// chytil i barevně odlišný objekt se stejným jasem.
+static bool saveBgRef(const char* path, const unsigned char* rgb, int w, int h) {
+    if (!rgb || w <= 0 || h <= 0) return false;
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    f << "P6\n" << w << " " << h << "\n255\n";
+    f.write(reinterpret_cast<const char*>(rgb), (std::streamsize)w * h * 3);
+    return (bool)f;
+}
+
+static bool loadBgRef(const char* path, int w, int h) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+    std::string magic;
+    int gw = 0, gh = 0, maxv = 0;
+    f >> magic >> gw >> gh >> maxv;
+    if (magic != "P6" || gw <= 0 || gh <= 0 || maxv <= 0) return false;
+    f.get();   // jedna bílá mezera za hlavičkou
+    std::vector<unsigned char> g((size_t)gw * gh * 3);
+    f.read(reinterpret_cast<char*>(g.data()), (std::streamsize)g.size());
+    if (!f) return false;
+    if (gw != w || gh != h) {
+        // Jiné rozlišení kamery: převzorkuj nejbližším sousedem (reference je
+        // rozmazaná, hrubé převzorkování stačí).
+        std::vector<unsigned char> r((size_t)w * h * 3);
+        for (int y = 0; y < h; y++) {
+            int sy = (int)((long)y * gh / h);
+            for (int x = 0; x < w; x++) {
+                int sx = (int)((long)x * gw / w);
+                const unsigned char* s = &g[((size_t)sy * gw + sx) * 3];
+                unsigned char* d = &r[((size_t)y * w + x) * 3];
+                d[0] = s[0]; d[1] = s[1]; d[2] = s[2];
+            }
+        }
+        bgRefRgb.swap(r);
+        std::cerr << "bg: reference přepočítána z " << gw << "x" << gh
+                  << " na " << w << "x" << h << std::endl;
+    } else {
+        bgRefRgb.swap(g);
+    }
+    bgRefOn = true;
+    std::cerr << "bg: reference načtena z " << path << " (" << w << "x" << h
+              << ")" << std::endl;
+    return true;
+}
+
+// Maska pixelů, které se liší od reference prázdné plochy (max rozdíl kanálu
+// > thresh), zředěná 3x3 dilatací. Bez reference vrací nullptr a volající
+// spadne na čistě barevnou detekci.
+static std::vector<unsigned char> bgFgBuf;
+static const unsigned char* buildFgMask(const unsigned char* rgb, int w, int h,
+                                        int thresh) {
+    if (!bgRefOn || !rgb || (int)bgRefRgb.size() < w * h * 3) return nullptr;
+    size_t N = (size_t)w * h;
+    if (bgFgBuf.size() < N) bgFgBuf.resize(N);
+    for (size_t i = 0, p = 0; i < N; i++, p += 3) {
+        int d0 = std::abs((int)rgb[p]     - (int)bgRefRgb[p]);
+        int d1 = std::abs((int)rgb[p + 1] - (int)bgRefRgb[p + 1]);
+        int d2 = std::abs((int)rgb[p + 2] - (int)bgRefRgb[p + 2]);
+        int d = d0 > d1 ? (d0 > d2 ? d0 : d2) : (d1 > d2 ? d1 : d2);
+        bgFgBuf[i] = (d > thresh) ? 255 : 0;
+    }
+    // Dilatace 3x3 (max okolí) do pomocného bufferu.
+    static std::vector<unsigned char> dil;
+    dil.assign(bgFgBuf.begin(), bgFgBuf.end());
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            unsigned char m = 0;
+            for (int dy = -1; dy <= 1 && !m; dy++) {
+                int yy = y + dy; if (yy < 0 || yy >= h) continue;
+                for (int dx = -1; dx <= 1; dx++) {
+                    int xx = x + dx; if (xx < 0 || xx >= w) continue;
+                    if (bgFgBuf[(size_t)yy * w + xx]) { m = 255; break; }
+                }
+            }
+            dil[(size_t)y * w + x] = m;
+        }
+    }
+    bgFgBuf.swap(dil);
+    return bgFgBuf.data();
+}
+
 // ── sledování koulí ──────────────────────────────────────────────────
 // Každá koule je nejlepší blob své barvy uvnitř masky plochy. Žádný
 // klasifikátor: koule jsou barevně odlišené, takže HSV prahy stačí a na
@@ -450,14 +558,17 @@ static std::vector<gs_label> g_labBuf;
 static std::vector<gs_blob> g_blobBuf;
 
 // Najde kouli dané barvy v ROI "roi" snímku rgb (fw x fh, R8G8B8). floorMask
-// (fw*fh, 0/255) omezí hledání na hrací plochu. Vrací true a vyplní
+// (fw*fh, 0/255) omezí hledání na hrací plochu, volitelný fgMask (stejný
+// layout, může být nullptr) navíc vyloučí pixely shodné s prázdnou plochou.
+// Vrací true a vyplní
 // outCenter/outBox (souřadnice snímku) a střední saturaci/jas blobu.
 //
 // Kandidáty dělá grayskull (spojité komponenty); tvar filtrujeme poměrem stran
 // bboxu a zaplněním (odfiltruje odlesky a protáhlé fleky). Asociace je po
 // vrstvách, aby koule "nepřeskočila" na jiný objekt daleko od predikce.
 static bool detectBall(const unsigned char* rgb, int fw, int fh,
-                       const unsigned char* floorMask, int color, const Box& roi,
+                       const unsigned char* floorMask, const unsigned char* fgMask,
+                       int color, const Box& roi,
                        Pt prev, float gatePx, float reacquirePx, Pt avoid,
                        Pt& outCenter, Box& outBox, float* meanS, float* meanV) {
     int rw = roi.w, rh = roi.h;
@@ -478,11 +589,14 @@ static bool detectBall(const unsigned char* rgb, int fw, int fh,
         const unsigned char* rp = rgb + ((size_t)(roi.y + ry) * fw + roi.x) * 3;
         const unsigned char* fm = floorMask
             ? floorMask + (size_t)(roi.y + ry) * fw + roi.x : nullptr;
+        const unsigned char* gm = fgMask
+            ? fgMask + (size_t)(roi.y + ry) * fw + roi.x : nullptr;
         unsigned char* mp = g_maskBuf.data() + (size_t)ry * rw;
         unsigned char* sp = g_sBuf.data() + (size_t)ry * rw;
         unsigned char* vp = g_vBuf.data() + (size_t)ry * rw;
         for (int rx = 0; rx < rw; rx++, rp += 3, mp++, sp++, vp++) {
             if (fm && !fm[rx]) continue;
+            if (gm && !gm[rx]) continue;   // stejné jako prázdná plocha
             int H, S, V; rgbToHsv(rp[0], rp[1], rp[2], H, S, V);
             if (S < sMin || V < vMin) continue;
             bool match;
@@ -690,6 +804,7 @@ int main(int argc, char* argv[]) {
     bool allowRestart = false;
     bool dryRun = false;
     bool lockExposure = false;   // --lock-exposure, vypne auto-expozici/WB
+    const char* bgFile = BG_FILE_DEFAULT;   // --bg, reference prázdné plochy
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
@@ -724,8 +839,15 @@ int main(int argc, char* argv[]) {
             std::cout << "  --gate-px N      lock gate radius in px, 0 = off (default "
                       << (int)BALL_GATE_PX << ")\n";
             std::cout << "  --adapt-alpha F  learned S/V adaptation rate (default "
-                      << BALL_ADAPT_ALPHA << ")\n"
-                         "  --lock-exposure  turn off camera auto-exposure/WB\n";
+                      << BALL_ADAPT_ALPHA << ")\n";
+            std::cout << "  --reacquire-px N lost-ball search radius in px (default "
+                      << (int)BALL_REACQUIRE_PX << ")\n"
+                         "  --bg FILE        empty-floor reference image (default "
+                      << BG_FILE_DEFAULT << ")\n"
+                         "  --bg-diff N      background diff threshold, max channel (default "
+                      << BG_DIFF_DEFAULT << ")\n"
+                         "  --no-bg          disable background removal\n";
+            std::cout << "  --lock-exposure  turn off camera auto-exposure/WB\n";
             std::cout << "  --detect-ms N    max CV detection rate in ms (default "
                       << DETECT_MS_DEFAULT << "; 0 = every frame)\n";
             std::cout << "  --no-rf          do not read the 433 MHz receiver" << std::endl;
@@ -810,6 +932,20 @@ int main(int argc, char* argv[]) {
             ballAdaptAlpha = (float)std::atof(argv[++i]);
             if (ballAdaptAlpha < 0) ballAdaptAlpha = 0;
             if (ballAdaptAlpha > 0.5f) ballAdaptAlpha = 0.5f;
+        }
+        if (strcmp(argv[i], "--reacquire-px") == 0 && i + 1 < argc) {
+            ballReacquirePx = (float)std::atof(argv[++i]);
+            if (ballReacquirePx < 0) ballReacquirePx = 0;
+        }
+        if (strcmp(argv[i], "--bg") == 0 && i + 1 < argc) {
+            bgFile = argv[++i];
+        }
+        if (strcmp(argv[i], "--bg-diff") == 0 && i + 1 < argc) {
+            bgDiffThresh = std::atoi(argv[++i]);
+            if (bgDiffThresh < 1) bgDiffThresh = 1;
+        }
+        if (strcmp(argv[i], "--no-bg") == 0) {
+            bgEnabled = false;
         }
         if (strcmp(argv[i], "--lock-exposure") == 0) {
             lockExposure = true;
@@ -980,6 +1116,14 @@ int main(int argc, char* argv[]) {
         frameHeight = camFrame.h;
         rgbPtr = camFrame.rgb;
         loadCalib(frameWidth, frameHeight);
+        if (bgEnabled && !bgRefOn && !bgWarned) {
+            if (!loadBgRef(bgFile, frameWidth, frameHeight)) {
+                std::cerr << "bg: reference " << bgFile
+                          << " nenalezena — detekce bez odstranění pozadí "
+                             "(v okně stiskni B na prázdné ploše)" << std::endl;
+                bgWarned = true;
+            }
+        }
         raylibImage = Image{const_cast<unsigned char*>(rgbPtr), frameWidth,
                             frameHeight, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8};
         return true;
@@ -1058,6 +1202,9 @@ int main(int argc, char* argv[]) {
     auto lastDetect = std::chrono::steady_clock::now() - std::chrono::hours(1);
     // Čas minulého snímku pro Kalman (predikce mezi detekcemi).
     auto lastLoop = std::chrono::steady_clock::now();
+    // Sběr snímků pro referenci pozadí (klávesa B): průměr BG_FRAMES snímků.
+    int bgCaptureLeft = 0;
+    std::vector<unsigned long> bgAccum;   // w*h*3 součtů (unsigned long)
 
     while (headless ? !g_quit : (!WindowShouldClose() && !g_quit)) {
         if (buttons.takeRestart()) {
@@ -1111,6 +1258,22 @@ int main(int argc, char* argv[]) {
             calibDirty = false;
         }
 
+        // ── sběr reference pozadí (klávesa B) ──────────────────────────────
+        // Průměr BG_FRAMES snímků prázdné plochy (koule mimo stůl); průměr
+        // potlačí šum senzoru. Běží jen v okenním režimu (klávesa B).
+        if (bgCaptureLeft > 0) {
+            size_t N = (size_t)frameWidth * frameHeight * 3;
+            if (bgAccum.size() != N) bgAccum.assign(N, 0);
+            for (size_t p = 0; p < N; p++) bgAccum[p] += rgbPtr[p];
+            if (--bgCaptureLeft == 0) {
+                std::vector<unsigned char> avg(N);
+                for (size_t p = 0; p < N; p++) avg[p] = (unsigned char)(bgAccum[p] / BG_FRAMES);
+                if (saveBgRef(bgFile, avg.data(), frameWidth, frameHeight))
+                    std::cerr << "bg: reference uložena (" << bgFile << ")" << std::endl;
+                loadBgRef(bgFile, frameWidth, frameHeight);
+            }
+        }
+
         // ── predikce polohy (Kalman) ───────────────────────────────────────
         // Predikujeme každý snímek (i mezi detekcemi), aby koule plynule
         // pokračovala a nezavlékala; dt je skutečný čas od minulého snímku.
@@ -1131,6 +1294,11 @@ int main(int argc, char* argv[]) {
             std::chrono::duration_cast<std::chrono::milliseconds>(detNow - lastDetect).count() >= detectMs;
         if (doDetect) {
             lastDetect = detNow;
+            // Maska rozdílu od prázdné plochy (jedna pro obě koule). Bez
+            // reference je nullptr a detekce jede jen barevně + podle plochy.
+            const unsigned char* fgMask = bgRefOn
+                ? buildFgMask(rgbPtr, frameWidth, frameHeight, bgDiffThresh)
+                : nullptr;
             auto detectOne = [&](int color, Ball& b, const Ball& other) {
                 Box roi;
                 if (b.present && b.kx.init) {
@@ -1153,8 +1321,8 @@ int main(int argc, char* argv[]) {
                 // k nám než k druhé kouli). Ztracená: největší blob kdekoliv.
                 float gate = std::max(60.0f, 0.5f * std::min((float)roi.w, (float)roi.h));
                 bool found = detectBall(rgbPtr, frameWidth, frameHeight,
-                                        floorMaskFull.data(), color, roi,
-                                        prev, gate, 0.0f, avoid,
+                                        floorMaskFull.data(), fgMask, color, roi,
+                                        prev, gate, ballReacquirePx, avoid,
                                         c, bx, &mS, &mV);
                 if (found) {
                     b.correct(c.x, c.y, bx);
@@ -1241,6 +1409,14 @@ int main(int argc, char* argv[]) {
                 ballColor[BALL_GREEN] = ColorModel{};
                 saveCalib();
                 std::cerr << "color: cleared (pevné prahy)" << std::endl;
+            }
+            if (IsKeyPressed(KEY_B)) {
+                // Změř referenci pozadí z aktuální prázdné plochy (koule mimo
+                // stůl). Uloží se do bgFile a hned se použije.
+                bgCaptureLeft = BG_FRAMES;
+                bgAccum.clear();
+                std::cerr << "bg: měřím prázdnou plochu (" << BG_FRAMES
+                          << " snímků; drž koule mimo stůl)…" << std::endl;
             }
             if (IsKeyPressed(KEY_LEFT_BRACKET)) {
                 hueTol = std::max(HUE_TOL_MIN, hueTol - 2);
