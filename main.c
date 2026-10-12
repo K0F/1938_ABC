@@ -1016,7 +1016,7 @@ int main(int argc, char* argv[]) {
                 cv::Point2f c; cv::Rect bx;
                 float mS = 0, mV = 0;
                 bool found = detectBall(hsvRoi, color, maskRoi,
-                                        cv::Point2f(b.sx, b.sy),
+                                        cv::Point2f(b.sx - roi.x, b.sy - roi.y),
                                         std::max(60.0f, 0.5f * std::min(roi.width, roi.height)),
                                         b.present, c, bx, &mS, &mV);
                 if (found) {
