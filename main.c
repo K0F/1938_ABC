@@ -50,9 +50,21 @@
 #define N_MOOD 4
 #define N_INTER 3
 #define N_BED 1
-#define BALL_MIN_AREA 20
+// Nejmenší plocha blobu, aby se počítal za kouli. Menší koule (zelená bývá
+// menší než červená) dává jen pár desítek pixelů, takže vyšší práh ji zahodil.
+#define BALL_MIN_AREA 8
 #define BALL_LOST_FRAMES 12
 #define BALL_SMOOTH_ALPHA 0.5f
+
+// Výchozí rozlišení kamery. 1280x720 dá menší kouli víc pixelů (lepší
+// detekce) za cenu vyššího CPU; jde přebít --width/--height.
+#define CAM_W_DEFAULT 1280
+#define CAM_H_DEFAULT 720
+
+// Jak často nejvýš spouštět barevnou detekci (ms). Koule se hýbou pomalu,
+// takže ~15 Hz stačí a ušetří to drtivou většinu CPU ve vysokém rozlišení.
+// 0 = každý snímek (bez šetření).
+#define DETECT_MS_DEFAULT 66
 #define HANDLE_RADIUS 20.0f
 #define GRID_DIV 8
 #define VOL_SMOOTH_ALPHA 0.30f
@@ -113,12 +125,16 @@ static void onSignal(int) { g_quit = 1; }
 static ButtonEngine buttons;
 
 static cv::Point2f corners[4];
+// Rozlišení, pro které jsou rohy uložené. Při změně rozlišení kamery se rohy
+// přepočítají, aby kalibrace plochy zůstala platná (viz loadCalib).
+static int calibW = 0, calibH = 0;
 
 // Naučená barva (HSV, OpenCV rozsahy) pro každou kouli; index = BallColor
 // (BALL_RED=0, BALL_GREEN=1). Když set=false, použijí se původní pevné prahy.
 struct ColorModel { bool set = false; int h = 0, s = 0, v = 0; };
 static ColorModel ballColor[2];
 static int hueTol = HUE_TOL_DEFAULT;
+static int ballMinArea = BALL_MIN_AREA;   // --min-area, prah plochy blobu
 
 static int nearestCorner(cv::Point2f p) {
     float bestD = HANDLE_RADIUS;
@@ -166,6 +182,9 @@ static void saveCalib() {
             f << (ballColor[c].set ? 1 : 0) << " "
               << ballColor[c].h << " " << ballColor[c].s << " " << ballColor[c].v << " ";
         f << hueTol << "\n";
+        // Třetí řádek: rozlišení, pro které jsou rohy uložené (pro přepočet
+        // při jiném rozlišení kamery). Starší soubory ho nemají.
+        if (calibW > 0 && calibH > 0) f << calibW << " " << calibH << "\n";
         f.close();
     }
 }
@@ -189,16 +208,38 @@ static void loadCalib(int w, int h) {
         }
         int t;
         if (f >> t) hueTol = std::clamp(t, HUE_TOL_MIN, HUE_TOL_MAX);
+        // Rozlišení uložených rohů: z nového třetího řádku, jinak předpokládáme
+        // starých 640x480 (než existoval --width/--height).
+        int sw = 640, sh = 480;
+        if (f >> sw >> sh) { /* nový formát */ }
         f.close();
+        if (sw > 0 && sh > 0 && (sw != w || sh != h)) {
+            float fx = (float)w / (float)sw;
+            float fy = (float)h / (float)sh;
+            for (int i = 0; i < 4; i++) {
+                corners[i].x *= fx;
+                corners[i].y *= fy;
+            }
+            std::cerr << "calib: rohy přepočítány z " << sw << "x" << sh
+                      << " na " << w << "x" << h << std::endl;
+        }
     }
+    calibW = w;
+    calibH = h;
 }
 
 // Maska hrací plochy = polygon z kalibrovaných rohů. Mimo něj koule nehrají.
+// floorROI je bounding box té masky — detekce běží jen v něm (méně pixelů =
+// rychlejší cvtColor/inRange/findContours, hlavně ve vysokém rozlišení).
+static cv::Rect floorROI;
 static void buildFloorMask(int w, int h, cv::Mat& mask) {
     mask = cv::Mat::zeros(h, w, CV_8UC1);
     std::vector<cv::Point> pts;
     for (int i = 0; i < 4; i++) pts.push_back(cv::Point((int)corners[i].x, (int)corners[i].y));
     cv::fillPoly(mask, std::vector<std::vector<cv::Point>>{pts}, cv::Scalar(255));
+    cv::Rect r = cv::boundingRect(pts) & cv::Rect(0, 0, w, h);
+    if (r.width < 1 || r.height < 1) r = cv::Rect(0, 0, w, h);
+    floorROI = r;
 }
 
 // ── sledování koulí ──────────────────────────────────────────────────
@@ -215,16 +256,16 @@ struct Ball {
 
 enum BallColor { BALL_RED = 0, BALL_GREEN = 1 };
 
-static bool detectBall(const cv::Mat& frame, int color, const cv::Mat& mask, cv::Rect& out) {
-    cv::Mat hsv, m1, m2, fg;
-    cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
+static bool detectBall(const cv::Mat& hsv, int color, const cv::Mat& mask, cv::Rect& out) {
+    cv::Mat m1, m2, fg;
     const ColorModel& cm = ballColor[color];
     if (cm.set) {
         // Naučená barva: odstín ±hueTol (kolem 0/180 se obepíná), saturace
         // a jas stačí zlomek naučené hodnoty, aby koule zůstala chycená
-        // i ve stínu / při jiném osvětlení.
-        int sMin = std::max(30, cm.s / 3);
-        int vMin = std::max(30, cm.v / 3);
+        // i ve stínu / při jiném osvětlení. Malá koule má větší podíl
+        // okrajových pixelů (míchaných s pozadím), proto jsou podlahy nízké.
+        int sMin = std::max(25, cm.s / 4);
+        int vMin = std::max(20, cm.v / 4);
         int lo = cm.h - hueTol;
         int hi = cm.h + hueTol;
         auto band = [&](int a, int b) {
@@ -241,18 +282,21 @@ static bool detectBall(const cv::Mat& frame, int color, const cv::Mat& mask, cv:
         cv::inRange(hsv, cv::Scalar(158, 80, 50), cv::Scalar(180, 255, 255), m2);
         fg = m1 | m2;
     } else {
-        cv::inRange(hsv, cv::Scalar(35, 60, 40), cv::Scalar(90, 255, 255), fg);
+        // Výchozí zelená (dokud není naučená klikem): širší prahy, ať chytí
+        // i menší/tmavší kouli. Odstín 35..90, nižší saturace i jas.
+        cv::inRange(hsv, cv::Scalar(35, 45, 30), cv::Scalar(90, 255, 255), fg);
     }
     if (!mask.empty()) cv::bitwise_and(fg, mask, fg);
 
+    // Malé koule: OPEN (eroze+dilatace) může drobný blob úplně smazat, proto
+    // jen CLOSE (doplní dírky) a šum odfiltruje až práh --min-area.
     static const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, {3, 3});
-    cv::morphologyEx(fg, fg, cv::MORPH_OPEN, kernel);
     cv::morphologyEx(fg, fg, cv::MORPH_CLOSE, kernel);
 
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(fg, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    double best = BALL_MIN_AREA;
+    double best = ballMinArea;
     cv::Rect bestR;
     for (auto& c : contours) {
         double a = cv::contourArea(c);
@@ -385,6 +429,9 @@ int main(int argc, char* argv[]) {
     int debounceMs = 2000;
     int fadeMs = 2000;
     int stopFadeMs = 300;
+    int reqWidth = CAM_W_DEFAULT;
+    int reqHeight = CAM_H_DEFAULT;
+    int detectMs = DETECT_MS_DEFAULT;
     uint32_t resetCode = 0;      // 0 = off; map.csv wins (F = @stopall)
     bool allowRestart = false;
     bool dryRun = false;
@@ -410,6 +457,12 @@ int main(int argc, char* argv[]) {
                          "                   0 = map.csv decides, e.g. F = @stopall)" << std::endl;
             std::cout << "  --rf-pin N       BCM line of the 433 MHz receiver (default "
                       << RF_GPIO_LINE << ")" << std::endl;
+            std::cout << "  --width N        capture width (default " << CAM_W_DEFAULT << ")\n"
+                         "  --height N       capture height (default " << CAM_H_DEFAULT << ")\n";
+            std::cout << "  --min-area N     min blob area for a ball (default "
+                      << BALL_MIN_AREA << ")\n";
+            std::cout << "  --detect-ms N    max CV detection rate in ms (default "
+                      << DETECT_MS_DEFAULT << "; 0 = every frame)\n";
             std::cout << "  --no-rf          do not read the 433 MHz receiver" << std::endl;
             std::cout << "  --no-audio       skip audio init (decode and act, play nothing)\n"
                          "  --simulate       read RF codes from stdin instead of GPIO15\n";
@@ -466,6 +519,19 @@ int main(int argc, char* argv[]) {
         }
         if (strcmp(argv[i], "--te-us") == 0 && i + 1 < argc) {
             teUs = std::atoi(argv[++i]);
+        }
+        if (strcmp(argv[i], "--min-area") == 0 && i + 1 < argc) {
+            ballMinArea = std::atoi(argv[++i]);
+            if (ballMinArea < 1) ballMinArea = 1;
+        }
+        if (strcmp(argv[i], "--width") == 0 && i + 1 < argc) {
+            reqWidth = std::atoi(argv[++i]);
+        }
+        if (strcmp(argv[i], "--height") == 0 && i + 1 < argc) {
+            reqHeight = std::atoi(argv[++i]);
+        }
+        if (strcmp(argv[i], "--detect-ms") == 0 && i + 1 < argc) {
+            detectMs = std::atoi(argv[++i]);
         }
         // Zpětná kompatibilita se starým CLI (--max-people N, --tracker kcf):
         // počet koulí je teď pevně daný (červená + zelená), sledovač barevný.
@@ -610,7 +676,17 @@ int main(int argc, char* argv[]) {
     Texture2D videoTex = {0};
 
     auto openCamera = [&]() -> bool {
-        if (!cap.isOpened()) cap.open(0);
+        if (!cap.isOpened()) {
+            cap.open(0);
+            if (cap.isOpened()) {
+                // MJPG dovolí 1280x720 (i vyšší) po USB2; když to kamera
+                // neumí, OpenCV set tiše ignoruje a zvolí výchozí formát.
+                cap.set(cv::CAP_PROP_FOURCC,
+                        cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+                cap.set(cv::CAP_PROP_FRAME_WIDTH, reqWidth);
+                cap.set(cv::CAP_PROP_FRAME_HEIGHT, reqHeight);
+            }
+        }
         if (!cap.isOpened()) return false;
         frame = cv::Mat();
         cap >> frame;
@@ -672,10 +748,14 @@ int main(int argc, char* argv[]) {
               << "balls green(4 mood)+red(" << N_INTER << " inter) volume-mixed, "
               << mixCh << " loop (interaction off until F) + "
               << BUTTONS_MAX_SLOTS << " button channel(s), "
-              << buttons.slotCount() << " RF slot(s)"
+              << buttons.slotCount() << " RF slot(s), "
+              << reqWidth << "x" << reqHeight << " capture, "
+              << (detectMs > 0 ? std::to_string(1000 / std::max(1, detectMs)) + "Hz detect"
+                               : std::string("detect every frame"))
               << std::endl;
 
     cv::Mat rgbFrame;
+    cv::Mat hsvFrame;           // jeden HSV pro obě koule (reuse bufferu)
     bool dragging = false;
     int dragIdx = -1;
 
@@ -690,6 +770,8 @@ int main(int argc, char* argv[]) {
     // ~0.5 s a bez throttlingu by pokusy zaplavily CPU i journal.
     auto lastCamTry = std::chrono::steady_clock::now() - std::chrono::seconds(10);
     bool camWarned = false;
+    // Detekci (nejdražší část) pouštíme nejvýš každých detectMs milisekund.
+    auto lastDetect = std::chrono::steady_clock::now() - std::chrono::hours(1);
 
     while (headless ? !g_quit : (!WindowShouldClose() && !g_quit)) {
         if (buttons.takeRestart()) {
@@ -742,12 +824,28 @@ int main(int argc, char* argv[]) {
             calibDirty = false;
         }
 
-        // ── koule (každý snímek, barevný blob) ─────────────────────────────
-        cv::Rect rb, gb;
-        bool rFound = detectBall(frame, BALL_RED, floorMask, rb);
-        bool gFound = detectBall(frame, BALL_GREEN, floorMask, gb);
-        updateBall(red, rFound, rb);
-        updateBall(green, gFound, gb);
+        // ── koule (barevný blob) ───────────────────────────────────────────
+        // HSV se počítá jednou pro obě koule (dřív 2x cvtColor na snímek) a
+        // detekce běží jen v bounding boxu plochy (floorROI), ne v celém
+        // snímku — na 1280x720 to citelně ubere práci. Navíc jen každých
+        // detectMs ms (koule se hýbou pomalu), zbytek snímků se jen vykreslí.
+        auto detNow = std::chrono::steady_clock::now();
+        bool doDetect = detectMs <= 0 ||
+            std::chrono::duration_cast<std::chrono::milliseconds>(detNow - lastDetect).count() >= detectMs;
+        if (doDetect) {
+            lastDetect = detNow;
+            cv::cvtColor(frame, hsvFrame, cv::COLOR_BGR2HSV);
+            cv::Rect roi = floorROI;
+            cv::Mat hsvRoi = hsvFrame(roi);
+            cv::Mat maskRoi = floorMask(roi);
+            cv::Rect rb, gb;
+            bool rFound = detectBall(hsvRoi, BALL_RED, maskRoi, rb);
+            bool gFound = detectBall(hsvRoi, BALL_GREEN, maskRoi, gb);
+            if (rFound) { rb.x += roi.x; rb.y += roi.y; }
+            if (gFound) { gb.x += roi.x; gb.y += roi.y; }
+            updateBall(red, rFound, rb);
+            updateBall(green, gFound, gb);
+        }
 
         // ── hlasitost: smyčky hrají jen když je interaction zapnutá ────────
         // Vypnutá interaction = ticho (F ztlumí všechny smyčky); zapnutá
