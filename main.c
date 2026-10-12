@@ -25,8 +25,13 @@
 #include <csignal>
 #include <ctime>
 #include <algorithm>
+#include <cmath>
 #include <thread>
 #include <chrono>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <unistd.h>
 #if HAVE_GPIOD
 #include <gpiod.h>
@@ -54,7 +59,24 @@
 // menší než červená) dává jen pár desítek pixelů, takže vyšší práh ji zahodil.
 #define BALL_MIN_AREA 8
 #define BALL_LOST_FRAMES 12
-#define BALL_SMOOTH_ALPHA 0.5f
+// Koule je kruh, takže tvar filtrujeme: příliš protáhlé/nerovné blobu jsou
+// odlesky nebo pozadí. circularita = 4π·obsah / obvod² (1 = kruh).
+#define BALL_MIN_ROUNDNESS 0.45f
+// Maximální plocha blobu (0 = bez limitu). Chrání proti chycení velkého
+// stejně barevného objektu v pozadí.
+#define BALL_MAX_AREA 0
+// "Gate": když je koule zamčená, přijmeme jen blob do téhle vzdálenosti
+// (px) od predikovaného středu — zamezí přeskočení na jiný objekt. Ztracená
+// koule hledá globálně (gate se neuplatní), takže se zase chytne.
+#define BALL_GATE_PX 220.0f
+// Jak rychle (EMA) se naučená saturace/jas přizpůsobují skutečnému blobu,
+// aby detekce nespadla při změně expozice. Odstín zůstává naučený.
+#define BALL_ADAPT_ALPHA 0.02f
+// Šum Kalmanu (v px²): větší KF_MEAS_NOISE = hlazší ale pomalejší; menší =
+// svižnější. KF_POS_NOISE/KF_VEL_NOISE řídí, jak rychle filtr věří změně.
+#define KF_MEAS_NOISE 9.0f
+#define KF_POS_NOISE 0.2f
+#define KF_VEL_NOISE 2.0f
 
 // Výchozí rozlišení kamery. 1280x720 dá menší kouli víc pixelů (lepší
 // detekce) za cenu vyššího CPU; jde přebít --width/--height.
@@ -136,6 +158,10 @@ struct ColorModel { bool set = false; int h = 0, s = 0, v = 0; };
 static ColorModel ballColor[2];
 static int hueTol = HUE_TOL_DEFAULT;
 static int ballMinArea = BALL_MIN_AREA;   // --min-area, prah plochy blobu
+static int ballMaxArea = BALL_MAX_AREA;   // --max-area, 0 = bez limitu
+static float ballMinRoundness = BALL_MIN_ROUNDNESS;  // --min-roundness
+static float ballGatePx = BALL_GATE_PX;   // --gate-px, 0 = bez gate
+static float ballAdaptAlpha = BALL_ADAPT_ALPHA;      // --adapt-alpha
 
 static int nearestCorner(cv::Point2f p) {
     float bestD = HANDLE_RADIUS;
@@ -244,20 +270,74 @@ static void buildFloorMask(int w, int h, cv::Mat& mask) {
 }
 
 // ── sledování koulí ──────────────────────────────────────────────────
-// Každá koule je jen největší blob své barvy uvnitř masky plochy. Žádný
+// Každá koule je nejlepší blob své barvy uvnitř masky plochy. Žádný
 // klasifikátor: koule jsou barevně odlišené, takže HSV prahy stačí a na
 // rozdíl od MOG2 to funguje i pro kouli, která se nehýbe.
+//
+// Střed bereme z minEnclosingCircle (robustní vůči dírám od odlesku), tvar
+// filtrujeme kruhovostí a zamčená koule musí být blízko predikce (gate).
+// Polohu vyhlazuje drobný 1D Kalman s konstantní rychlostí (zvlášť X a Y):
+// hlazuje šum, ale nezavléká a při krátkém výpadku chvíli předpovídá.
+struct CVKalman1D {
+    float p = 0, v = 0;
+    float P00 = 1, P01 = 0, P10 = 0, P11 = 1;
+    bool init = false;
+    void reset(float pos) {
+        p = pos; v = 0; P00 = 1; P01 = P10 = 0; P11 = 1; init = true;
+    }
+    void predict(float dt) {
+        if (!init) return;
+        p += v * dt;
+        float n00 = P00 + dt * (P10 + P01) + dt * dt * P11 + KF_POS_NOISE;
+        float n01 = P01 + dt * P11;
+        float n10 = P10 + dt * P11;
+        float n11 = P11 + KF_VEL_NOISE;
+        P00 = n00; P01 = n01; P10 = n10; P11 = n11;
+    }
+    void correct(float z) {
+        if (!init) { reset(z); return; }
+        float S = P00 + KF_MEAS_NOISE;
+        float K0 = P00 / S, K1 = P10 / S;
+        float innov = z - p;
+        p += K0 * innov;
+        v += K1 * innov;
+        float n00 = (1 - K0) * P00, n01 = (1 - K0) * P01;
+        float n10 = P10 - K1 * P00, n11 = P11 - K1 * P01;
+        P00 = n00; P01 = n01; P10 = n10; P11 = n11;
+    }
+};
+
 struct Ball {
     bool present = false;
     int lost = 0;
     int zone = -1;              // kvadrant 0..3 v rektifikované ploše
-    float sx = -1.0f, sy = -1.0f;   // vyhlazený střed (EMA)
+    float sx = -1.0f, sy = -1.0f;   // vyhlazený/predikovaný střed
     cv::Rect bbox;
+    CVKalman1D kx, ky;
+    void predict(float dt) {
+        if (!kx.init) return;
+        kx.predict(dt); ky.predict(dt);
+        sx = kx.p; sy = ky.p;
+    }
+    void correct(float cx, float cy, const cv::Rect& r) {
+        kx.correct(cx); ky.correct(cy);
+        sx = kx.p; sy = ky.p;
+        bbox = r; lost = 0; present = true;
+    }
+    void miss() {
+        if (++lost >= BALL_LOST_FRAMES) {
+            present = false; zone = -1;
+            kx.init = false; ky.init = false;
+        }
+    }
 };
 
 enum BallColor { BALL_RED = 0, BALL_GREEN = 1 };
 
-static bool detectBall(const cv::Mat& hsv, int color, const cv::Mat& mask, cv::Rect& out) {
+static bool detectBall(const cv::Mat& hsv, int color, const cv::Mat& mask,
+                       cv::Point2f prev, float gatePx, bool useGate,
+                       cv::Point2f& outCenter, cv::Rect& outBox,
+                       float* meanS, float* meanV) {
     cv::Mat m1, m2, fg;
     const ColorModel& cm = ballColor[color];
     if (cm.set) {
@@ -297,35 +377,51 @@ static bool detectBall(const cv::Mat& hsv, int color, const cv::Mat& mask, cv::R
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(fg, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    double best = ballMinArea;
+    // Kandidáti: kruhovitost + meze plochy odfiltrují odlesky a pozadí.
+    // Střed je z minEnclosingCircle (ne z bboxu — dírka od odlesku posouvá
+    // těžiště i bbox). Zamčená koule bere nejbližší blob k predikci (gate),
+    // ztracená bere největší (globální re-acquire).
+    bool have = false;
+    float bestScore = 0;
+    cv::Point2f bestC;
     cv::Rect bestR;
     for (auto& c : contours) {
         double a = cv::contourArea(c);
-        if (a < best) continue;
-        best = a;
-        bestR = cv::boundingRect(c);
-    }
-    if (bestR.empty()) return false;
-    out = bestR;
-    return true;
-}
-
-static void updateBall(Ball& b, bool found, const cv::Rect& r) {
-    if (found) {
-        float cx = (float)r.x + (float)r.width / 2.0f;
-        float cy = (float)r.y + (float)r.height / 2.0f;
-        if (b.sx < 0) { b.sx = cx; b.sy = cy; }
-        else {
-            b.sx += (cx - b.sx) * BALL_SMOOTH_ALPHA;
-            b.sy += (cy - b.sy) * BALL_SMOOTH_ALPHA;
+        if (a < (double)ballMinArea) continue;
+        if (ballMaxArea > 0 && a > (double)ballMaxArea) continue;
+        double per = cv::arcLength(c, true);
+        if (per > 1.0) {
+            double circ = 4.0 * M_PI * a / (per * per);
+            if (circ < (double)ballMinRoundness) continue;
         }
-        b.bbox = r;
-        b.lost = 0;
-        b.present = true;
-    } else if (b.present && ++b.lost >= BALL_LOST_FRAMES) {
-        b.present = false;
-        b.zone = -1;
+        cv::Point2f ctr; float rad;
+        cv::minEnclosingCircle(c, ctr, rad);
+        float score;
+        if (useGate && ballGatePx > 0) {
+            float dx = ctr.x - prev.x, dy = ctr.y - prev.y;
+            float d = std::sqrt(dx * dx + dy * dy);
+            if (d > gatePx) continue;
+            score = -d;                 // nejblíž k predikci
+        } else {
+            score = (float)a;           // největší blob
+        }
+        if (!have || score > bestScore) {
+            bestScore = score; bestC = ctr;
+            bestR = cv::boundingRect(c); have = true;
+        }
     }
+    if (!have) return false;
+    outCenter = bestC;
+    outBox = bestR;
+    if (meanS || meanV) {
+        cv::Rect br = bestR & cv::Rect(0, 0, hsv.cols, hsv.rows);
+        if (br.width > 0 && br.height > 0) {
+            cv::Scalar mn = cv::mean(hsv(br), fg(br));
+            if (meanS) *meanS = (float)mn[1];
+            if (meanV) *meanV = (float)mn[2];
+        }
+    }
+    return true;
 }
 
 // Střed koule -> rektifikované souřadnice plochy 0..1.
@@ -338,15 +434,34 @@ static void rectify(const cv::Mat& H, float cx, float cy, float& u, float& v) {
 }
 
 // ── naučení barvy koule kliknutím ────────────────────────────────────
-// Vezme pixel pod kurzorem (BGR snímek -> HSV) a uloží ho jako cílovou barvu
-// koule. Detekce pak hledá odstín ±hueTol kolem této barvy.
+// Vezme průměr barev v malém okně (5x5) kolem kliknutého pixelu a uloží
+// ho jako cílovou barvu koule. Průměr z okna je odolnější než jediný pixel
+// (ten může padnout na odlesk nebo šum). Detekce pak hledá odstín ±hueTol.
 static bool pickColor(const cv::Mat& bgr, int x, int y, int& h, int& s, int& v) {
     if (x < 0 || y < 0 || x >= bgr.cols || y >= bgr.rows) return false;
-    cv::Vec3b px = bgr.at<cv::Vec3b>(y, x);
-    cv::Mat one(1, 1, CV_8UC3, cv::Scalar(px[0], px[1], px[2])), hsv;
-    cv::cvtColor(one, hsv, cv::COLOR_BGR2HSV);
-    cv::Vec3b q = hsv.at<cv::Vec3b>(0, 0);
-    h = q[0]; s = q[1]; v = q[2];
+    const int R = 2;
+    cv::Rect r(std::max(0, x - R), std::max(0, y - R),
+               std::min(bgr.cols - 1, x + R) - std::max(0, x - R) + 1,
+               std::min(bgr.rows - 1, y + R) - std::max(0, y - R) + 1);
+    cv::Mat patch;
+    cv::cvtColor(bgr(r), patch, cv::COLOR_BGR2HSV);
+    double sx = 0, sy = 0, ss = 0, sv = 0;
+    int n = 0;
+    for (int yy = 0; yy < patch.rows; yy++) {
+        for (int xx = 0; xx < patch.cols; xx++) {
+            cv::Vec3b p = patch.at<cv::Vec3b>(yy, xx);
+            double ang = p[0] * M_PI / 90.0;   // 0..180 -> 0..2π
+            sx += std::cos(ang); sy += std::sin(ang);
+            ss += p[1]; sv += p[2]; n++;
+        }
+    }
+    if (n == 0) return false;
+    double ang = std::atan2(sy, sx);
+    if (ang < 0) ang += 2.0 * M_PI;
+    h = (int)std::lround(ang * 90.0 / M_PI);
+    if (h >= 180) h -= 180;
+    s = (int)std::lround(ss / n);
+    v = (int)std::lround(sv / n);
     return true;
 }
 
@@ -436,6 +551,7 @@ int main(int argc, char* argv[]) {
     uint32_t resetCode = 0;      // 0 = off; map.csv wins (F = @interact)
     bool allowRestart = false;
     bool dryRun = false;
+    bool lockExposure = false;   // --lock-exposure, vypne auto-expozici/WB
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
@@ -462,6 +578,15 @@ int main(int argc, char* argv[]) {
                          "  --height N       capture height (default " << CAM_H_DEFAULT << ")\n";
             std::cout << "  --min-area N     min blob area for a ball (default "
                       << BALL_MIN_AREA << ")\n";
+            std::cout << "  --max-area N     max blob area, 0 = no limit (default "
+                      << BALL_MAX_AREA << ")\n"
+                         "  --min-roundness F min blob roundness 0..1 (default "
+                      << BALL_MIN_ROUNDNESS << ")\n";
+            std::cout << "  --gate-px N      lock gate radius in px, 0 = off (default "
+                      << (int)BALL_GATE_PX << ")\n";
+            std::cout << "  --adapt-alpha F  learned S/V adaptation rate (default "
+                      << BALL_ADAPT_ALPHA << ")\n"
+                         "  --lock-exposure  turn off camera auto-exposure/WB\n";
             std::cout << "  --detect-ms N    max CV detection rate in ms (default "
                       << DETECT_MS_DEFAULT << "; 0 = every frame)\n";
             std::cout << "  --no-rf          do not read the 433 MHz receiver" << std::endl;
@@ -524,6 +649,27 @@ int main(int argc, char* argv[]) {
         if (strcmp(argv[i], "--min-area") == 0 && i + 1 < argc) {
             ballMinArea = std::atoi(argv[++i]);
             if (ballMinArea < 1) ballMinArea = 1;
+        }
+        if (strcmp(argv[i], "--max-area") == 0 && i + 1 < argc) {
+            ballMaxArea = std::atoi(argv[++i]);
+            if (ballMaxArea < 0) ballMaxArea = 0;
+        }
+        if (strcmp(argv[i], "--min-roundness") == 0 && i + 1 < argc) {
+            ballMinRoundness = (float)std::atof(argv[++i]);
+            if (ballMinRoundness < 0) ballMinRoundness = 0;
+            if (ballMinRoundness > 1) ballMinRoundness = 1;
+        }
+        if (strcmp(argv[i], "--gate-px") == 0 && i + 1 < argc) {
+            ballGatePx = (float)std::atof(argv[++i]);
+            if (ballGatePx < 0) ballGatePx = 0;
+        }
+        if (strcmp(argv[i], "--adapt-alpha") == 0 && i + 1 < argc) {
+            ballAdaptAlpha = (float)std::atof(argv[++i]);
+            if (ballAdaptAlpha < 0) ballAdaptAlpha = 0;
+            if (ballAdaptAlpha > 0.5f) ballAdaptAlpha = 0.5f;
+        }
+        if (strcmp(argv[i], "--lock-exposure") == 0) {
+            lockExposure = true;
         }
         if (strcmp(argv[i], "--width") == 0 && i + 1 < argc) {
             reqWidth = std::atoi(argv[++i]);
@@ -686,6 +832,14 @@ int main(int argc, char* argv[]) {
                         cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
                 cap.set(cv::CAP_PROP_FRAME_WIDTH, reqWidth);
                 cap.set(cv::CAP_PROP_FRAME_HEIGHT, reqHeight);
+                if (lockExposure) {
+                    // Automatická expozice/WB mění barvy za běhu a koule pak
+                    // "mizí"; napevno je držíme. Hodnoty zůstávají na kameře.
+                    cap.set(cv::CAP_PROP_AUTO_EXPOSURE, 1);   // V4L2: manual
+                    cap.set(cv::CAP_PROP_AUTO_WB, 0);
+                    std::cerr << "camera: auto-exposure/WB off (--lock-exposure)"
+                              << std::endl;
+                }
             }
         }
         if (!cap.isOpened()) return false;
@@ -756,7 +910,6 @@ int main(int argc, char* argv[]) {
               << std::endl;
 
     cv::Mat rgbFrame;
-    cv::Mat hsvFrame;           // jeden HSV pro obě koule (reuse bufferu)
     bool dragging = false;
     int dragIdx = -1;
 
@@ -773,6 +926,8 @@ int main(int argc, char* argv[]) {
     bool camWarned = false;
     // Detekci (nejdražší část) pouštíme nejvýš každých detectMs milisekund.
     auto lastDetect = std::chrono::steady_clock::now() - std::chrono::hours(1);
+    // Čas minulého snímku pro Kalman (predikce mezi detekcemi).
+    auto lastLoop = std::chrono::steady_clock::now();
 
     while (headless ? !g_quit : (!WindowShouldClose() && !g_quit)) {
         if (buttons.takeRestart()) {
@@ -825,27 +980,64 @@ int main(int argc, char* argv[]) {
             calibDirty = false;
         }
 
+        // ── predikce polohy (Kalman) ───────────────────────────────────────
+        // Predikujeme každý snímek (i mezi detekcemi), aby koule plynule
+        // pokračovala a nezavlékala; dt je skutečný čas od minulého snímku.
+        auto loopNow = std::chrono::steady_clock::now();
+        float dt = std::chrono::duration<float>(loopNow - lastLoop).count();
+        lastLoop = loopNow;
+        if (dt < 0.0f) dt = 0.0f;
+        if (dt > 0.5f) dt = 0.5f;
+        red.predict(dt);
+        green.predict(dt);
+
         // ── koule (barevný blob) ───────────────────────────────────────────
-        // HSV se počítá jednou pro obě koule (dřív 2x cvtColor na snímek) a
-        // detekce běží jen v bounding boxu plochy (floorROI), ne v celém
-        // snímku — na 1280x720 to citelně ubere práci. Navíc jen každých
-        // detectMs ms (koule se hýbou pomalu), zbytek snímků se jen vykreslí.
+        // Zamčená koule se hledá jen v úzkém okně kolem predikce (méně pixelů
+        // = rychlejší a stabilnější), ztracená v celé ploše (re-acquire).
+        // Navíc jen každých detectMs ms (koule se hýbou pomalu).
         auto detNow = std::chrono::steady_clock::now();
         bool doDetect = detectMs <= 0 ||
             std::chrono::duration_cast<std::chrono::milliseconds>(detNow - lastDetect).count() >= detectMs;
         if (doDetect) {
             lastDetect = detNow;
-            cv::cvtColor(frame, hsvFrame, cv::COLOR_BGR2HSV);
-            cv::Rect roi = floorROI;
-            cv::Mat hsvRoi = hsvFrame(roi);
-            cv::Mat maskRoi = floorMask(roi);
-            cv::Rect rb, gb;
-            bool rFound = detectBall(hsvRoi, BALL_RED, maskRoi, rb);
-            bool gFound = detectBall(hsvRoi, BALL_GREEN, maskRoi, gb);
-            if (rFound) { rb.x += roi.x; rb.y += roi.y; }
-            if (gFound) { gb.x += roi.x; gb.y += roi.y; }
-            updateBall(red, rFound, rb);
-            updateBall(green, gFound, gb);
+            auto detectOne = [&](int color, Ball& b) {
+                cv::Rect roi;
+                if (b.present && b.kx.init) {
+                    float margin = std::max(90.0f,
+                        0.75f * std::max(b.bbox.width, b.bbox.height) + 60.0f);
+                    roi = cv::Rect((int)(b.sx - margin), (int)(b.sy - margin),
+                                   (int)(2 * margin), (int)(2 * margin)) & floorROI;
+                } else {
+                    roi = floorROI;
+                }
+                if (roi.width < 8 || roi.height < 8) roi = floorROI;
+                cv::Mat hsvRoi, maskRoi = floorMask(roi);
+                cv::cvtColor(frame(roi), hsvRoi, cv::COLOR_BGR2HSV);
+                cv::Point2f c; cv::Rect bx;
+                float mS = 0, mV = 0;
+                bool found = detectBall(hsvRoi, color, maskRoi,
+                                        cv::Point2f(b.sx, b.sy),
+                                        std::max(60.0f, 0.5f * std::min(roi.width, roi.height)),
+                                        b.present, c, bx, &mS, &mV);
+                if (found) {
+                    c.x += roi.x; c.y += roi.y;
+                    bx.x += roi.x; bx.y += roi.y;
+                    b.correct(c.x, c.y, bx);
+                    // Adaptace saturace/jasu naučené barvy (pomalu, proti
+                    // driftu expozice; odstín zůstává naučený).
+                    ColorModel& cm = ballColor[color];
+                    if (cm.set && mS > 0 && mV > 0) {
+                        cm.s = (int)std::lround(cm.s + (mS - cm.s) * ballAdaptAlpha);
+                        cm.v = (int)std::lround(cm.v + (mV - cm.v) * ballAdaptAlpha);
+                        if (cm.s < 1) cm.s = 1;
+                        if (cm.v < 1) cm.v = 1;
+                    }
+                } else {
+                    b.miss();
+                }
+            };
+            detectOne(BALL_RED, red);
+            detectOne(BALL_GREEN, green);
         }
 
         // ── hlasitost: smyčky hrají jen když je interaction zapnutá ────────
@@ -974,9 +1166,6 @@ int main(int argc, char* argv[]) {
                 DrawCircle((int)corners[i].x, (int)corners[i].y, 8, c);
             }
 
-            // Červená = nálady, zelená = intermezza. Rámeček jen když koule
-            // zrovna je (nebo chvíli byla); jinak hlášení "lost".
-            // Barva rámečku = naučená barva koule (jinak výchozí zelená/červená).
             Color rDraw = ballColor[BALL_RED].set
                 ? hsvToRgb(ballColor[BALL_RED].h, ballColor[BALL_RED].s, ballColor[BALL_RED].v)
                 : RED;
@@ -1006,6 +1195,17 @@ int main(int argc, char* argv[]) {
             } else {
                 DrawTextEx(font, "G lost", {20, 90}, 18, 0.0f, gDraw);
             }
+
+            // Debug: predikovaný střed (křížek) a gate pro obě koule.
+            auto drawMark = [&](const Ball& b, Color col) {
+                if (!b.present || !b.kx.init) return;
+                int x = (int)b.sx, y = (int)b.sy;
+                DrawLine(x - 8, y, x + 8, y, col);
+                DrawLine(x, y - 8, x, y + 8, col);
+                if (ballGatePx > 0) DrawCircleLines(x, y, (int)ballGatePx, col);
+            };
+            drawMark(red, rDraw);
+            drawMark(green, gDraw);
 
             // Vzorník naučených barev (plný = naučeno, dutý = výchozí prahy).
             int swX = frameWidth - 34;
