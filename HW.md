@@ -216,7 +216,7 @@ Sazba **350 Kč/h**, ideální délka instalace **2 týdny**.
 2. Osazení obou boxů: Pi 4 8 GB + ODS-721 + zdroj 15,3 W + USB zvukovka AXAGON ADA-17 + jack do panelu + zesilovač CA-3110S + reproduktor LS40N + kalibrace (README.md).
 3. Box A: + webkamera na stativu. Box B: + SRX882S přijímač 433 MHz (+ volitelný LCD 16×2 na GPIO).
 4. 10 hotových tlačítek: dekódování kódu (EV1527), mapa kód → sample (10 ks → B).
-5. Instalace OS (Raspberry Pi OS Lite), ovladače (opencv, raylib, SDL2_mixer, libgpiod, i2c-tools), služby (reset, sampler, zvukový výstup přes USB zvukovku).
+5. Instalace OS (Raspberry Pi OS Lite), ovladače (raylib, SDL2_mixer, libjpeg-turbo, libgpiod, i2c-tools), služby (reset, sampler, zvukový výstup přes USB zvukovku).
 6. Test synchronizace A↔B (WiFi), RF dosahu (433 MHz), audio výstupů na panelech (stereo jacky), zátěžový 2denní test.
 
 ---

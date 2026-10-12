@@ -33,7 +33,7 @@ SYSTEMCTL_LOG="$TMP/systemctl.log"
 export SYSTEMCTL_LOG
 
 # falešný make v PATH: "sestaví" prázdný skript, aby se dalo ověřit, že se
-# binárka instaluje. Skutečný make by v testu chtěl SDL2/OpenCV a by selhal.
+# binárka instaluje. Skutečný make by v testu chtěl SDL2/raylib/libjpeg a by selhal.
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
 cat > "$FAKEBIN/make" <<'EOF'

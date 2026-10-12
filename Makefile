@@ -3,7 +3,7 @@
 #         make PLATFORM=termux
 
 CXX       ?= g++
-SRC       = main.c buttons.c
+SRC       = main.c buttons.c v4l2_cam.c
 BIN       = tracker
 SAMPLER_SRC = sampler.c
 SAMPLER_BIN = sampler
@@ -12,8 +12,8 @@ GIT_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 # ── Platform detection ──
 PLATFORM ?= $(shell [ -d /data/data/com.termux/files/usr ] && echo termux || echo desktop)
 
-# Bez -O by se tracker i OpenCV glue kód přeložily na -O0. Per-frame smyčka
-# (CSRT/KCF update, MOG2, perspektiva) je čistě CPU vázaná, takže -O2 je na
+# Bez -O by se tracker i vision glue kód přeložily na -O0. Per-frame smyčka
+# (blob detekce, morfologie, perspektiva) je čistě CPU vázaná, takže -O2 je na
 # Pi nejlevnější zrychlení. -march=native je bezpečné: binárka se staví přímo na
 # boxu (prepare-sd.sh host binaries nekopíruje), takže cílí na A72, na kterém běží.
 # Termux (Android) zůstává bez -march, ať je binárka přenositelná.
@@ -26,33 +26,22 @@ else
     LDFLAGS  +=
 endif
 
-# ── OpenCV (auto-detect pkg-config name) ──
-# Include dirs come from pkg-config so Debian / Raspberry Pi OS
-# (opencv4.pc -> /usr/include/opencv4) work out of the box. The library list is
-# kept explicit: it is the minimal set main.c needs, and it avoids pulling in
-# the viz/VTK module that the full opencv4 --libs drags along.
-# Debian ships the CSRT tracker in libopencv-contrib-dev -> -lopencv_tracking.
-# libopencv_geometry exists only in OpenCV 5.x, hence the two variants.
-ifneq ($(wildcard /usr/lib/libopencv_calib.so),)
-    # OpenCV 5.x (dev laptop)
-    OPENCV_CFLAGS := -I/usr/include/opencv5
-    OPENCV_LIBS   := -lopencv_core -lopencv_videoio -lopencv_video -lopencv_imgproc -lopencv_calib -lopencv_geometry -lopencv_tracking
-else ifneq ($(shell pkg-config --exists opencv4 2>/dev/null && echo yes),)
-    # OpenCV 4.x via pkg-config (Raspberry Pi OS, Debian, desktop)
-    OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4)
-    OPENCV_LIBS   := -lopencv_core -lopencv_imgproc -lopencv_videoio -lopencv_video -lopencv_calib3d -lopencv_tracking
-else ifneq ($(shell pkg-config --exists opencv 2>/dev/null && echo yes),)
-    # OpenCV 4.x via pkg-config, unversioned .pc
-    OPENCV_CFLAGS := $(shell pkg-config --cflags opencv)
-    OPENCV_LIBS   := -lopencv_core -lopencv_imgproc -lopencv_videoio -lopencv_video -lopencv_calib3d -lopencv_tracking
-else ifeq ($(PLATFORM),termux)
-    # OpenCV 4.x (Termux ships 4.14)
-    OPENCV_CFLAGS := -I$(PREFIX)/include/opencv4
-    OPENCV_LIBS   := -lopencv_core -lopencv_videoio -lopencv_video -lopencv_imgproc -lopencv_calib3d -lopencv_tracking
+# ── libjpeg-turbo (dekódování MJPEG z kamery) ──
+# V4L2 kamera dodává MJPEG stream; dekóduje ho libjpeg-turbo.
+JPEG_CFLAGS := $(shell pkg-config --cflags libjpeg 2>/dev/null)
+JPEG_LIBS   := $(shell pkg-config --libs libjpeg 2>/dev/null || echo -ljpeg)
+
+# ── grayskull (tiny C vision) ──
+# Hlavičková knihovna ve third_party/ (blobs, morfologie, perspektiva).
+VISION_CFLAGS := -Ithird_party
+
+# ── V4L2 kamera ──
+# Jen na Linuxu; Termux/Android V4L2 nemá, takže main.c + v4l2_cam.c se staví
+# s HAVE_V4L2=0 (stuby, kamera se neotevře, zvuk a RF tlačítka jedou dál).
+ifeq ($(PLATFORM),termux)
+    HAVE_V4L2 := 0
 else
-    # OpenCV 4.x, manual paths
-    OPENCV_CFLAGS := -I/usr/include/opencv4
-    OPENCV_LIBS   := -lopencv_core -lopencv_imgproc -lopencv_videoio -lopencv_video -lopencv_calib3d -lopencv_tracking
+    HAVE_V4L2 := 1
 endif
 
 # ── SDL2 ──
@@ -79,8 +68,8 @@ endif
 
 # Tracker si bere i GPIOD_CFLAGS/_LIBS: od 433 MHz tlačítka F (restart
 # služby) čte EV1527 na GPIO15. Bez libgpiod (HAVE_GPIOD=0) je RF vypnuté.
-ALL_CXXFLAGS = $(CXXFLAGS) $(GPIOD_CFLAGS) $(OPENCV_CFLAGS) $(SDL2_CFLAGS) -DGIT_VERSION='"$(GIT_VERSION)"'
-ALL_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(RAYLIB_LIBS) $(OPENCV_LIBS) $(GPIOD_LIBS) $(SYS_LIBS)
+ALL_CXXFLAGS = $(CXXFLAGS) $(GPIOD_CFLAGS) $(VISION_CFLAGS) $(JPEG_CFLAGS) $(SDL2_CFLAGS) -DHAVE_V4L2=$(HAVE_V4L2) -DGIT_VERSION='"$(GIT_VERSION)"'
+ALL_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(RAYLIB_LIBS) $(JPEG_LIBS) $(GPIOD_LIBS) $(SYS_LIBS)
 
 SAMPLER_CXXFLAGS = $(CXXFLAGS) $(SDL2_CFLAGS) $(GPIOD_CFLAGS) -DGIT_VERSION='"$(GIT_VERSION)"'
 SAMPLER_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(GPIOD_LIBS) -lm -lpthread

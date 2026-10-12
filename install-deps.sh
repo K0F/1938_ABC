@@ -10,7 +10,7 @@ sudo apt-get update
 sudo apt-get install -y --no-install-recommends \
     g++ make pkg-config git ca-certificates \
     libsdl2-dev libsdl2-mixer-dev libgpiod-dev \
-    libopencv-dev libopencv-contrib-dev libx11-dev libgl-dev
+    libjpeg-dev libx11-dev libgl-dev
 
 echo "=== Building raylib 5.5 ==="
 cd /tmp

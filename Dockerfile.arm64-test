@@ -9,8 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     make \
     pkg-config \
-    libopencv-dev \
-    libopencv-contrib-dev \
+    libjpeg-dev \
     libsdl2-dev \
     libsdl2-mixer-dev \
     && rm -rf /var/lib/apt/lists/*

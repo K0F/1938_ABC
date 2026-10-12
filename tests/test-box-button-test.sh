@@ -75,7 +75,7 @@ exit 0
 EOF
 chmod 755 "$TMP/systemd-run"
 
-# Skutečný make by v testu chtěl SDL2/OpenCV a selhal. Falešný make
+# Skutečný make by v testu chtěl SDL2/raylib/libjpeg a selhal. Falešný make
 # vyrobí prázdnou binárku, aby prošel i test [ -x "$BIN" ] v skriptu.
 cat > "$TMP/make" <<'EOF'
 #!/bin/bash

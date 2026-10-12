@@ -53,7 +53,7 @@ if [ "$DEPS" = 1 ]; then
     if [ "$BOX" = "A" ]; then
         $SUDO $APT install -y --no-install-recommends \
             g++ make pkg-config git ca-certificates \
-            libopencv-dev libopencv-contrib-dev libx11-dev libgl-dev \
+            libjpeg-dev libx11-dev libgl-dev \
             libsdl2-dev libsdl2-mixer-dev libxrandr-dev libgpiod-dev
         # X + mesa zůstávají v image: kalibrace přes HDMI ručně (startx na tty1,
         # ./tracker s oknem a klávesou S) a volitelná HDMI konzole

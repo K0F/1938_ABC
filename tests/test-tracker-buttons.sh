@@ -6,8 +6,8 @@
 # jede bez kamery, bez GPIO a bez zvukové karty — kódy posílá přes --simulate
 # (stdin) a ověřuje, že se z mapy vybere správný vzorek, že debounce potlačí
 # retransmise tlačítka a že akční sloty @stopall/@interact fungují (@stopall
-# bez --allow-restart se jen ohlásí, @interact root needá). Simulace nepotřebuje raylib okno ani OpenCV video backend,
-# ale binárka je linkovaná proti nim, takže se test skipne, když nejsou.
+# bez --allow-restart se jen ohlásí, @interact root needá). Simulace nepotřebuje raylib okno ani V4L2 kameru,
+# ale binárka je linkovaná proti nim (a libjpeg), takže se test skipne, když nejsou.
 #
 #   usage: ./tests/test-tracker-buttons.sh
 
@@ -34,9 +34,9 @@ build() {
     echo "== build trackeru =="
     rm -f "$BIN"
     if ! make -C "$ROOT" tracker >"$TMP/build.log" 2>&1; then
-        echo "    tracker se tu nepovede sestavit (chybí OpenCV/raylib/SDL2?):"
+        echo "    tracker se tu nepovede sestavit (chybí raylib/SDL2/libjpeg?):"
         sed 's/^/      /' "$TMP/build.log" | tail -8
-        skip "  SKIP — nainstaluj libopencv-dev libraylib-dev libsdl2-mixer-dev, nebo pust na Pi"
+        skip "  SKIP — nainstaluj libraylib-dev libsdl2-mixer-dev libjpeg-dev, nebo pust na Pi"
     fi
     runnable || skip "  SKIP — sestavený tracker nenaběhne (chybí runtime knihovna?)"
 }

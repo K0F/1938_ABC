@@ -194,7 +194,7 @@ Schéma: [`docs/SCH.md`](SCH.md) §7, [`docs/dot/sch_10_audio_jack.dot`](dot/sch
 # 1. Nahrajte Raspberry Pi OS Lite na microSD 32 GB
 # 2. Po prvním spuštění:
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y git cmake pkg-config libopencv-dev
+sudo apt install -y git cmake pkg-config libjpeg-dev
 sudo apt install -y libasound2-dev libsdl2-dev libsdl2-mixer-dev
 
 # 3. Nainstalujte raylib (postup dle raylib/docs/INSTALL.md)
@@ -378,7 +378,7 @@ Před finální instalací spusťte 2denní test:
 | `cannot find -lraylib` | `sudo apt install x11-repo && sudo apt install raylib` (Termux) nebo sestavit ze zdroje |
 | `cannot find -lGL` | `sudo apt install mesa` (Termux) |
 | LCD nezobrazuje | `i2cdetect -y 1` — ověřte adresu 0x27; zkontrolujte I2C pull-upy; zkontrolujte `dtparam=i2c_arm=on` v `/boot/config.txt` |
-| Opencv build selže (Qt6) | Na Termux: `build_termux.sh` automaticky builduje OpenCV bez Qt (~15–25 min) |
+| `libjpeg` chybí | `sudo apt install libjpeg-dev` (desktop, box A). Termux staví bez V4L2, libjpeg nepotřebuje |
 | Žádný zvuk | Ověřte `aplay -l` — USB zvukovka musí být viditelná; nastavte `SDL_AUDIODRIVER=alsa` |
 | Tlačítka nepřijímají | Zkontrolujte napájení SRX882S (3V3, ne 5V); ověřte GPIO22; modul ≥2 cm od Pi |
 | LED nesvítí | Zkontrolujte polaritu LED (delší noha = +); rezistor 330 Ω |

@@ -3,13 +3,8 @@
 #endif
 #define VERSION_STRING GIT_VERSION
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/calib3d.hpp>
-#include <opencv2/core/utils/logger.hpp>
-#ifdef GRAY
-#undef GRAY
-#endif
+#include "grayskull.h"   // tiny C vision (blobs, morfologie, perspektiva)
+#include "v4l2_cam.h"    // V4L2 webkamera (MJPEG/libjpeg, YUYV), bez OpenCV
 #include "raylib.h"
 #include "rlgl.h"   // rlPushMatrix/rlScalef — škálování snímku na celý monitor
 #include <SDL2/SDL.h>
@@ -37,6 +32,54 @@
 #include <gpiod.h>
 #endif
 #include "buttons.h"
+
+// ── Drobné náhrady typů, které dřív dělalo OpenCV ────────────────────
+struct Pt { float x = 0, y = 0; };                       // bod (souřadnice snímku)
+struct Box { int x = 0, y = 0, w = 0, h = 0;             // obdélník (bbox blobu)
+             bool empty() const { return w <= 0 || h <= 0; } };
+struct Mat3 { double m[9]; };                            // homografie, řádkově
+
+static inline float dist2(const Pt& a, const Pt& b) {
+    float dx = a.x - b.x, dy = a.y - b.y;
+    return dx * dx + dy * dy;
+}
+
+// RGB (0..255) -> HSV ve stejných rozsazích jako OpenCV: H 0..179 (stupně/2),
+// S,V 0..255. Držíme se OpenCV konvence, aby starší calib.txt (naučené barvy
+// uložené jako OpenCV HSV) zůstal platný.
+static inline void rgbToHsv(int r, int g, int b, int& h, int& s, int& v) {
+    int mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    int mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    v = mx;
+    int d = mx - mn;
+    s = mx == 0 ? 0 : (d * 255) / mx;
+    if (d == 0) { h = 0; return; }
+    float hue;
+    if (mx == r)      hue = 60.0f * ((g - b) / (float)d);
+    else if (mx == g) hue = 60.0f * ((b - r) / (float)d) + 120.0f;
+    else              hue = 60.0f * ((r - g) / (float)d) + 240.0f;
+    if (hue < 0) hue += 360.0f;
+    h = (int)(hue / 2.0f);
+    if (h > 179) h = 179;
+}
+
+// HSV (OpenCV rozsahy) -> raylib Color, pro vzorník naučené barvy v HUD.
+static Color hsvToRgb(int h, int s, int v, unsigned char a = 255) {
+    float H = (float)h * 2.0f, S = s / 255.0f, V = v / 255.0f;
+    float C = V * S;
+    float X = C * (1.0f - std::fabs(std::fmod(H / 60.0f, 2.0f) - 1.0f));
+    float m = V - C;
+    float r = 0, g = 0, b = 0;
+    if      (H < 60)  { r = C; g = X; }
+    else if (H < 120) { r = X; g = C; }
+    else if (H < 180) { g = C; b = X; }
+    else if (H < 240) { g = X; b = C; }
+    else if (H < 300) { r = X; b = C; }
+    else              { r = C; b = X; }
+    return (Color){(unsigned char)((r + m) * 255.0f),
+                   (unsigned char)((g + m) * 255.0f),
+                   (unsigned char)((b + m) * 255.0f), a};
+}
 
 #define CALIB_FILE "calib.txt"
 
@@ -147,7 +190,7 @@ static void onSignal(int) { g_quit = 1; }
 // Sampler přilepený k trackeru: jedno SDL_mixer, jedno GPIO15.
 static ButtonEngine buttons;
 
-static cv::Point2f corners[4];
+static Pt corners[4];
 // Rozlišení, pro které jsou rohy uložené. Při změně rozlišení kamery se rohy
 // přepočítají, aby kalibrace plochy zůstala platná (viz loadCalib).
 static int calibW = 0, calibH = 0;
@@ -162,41 +205,88 @@ static int ballMaxArea = BALL_MAX_AREA;   // --max-area, 0 = bez limitu
 static float ballMinRoundness = BALL_MIN_ROUNDNESS;  // --min-roundness
 static float ballGatePx = BALL_GATE_PX;   // --gate-px, 0 = bez gate
 static float ballAdaptAlpha = BALL_ADAPT_ALPHA;      // --adapt-alpha
+static const char* camDevice = "/dev/video0";        // --device
 
-static int nearestCorner(cv::Point2f p) {
-    float bestD = HANDLE_RADIUS;
+// ── homografie (nahrazuje cv::getPerspectiveTransform/perspectiveTransform) ──
+// 3x3 matice zobrazení snímek -> jednotkový čtverec (a zpět). Počítá se jen při
+// změně kalibrace, takže i jednoduchý Gauss stačí.
+static inline void applyH(const Mat3& H, double x, double y, float& ox, float& oy) {
+    double w = H.m[6] * x + H.m[7] * y + H.m[8];
+    if (std::fabs(w) < 1e-12) w = 1e-12;
+    ox = (float)((H.m[0] * x + H.m[1] * y + H.m[2]) / w);
+    oy = (float)((H.m[3] * x + H.m[4] * y + H.m[5]) / w);
+}
+
+static Mat3 homography4(const Pt src[4], const Pt dst[4]) {
+    double a[8][9];
+    for (int i = 0; i < 4; i++) {
+        double x = src[i].x, y = src[i].y, u = dst[i].x, v = dst[i].y;
+        double* r0 = a[2 * i];
+        double* r1 = a[2 * i + 1];
+        r0[0]=x; r0[1]=y; r0[2]=1; r0[3]=0; r0[4]=0; r0[5]=0; r0[6]=-u*x; r0[7]=-u*y; r0[8]=u;
+        r1[0]=0; r1[1]=0; r1[2]=0; r1[3]=x; r1[4]=y; r1[5]=1; r1[6]=-v*x; r1[7]=-v*y; r1[8]=v;
+    }
+    for (int c = 0; c < 8; c++) {
+        int piv = c;
+        for (int r = c + 1; r < 8; r++)
+            if (std::fabs(a[r][c]) > std::fabs(a[piv][c])) piv = r;
+        if (piv != c)
+            for (int k = c; k < 9; k++) std::swap(a[c][k], a[piv][k]);
+        double p = a[c][c];
+        if (std::fabs(p) < 1e-12) continue;
+        for (int k = c; k < 9; k++) a[c][k] /= p;
+        for (int r = 0; r < 8; r++) {
+            if (r == c) continue;
+            double f = a[r][c];
+            if (f == 0) continue;
+            for (int k = c; k < 9; k++) a[r][k] -= f * a[c][k];
+        }
+    }
+    Mat3 H;
+    for (int i = 0; i < 8; i++) H.m[i] = a[i][8];
+    H.m[8] = 1.0;
+    return H;
+}
+
+static Mat3 invert3(const Mat3& H) {
+    const double* m = H.m;
+    double det = m[0]*(m[4]*m[8]-m[5]*m[7])
+               - m[1]*(m[3]*m[8]-m[5]*m[6])
+               + m[2]*(m[3]*m[7]-m[4]*m[6]);
+    if (std::fabs(det) < 1e-12) det = 1e-12;
+    double id = 1.0 / det;
+    Mat3 r;
+    r.m[0]=(m[4]*m[8]-m[5]*m[7])*id; r.m[1]=(m[2]*m[7]-m[1]*m[8])*id; r.m[2]=(m[1]*m[5]-m[2]*m[4])*id;
+    r.m[3]=(m[5]*m[6]-m[3]*m[8])*id; r.m[4]=(m[0]*m[8]-m[2]*m[6])*id; r.m[5]=(m[2]*m[3]-m[0]*m[5])*id;
+    r.m[6]=(m[3]*m[7]-m[4]*m[6])*id; r.m[7]=(m[1]*m[6]-m[0]*m[7])*id; r.m[8]=(m[0]*m[4]-m[1]*m[3])*id;
+    return r;
+}
+
+static int nearestCorner(Pt p) {
+    float bestD = HANDLE_RADIUS * HANDLE_RADIUS;
     int best = -1;
     for (int i = 0; i < 4; i++) {
-        float d = cv::norm(p - corners[i]);
+        float d = dist2(p, corners[i]);
         if (d < bestD) { bestD = d; best = i; }
     }
     return best;
 }
 
-static void gridLines(cv::Mat& img, const cv::Mat& Hinv) {
-    cv::Scalar col(255, 255, 255);
+// Mřížka plochy: 8 dílků + středové osy. Kreslí se raylibem přes texturu
+// (dřív se pekla do snímku). Hinv zobrazuje jednotkový čtverec -> snímek.
+static void drawGrid(const Mat3& Hinv) {
     for (int i = 1; i < GRID_DIV; i++) {
-        float f = (float)i / GRID_DIV;
-        std::vector<cv::Point2f> dst1, dst2;
-        std::vector<cv::Point2f> s1 = {{f, 0}}, s2 = {{f, 1}};
-        cv::perspectiveTransform(s1, dst1, Hinv);
-        cv::perspectiveTransform(s2, dst2, Hinv);
-        cv::line(img, dst1[0], dst2[0], col, 1);
-
-        std::vector<cv::Point2f> h1, h2;
-        std::vector<cv::Point2f> t1 = {{0, f}}, t2 = {{1, f}};
-        cv::perspectiveTransform(t1, h1, Hinv);
-        cv::perspectiveTransform(t2, h2, Hinv);
-        cv::line(img, h1[0], h2[0], col, 1);
+        float f = (float)i / GRID_DIV, x1, y1, x2, y2;
+        applyH(Hinv, f, 0, x1, y1); applyH(Hinv, f, 1, x2, y2);
+        DrawLine((int)x1, (int)y1, (int)x2, (int)y2, (Color){255, 255, 255, 90});
+        applyH(Hinv, 0, f, x1, y1); applyH(Hinv, 1, f, x2, y2);
+        DrawLine((int)x1, (int)y1, (int)x2, (int)y2, (Color){255, 255, 255, 90});
     }
-
-    std::vector<cv::Point2f> sa, sb;
-    cv::perspectiveTransform((std::vector<cv::Point2f>){{0.5f, 0}}, sa, Hinv);
-    cv::perspectiveTransform((std::vector<cv::Point2f>){{0.5f, 1}}, sb, Hinv);
-    cv::line(img, sa[0], sb[0], cv::Scalar(0, 255, 0), 2);
-    cv::perspectiveTransform((std::vector<cv::Point2f>){{0, 0.5f}}, sa, Hinv);
-    cv::perspectiveTransform((std::vector<cv::Point2f>){{1, 0.5f}}, sb, Hinv);
-    cv::line(img, sa[0], sb[0], cv::Scalar(0, 255, 0), 2);
+    float x1, y1, x2, y2;
+    applyH(Hinv, 0.5f, 0, x1, y1); applyH(Hinv, 0.5f, 1, x2, y2);
+    DrawLine((int)x1, (int)y1, (int)x2, (int)y2, (Color){0, 255, 0, 160});
+    applyH(Hinv, 0, 0.5f, x1, y1); applyH(Hinv, 1, 0.5f, x2, y2);
+    DrawLine((int)x1, (int)y1, (int)x2, (int)y2, (Color){0, 255, 0, 160});
 }
 
 static void saveCalib() {
@@ -217,10 +307,10 @@ static void saveCalib() {
 }
 
 static void loadCalib(int w, int h) {
-    corners[0] = cv::Point2f(0, 0);
-    corners[1] = cv::Point2f(w, 0);
-    corners[2] = cv::Point2f(0, h);
-    corners[3] = cv::Point2f(w, h);
+    corners[0] = Pt{0, 0};
+    corners[1] = Pt{(float)w, 0};
+    corners[2] = Pt{0, (float)h};
+    corners[3] = Pt{(float)w, (float)h};
     for (int c = 0; c < 2; c++) ballColor[c] = ColorModel{};
     hueTol = HUE_TOL_DEFAULT;
     std::ifstream f(CALIB_FILE);
@@ -255,18 +345,38 @@ static void loadCalib(int w, int h) {
     calibH = h;
 }
 
-// Maska hrací plochy = polygon z kalibrovaných rohů. Mimo něj koule nehrají.
-// floorROI je bounding box té masky — detekce běží jen v něm (méně pixelů =
-// rychlejší cvtColor/inRange/findContours, hlavně ve vysokém rozlišení).
-static cv::Rect floorROI;
-static void buildFloorMask(int w, int h, cv::Mat& mask) {
-    mask = cv::Mat::zeros(h, w, CV_8UC1);
-    std::vector<cv::Point> pts;
-    for (int i = 0; i < 4; i++) pts.push_back(cv::Point((int)corners[i].x, (int)corners[i].y));
-    cv::fillPoly(mask, std::vector<std::vector<cv::Point>>{pts}, cv::Scalar(255));
-    cv::Rect r = cv::boundingRect(pts) & cv::Rect(0, 0, w, h);
-    if (r.width < 1 || r.height < 1) r = cv::Rect(0, 0, w, h);
-    floorROI = r;
+// Maska hrací plochy = čtyřúhelník z kalibrovaných rohů (0/255, celý snímek).
+// floorROI je jeho bounding box — detekce běží jen v něm (méně pixelů =
+// rychlejší). Rohy jsou uložené jako TL,TR,BL,BR (kvůli homografii), pro výplň
+// je řadíme do správného pořadí TL,TR,BR,BL.
+static std::vector<unsigned char> floorMaskFull;
+static Box floorROI;
+static void buildFloorMask(int w, int h) {
+    floorMaskFull.assign((size_t)w * h, 0);
+    Pt poly[4] = {corners[0], corners[1], corners[3], corners[2]};
+    int minx = w - 1, miny = h - 1, maxx = 0, maxy = 0;
+    for (int i = 0; i < 4; i++) {
+        minx = std::min(minx, (int)corners[i].x);
+        maxx = std::max(maxx, (int)corners[i].x);
+        miny = std::min(miny, (int)corners[i].y);
+        maxy = std::max(maxy, (int)corners[i].y);
+    }
+    minx = std::max(0, minx); miny = std::max(0, miny);
+    maxx = std::min(w - 1, maxx); maxy = std::min(h - 1, maxy);
+    if (maxx < minx || maxy < miny) { floorROI = Box{0, 0, w, h}; return; }
+    for (int y = miny; y <= maxy; y++) {
+        for (int x = minx; x <= maxx; x++) {
+            bool in = false;
+            for (int i = 0, j = 3; i < 4; j = i++) {
+                float xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+                if (((yi > y) != (yj > y)) &&
+                    (x < (xj - xi) * (y - yi) / (yj - yi) + xi))
+                    in = !in;
+            }
+            if (in) floorMaskFull[(size_t)y * w + x] = 255;
+        }
+    }
+    floorROI = Box{minx, miny, maxx - minx + 1, maxy - miny + 1};
 }
 
 // ── sledování koulí ──────────────────────────────────────────────────
@@ -312,14 +422,14 @@ struct Ball {
     int lost = 0;
     int zone = -1;              // kvadrant 0..3 v rektifikované ploše
     float sx = -1.0f, sy = -1.0f;   // vyhlazený/predikovaný střed
-    cv::Rect bbox;
+    Box bbox;
     CVKalman1D kx, ky;
     void predict(float dt) {
         if (!kx.init) return;
         kx.predict(dt); ky.predict(dt);
         sx = kx.p; sy = ky.p;
     }
-    void correct(float cx, float cy, const cv::Rect& r) {
+    void correct(float cx, float cy, const Box& r) {
         kx.correct(cx); ky.correct(cy);
         sx = kx.p; sy = ky.p;
         bbox = r; lost = 0; present = true;
@@ -334,101 +444,136 @@ struct Ball {
 
 enum BallColor { BALL_RED = 0, BALL_GREEN = 1 };
 
-static bool detectBall(const cv::Mat& hsv, int color, const cv::Mat& mask,
-                       cv::Point2f prev, float gatePx, bool useGate,
-                       cv::Point2f& outCenter, cv::Rect& outBox,
-                       float* meanS, float* meanV) {
-    cv::Mat m1, m2, fg;
+// Buffery pro grayskull (alokují se jednou, jen rostou podle potřeby).
+static std::vector<unsigned char> g_maskBuf, g_tmpBuf, g_sBuf, g_vBuf;
+static std::vector<gs_label> g_labBuf;
+static std::vector<gs_blob> g_blobBuf;
+
+// Najde kouli dané barvy v ROI "roi" snímku rgb (fw x fh, R8G8B8). floorMask
+// (fw*fh, 0/255) omezí hledání na hrací plochu. Vrací true a vyplní
+// outCenter/outBox (souřadnice snímku) a střední saturaci/jas blobu.
+//
+// Kandidáty dělá grayskull (spojité komponenty); tvar filtrujeme poměrem stran
+// bboxu a zaplněním (odfiltruje odlesky a protáhlé fleky). Asociace je po
+// vrstvách, aby koule "nepřeskočila" na jiný objekt daleko od predikce.
+static bool detectBall(const unsigned char* rgb, int fw, int fh,
+                       const unsigned char* floorMask, int color, const Box& roi,
+                       Pt prev, float gatePx, float reacquirePx, Pt avoid,
+                       Pt& outCenter, Box& outBox, float* meanS, float* meanV) {
+    int rw = roi.w, rh = roi.h;
+    if (rw < 1 || rh < 1) return false;
+    size_t N = (size_t)rw * rh;
+    g_maskBuf.assign(N, 0);
+    g_sBuf.assign(N, 0);
+    g_vBuf.assign(N, 0);
+
     const ColorModel& cm = ballColor[color];
-    if (cm.set) {
-        // Naučená barva: odstín ±hueTol (kolem 0/180 se obepíná), saturace
-        // a jas stačí zlomek naučené hodnoty, aby koule zůstala chycená
-        // i ve stínu / při jiném osvětlení. Malá koule má větší podíl
-        // okrajových pixelů (míchaných s pozadím), proto jsou podlahy nízké.
-        int sMin = std::max(25, cm.s / 4);
-        int vMin = std::max(20, cm.v / 4);
-        int lo = cm.h - hueTol;
-        int hi = cm.h + hueTol;
-        auto band = [&](int a, int b) {
-            cv::Mat t;
-            cv::inRange(hsv, cv::Scalar(a, sMin, vMin), cv::Scalar(b, 255, 255), t);
-            return t;
-        };
-        if (lo < 0)        fg = band(lo + 180, 179) | band(0, hi);
-        else if (hi > 179) fg = band(lo, 179) | band(0, hi - 180);
-        else               fg = band(lo, hi);
-    } else if (color == BALL_RED) {
-        // Červená obepíná 0/180, takže dva intervaly.
-        cv::inRange(hsv, cv::Scalar(0, 80, 50), cv::Scalar(12, 255, 255), m1);
-        cv::inRange(hsv, cv::Scalar(158, 80, 50), cv::Scalar(180, 255, 255), m2);
-        fg = m1 | m2;
-    } else {
-        // Výchozí zelená (dokud není naučená klikem): širší prahy, ať chytí
-        // i menší/tmavší kouli. Odstín 35..90, nižší saturace i jas.
-        cv::inRange(hsv, cv::Scalar(35, 45, 30), cv::Scalar(90, 255, 255), fg);
-    }
-    if (!mask.empty()) cv::bitwise_and(fg, mask, fg);
+    const bool learned = cm.set;
+    int sMin, vMin;
+    if (learned)       { sMin = std::max(25, cm.s / 4); vMin = std::max(20, cm.v / 4); }
+    else if (color == BALL_RED) { sMin = 80; vMin = 50; }
+    else               { sMin = 45; vMin = 30; }
 
-    // Malé koule: OPEN (eroze+dilatace) může drobný blob úplně smazat, proto
-    // jen CLOSE (doplní dírky) a šum odfiltruje až práh --min-area.
-    static const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, {3, 3});
-    cv::morphologyEx(fg, fg, cv::MORPH_CLOSE, kernel);
-
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(fg, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-    // Kandidáti: kruhovitost + meze plochy odfiltrují odlesky a pozadí.
-    // Střed je z minEnclosingCircle (ne z bboxu — dírka od odlesku posouvá
-    // těžiště i bbox). Zamčená koule bere nejbližší blob k predikci (gate),
-    // ztracená bere největší (globální re-acquire).
-    bool have = false;
-    float bestScore = 0;
-    cv::Point2f bestC;
-    cv::Rect bestR;
-    for (auto& c : contours) {
-        double a = cv::contourArea(c);
-        if (a < (double)ballMinArea) continue;
-        if (ballMaxArea > 0 && a > (double)ballMaxArea) continue;
-        double per = cv::arcLength(c, true);
-        if (per > 1.0) {
-            double circ = 4.0 * M_PI * a / (per * per);
-            if (circ < (double)ballMinRoundness) continue;
-        }
-        cv::Point2f ctr; float rad;
-        cv::minEnclosingCircle(c, ctr, rad);
-        float score;
-        if (useGate && ballGatePx > 0) {
-            float dx = ctr.x - prev.x, dy = ctr.y - prev.y;
-            float d = std::sqrt(dx * dx + dy * dy);
-            if (d > gatePx) continue;
-            score = -d;                 // nejblíž k predikci
-        } else {
-            score = (float)a;           // největší blob
-        }
-        if (!have || score > bestScore) {
-            bestScore = score; bestC = ctr;
-            bestR = cv::boundingRect(c); have = true;
+    for (int ry = 0; ry < rh; ry++) {
+        const unsigned char* rp = rgb + ((size_t)(roi.y + ry) * fw + roi.x) * 3;
+        const unsigned char* fm = floorMask
+            ? floorMask + (size_t)(roi.y + ry) * fw + roi.x : nullptr;
+        unsigned char* mp = g_maskBuf.data() + (size_t)ry * rw;
+        unsigned char* sp = g_sBuf.data() + (size_t)ry * rw;
+        unsigned char* vp = g_vBuf.data() + (size_t)ry * rw;
+        for (int rx = 0; rx < rw; rx++, rp += 3, mp++, sp++, vp++) {
+            if (fm && !fm[rx]) continue;
+            int H, S, V; rgbToHsv(rp[0], rp[1], rp[2], H, S, V);
+            if (S < sMin || V < vMin) continue;
+            bool match;
+            if (learned) {
+                int d = H - cm.h; if (d < 0) d = -d;
+                if (d > 90) d = 180 - d;          // odstín se obepíná přes 0/180
+                match = d <= hueTol;
+            } else if (color == BALL_RED) {
+                match = (H <= 12 || H >= 158);
+            } else {
+                match = (H >= 35 && H <= 90);
+            }
+            if (match) { *mp = 255; *sp = (unsigned char)S; *vp = (unsigned char)V; }
         }
     }
-    if (!have) return false;
-    outCenter = bestC;
-    outBox = bestR;
+
+    // CLOSE = dilatace + eroze (doplní dírky od odlesku), přes grayskull.
+    g_tmpBuf.assign(N, 0);
+    gs_image im{(unsigned)rw, (unsigned)rh, g_maskBuf.data()};
+    gs_image it{(unsigned)rw, (unsigned)rh, g_tmpBuf.data()};
+    gs_dilate(it, im);
+    gs_erode(im, it);
+
+    const unsigned cap = 4096;
+    if (g_labBuf.size() < N) g_labBuf.resize(N);
+    if (g_blobBuf.size() < cap) g_blobBuf.resize(cap);
+    unsigned nb = gs_blobs(im, g_labBuf.data(), g_blobBuf.data(), cap);
+
+    const bool hasPrev = prev.x >= 0.0f;
+    const bool hasAvoid = avoid.x >= 0.0f;
+    bool haveNear = false, haveReacq = false, haveAny = false;
+    float bestNear = 0, bestReacq = 0, bestArea = 0;
+    Pt cNear, cReacq, cAny;
+    Box rNear, rReacq, rAny;
+    gs_label lNear = 0, lReacq = 0, lAny = 0;
+    for (unsigned i = 0; i < nb; i++) {
+        const gs_blob& bl = g_blobBuf[i];
+        float a = (float)bl.area;
+        if (a < (float)ballMinArea) continue;
+        if (ballMaxArea > 0 && a > (float)ballMaxArea) continue;
+        int bw = (int)bl.box.w, bh = (int)bl.box.h;
+        double aspect = (double)std::min(bw, bh) / (double)std::max(bw, bh);
+        double fill = (double)a / (double)(bw * bh);
+        if (aspect < (double)ballMinRoundness) continue;   // protáhlé (odlesk)
+        if (fill < 0.45) continue;                         // řídké (odlesk)
+        Box box{roi.x + (int)bl.box.x, roi.y + (int)bl.box.y, bw, bh};
+        // Střed z bboxu (ne z těžiště) — dírka od odlesku mění těžiště, ale ne
+        // krajní body, takže bbox zůstává vystředěný na kouli.
+        Pt ctr{(float)(box.x + box.w / 2), (float)(box.y + box.h / 2)};
+        float dPrev = 1e30f, dAvoid = 1e30f;
+        if (hasPrev) { float dx = ctr.x - prev.x, dy = ctr.y - prev.y; dPrev = std::sqrt(dx*dx+dy*dy); }
+        if (hasAvoid) { float dx = ctr.x - avoid.x, dy = ctr.y - avoid.y; dAvoid = std::sqrt(dx*dx+dy*dy); }
+        if (hasPrev && hasAvoid && dAvoid < dPrev) continue;  // patří druhé kouli
+        if (hasPrev && gatePx > 0 && dPrev <= gatePx && (!haveNear || dPrev < bestNear)) {
+            bestNear = dPrev; cNear = ctr; rNear = box; lNear = bl.label; haveNear = true;
+        }
+        if (hasPrev && reacquirePx > 0 && dPrev <= reacquirePx && (!haveReacq || dPrev < bestReacq)) {
+            bestReacq = dPrev; cReacq = ctr; rReacq = box; lReacq = bl.label; haveReacq = true;
+        }
+        if (!haveAny || a > bestArea) {
+            bestArea = a; cAny = ctr; rAny = box; lAny = bl.label; haveAny = true;
+        }
+    }
+    gs_label lbl;
+    if (haveNear)       { outCenter = cNear;  outBox = rNear;  lbl = lNear; }
+    else if (haveReacq) { outCenter = cReacq; outBox = rReacq; lbl = lReacq; }
+    else if (haveAny)   { outCenter = cAny;   outBox = rAny;   lbl = lAny; }
+    else return false;
+
     if (meanS || meanV) {
-        cv::Rect br = bestR & cv::Rect(0, 0, hsv.cols, hsv.rows);
-        if (br.width > 0 && br.height > 0) {
-            cv::Scalar mn = cv::mean(hsv(br), fg(br));
-            if (meanS) *meanS = (float)mn[1];
-            if (meanV) *meanV = (float)mn[2];
+        unsigned long ss = 0, vv = 0; unsigned area = 0;
+        for (int ry = 0; ry < rh; ry++) {
+            const gs_label* lp = g_labBuf.data() + (size_t)ry * rw;
+            for (int rx = 0; rx < rw; rx++) {
+                if (lp[rx] != lbl) continue;
+                ss += g_sBuf[(size_t)ry * rw + rx];
+                vv += g_vBuf[(size_t)ry * rw + rx];
+                area++;
+            }
+        }
+        if (area) {
+            if (meanS) *meanS = (float)(ss / area);
+            if (meanV) *meanV = (float)(vv / area);
         }
     }
     return true;
 }
 
 // Střed koule -> rektifikované souřadnice plochy 0..1.
-static void rectify(const cv::Mat& H, float cx, float cy, float& u, float& v) {
-    std::vector<cv::Point2f> src = {{cx, cy}}, dst;
-    cv::perspectiveTransform(src, dst, H);
-    u = dst[0].x; v = dst[0].y;
+static void rectify(const Mat3& H, float cx, float cy, float& u, float& v) {
+    applyH(H, cx, cy, u, v);
     if (u < 0) u = 0; if (u > 1) u = 1;
     if (v < 0) v = 0; if (v > 1) v = 1;
 }
@@ -437,22 +582,23 @@ static void rectify(const cv::Mat& H, float cx, float cy, float& u, float& v) {
 // Vezme průměr barev v malém okně (5x5) kolem kliknutého pixelu a uloží
 // ho jako cílovou barvu koule. Průměr z okna je odolnější než jediný pixel
 // (ten může padnout na odlesk nebo šum). Detekce pak hledá odstín ±hueTol.
-static bool pickColor(const cv::Mat& bgr, int x, int y, int& h, int& s, int& v) {
-    if (x < 0 || y < 0 || x >= bgr.cols || y >= bgr.rows) return false;
+static bool pickColor(const unsigned char* rgb, int fw, int fh, int x, int y,
+                      int& h, int& s, int& v) {
+    if (x < 0 || y < 0 || x >= fw || y >= fh) return false;
     const int R = 2;
-    cv::Rect r(std::max(0, x - R), std::max(0, y - R),
-               std::min(bgr.cols - 1, x + R) - std::max(0, x - R) + 1,
-               std::min(bgr.rows - 1, y + R) - std::max(0, y - R) + 1);
-    cv::Mat patch;
-    cv::cvtColor(bgr(r), patch, cv::COLOR_BGR2HSV);
+    int x0 = std::max(0, x - R), y0 = std::max(0, y - R);
+    int x1 = std::min(fw - 1, x + R), y1 = std::min(fh - 1, y + R);
+    // Odstín se průměruje vektorově (přes úhel na kružnici), aby se správně
+    // zprůměroval i kolem 0/180.
     double sx = 0, sy = 0, ss = 0, sv = 0;
     int n = 0;
-    for (int yy = 0; yy < patch.rows; yy++) {
-        for (int xx = 0; xx < patch.cols; xx++) {
-            cv::Vec3b p = patch.at<cv::Vec3b>(yy, xx);
-            double ang = p[0] * M_PI / 90.0;   // 0..180 -> 0..2π
+    for (int yy = y0; yy <= y1; yy++) {
+        const unsigned char* rp = rgb + ((size_t)yy * fw + x0) * 3;
+        for (int xx = x0; xx <= x1; xx++, rp += 3) {
+            int hh, ssv, vv; rgbToHsv(rp[0], rp[1], rp[2], hh, ssv, vv);
+            double ang = hh * M_PI / 90.0;   // 0..180 -> 0..2π
             sx += std::cos(ang); sy += std::sin(ang);
-            ss += p[1]; sv += p[2]; n++;
+            ss += ssv; sv += vv; n++;
         }
     }
     if (n == 0) return false;
@@ -465,22 +611,14 @@ static bool pickColor(const cv::Mat& bgr, int x, int y, int& h, int& s, int& v) 
     return true;
 }
 
-static void teachColor(const cv::Mat& frame, int color, cv::Point2f mp) {
+static void teachColor(const unsigned char* rgb, int fw, int fh, int color, Pt mp) {
     int h, s, v;
-    if (!pickColor(frame, (int)mp.x, (int)mp.y, h, s, v)) return;
+    if (!pickColor(rgb, fw, fh, (int)mp.x, (int)mp.y, h, s, v)) return;
     ballColor[color].set = true;
     ballColor[color].h = h; ballColor[color].s = s; ballColor[color].v = v;
     std::cerr << "color: " << (color == BALL_GREEN ? "green(mood)" : "red(inter)")
               << " <- h=" << h << " s=" << s << " v=" << v
               << " (tol +-" << hueTol << ")" << std::endl;
-}
-
-// HSV (OpenCV) -> raylib Color, pro vzorník naučené barvy v HUD.
-static Color hsvToRgb(int h, int s, int v, unsigned char a = 255) {
-    cv::Mat hsv(1, 1, CV_8UC3, cv::Scalar(h, s, v)), bgr;
-    cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
-    cv::Vec3b p = bgr.at<cv::Vec3b>(0, 0);
-    return (Color){p[2], p[1], p[0], a};
 }
 
 // ── 433 MHz přijímač (vlákno) ────────────────────────────────────────
@@ -575,7 +713,8 @@ int main(int argc, char* argv[]) {
             std::cout << "  --rf-pin N       BCM line of the 433 MHz receiver (default "
                       << RF_GPIO_LINE << ")" << std::endl;
             std::cout << "  --width N        capture width (default " << CAM_W_DEFAULT << ")\n"
-                         "  --height N       capture height (default " << CAM_H_DEFAULT << ")\n";
+                         "  --height N       capture height (default " << CAM_H_DEFAULT << ")\n"
+                         "  --device PATH    V4L2 camera device (default /dev/video0)\n";
             std::cout << "  --min-area N     min blob area for a ball (default "
                       << BALL_MIN_AREA << ")\n";
             std::cout << "  --max-area N     max blob area, 0 = no limit (default "
@@ -618,6 +757,10 @@ int main(int argc, char* argv[]) {
         }
         if (strcmp(argv[i], "--no-audio") == 0) {
             noAudio = true;
+        }
+        if (strcmp(argv[i], "--device") == 0 && i + 1 < argc) {
+            camDevice = argv[i + 1];
+            i++;
         }
         if (strcmp(argv[i], "--simulate") == 0) {
             simulate = true;
@@ -690,11 +833,6 @@ int main(int argc, char* argv[]) {
 
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
-
-    // Bez kamery OpenCV chrli na každý pokus otevřít /dev/video0 WARN řádky
-    // ("can't open camera by index"); ticho na ERROR, ať nezaplevelíme journal.
-    // Vlastní stav ("camera: opening/failed") hlásíme sami.
-    cv::utils::logging::setLogLevel(cv::utils::logging::LOG_LEVEL_ERROR);
 
     // ── sampler přilepený k trackeru ──────────────────────────────────
     buttons.setBoxLetter('A');
@@ -812,45 +950,38 @@ int main(int argc, char* argv[]) {
     // Když kamera chybí, tracker běží dál (zvuk + RF tlačítka) a kameru
     // zkouší otevřít každé ~2 s. Bez tohohle by služba bez kamery spadla
     // a tlačítka by nefungovala.
-    cv::VideoCapture cap;
-    cv::Mat frame;
     int frameWidth = 0, frameHeight = 0;
     bool camReady = false;
+    bool camOpen = false;              // V4L2 zařízení otevřeno
+    const unsigned char* rgbPtr = nullptr;
     Font font = {0};
     float scale = 1.0f;
     float offX = 0.0f, offY = 0.0f;
     Image raylibImage = {0};
     Texture2D videoTex = {0};
+    struct v4l2_frame camFrame = {0};
 
     auto openCamera = [&]() -> bool {
-        if (!cap.isOpened()) {
-            cap.open(0);
-            if (cap.isOpened()) {
-                // MJPG dovolí 1280x720 (i vyšší) po USB2; když to kamera
-                // neumí, OpenCV set tiše ignoruje a zvolí výchozí formát.
-                cap.set(cv::CAP_PROP_FOURCC,
-                        cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
-                cap.set(cv::CAP_PROP_FRAME_WIDTH, reqWidth);
-                cap.set(cv::CAP_PROP_FRAME_HEIGHT, reqHeight);
-                if (lockExposure) {
-                    // Automatická expozice/WB mění barvy za běhu a koule pak
-                    // "mizí"; napevno je držíme. Hodnoty zůstávají na kameře.
-                    cap.set(cv::CAP_PROP_AUTO_EXPOSURE, 1);   // V4L2: manual
-                    cap.set(cv::CAP_PROP_AUTO_WB, 0);
-                    std::cerr << "camera: auto-exposure/WB off (--lock-exposure)"
-                              << std::endl;
-                }
+        if (!camOpen) {
+            // MJPG dovolí 1280x720 (i vyšší) po USB2; když to kamera neumí,
+            // v4l2_open sám spadne na YUYV (nižší rozlišení).
+            if (v4l2_open(camDevice, reqWidth, reqHeight, 1) != 0) return false;
+            camOpen = true;
+            if (lockExposure) {
+                // Automatická expozice/WB mění barvy za běhu a koule pak
+                // "mizí"; napevno je držíme. Hodnoty zůstávají na kameře.
+                v4l2_lock_exposure(1);
+                std::cerr << "camera: auto-exposure/WB off (--lock-exposure)"
+                          << std::endl;
             }
         }
-        if (!cap.isOpened()) return false;
-        frame = cv::Mat();
-        cap >> frame;
-        if (frame.empty()) return false;
-        frameWidth = frame.cols;
-        frameHeight = frame.rows;
+        if (v4l2_grab(&camFrame, 2000) != 0 || !camFrame.rgb) return false;
+        frameWidth = camFrame.w;
+        frameHeight = camFrame.h;
+        rgbPtr = camFrame.rgb;
         loadCalib(frameWidth, frameHeight);
-        raylibImage = Image{frame.data, frameWidth, frameHeight, 1,
-                            PIXELFORMAT_UNCOMPRESSED_R8G8B8};
+        raylibImage = Image{const_cast<unsigned char*>(rgbPtr), frameWidth,
+                            frameHeight, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8};
         return true;
     };
 
@@ -909,19 +1040,18 @@ int main(int argc, char* argv[]) {
                                : std::string("detect every frame"))
               << std::endl;
 
-    cv::Mat rgbFrame;
     bool dragging = false;
     int dragIdx = -1;
 
     // Homografie i maska podlahy závisí jen na rozích kalibrace, takže se
     // přepočítají jen když je kalibrace "špinavá" — ne na každém snímku.
-    cv::Mat H, Hinv, floorMask;
+    Mat3 H, Hinv;
     bool calibDirty = true;
 
     Ball red, green;            // green = 4 náladové stopy, red = 3 intermezza
 
-    // Kameru zkoušíme otevřít nejvýš každé 2 s — cap.open() sám blokuje
-    // ~0.5 s a bez throttlingu by pokusy zaplavily CPU i journal.
+    // Kameru zkoušíme otevřít nejvýš každé 2 s — otevření V4L2 zařízení
+    // blokuje a bez throttlingu by pokusy zaplavily CPU i journal.
     auto lastCamTry = std::chrono::steady_clock::now() - std::chrono::seconds(10);
     bool camWarned = false;
     // Detekci (nejdražší část) pouštíme nejvýš každých detectMs milisekund.
@@ -962,21 +1092,22 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        cap >> frame;
-        if (frame.empty()) {
-            std::cerr << "camera: frame empty, reconnecting" << std::endl;
-            cap.release();
+        if (v4l2_grab(&camFrame, 2000) != 0 || !camFrame.rgb) {
+            std::cerr << "camera: frame timeout, reconnecting" << std::endl;
+            v4l2_close();
+            camOpen = false;
             camReady = false;
             continue;
         }
-        raylibImage.data = frame.data;
+        rgbPtr = camFrame.rgb;
+        raylibImage.data = const_cast<unsigned char*>(rgbPtr);
 
         if (calibDirty) {
-            cv::Point2f src[4] = {corners[0], corners[1], corners[2], corners[3]};
-            cv::Point2f dst[4] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
-            H = cv::getPerspectiveTransform(src, dst);
-            Hinv = H.inv();
-            buildFloorMask(frameWidth, frameHeight, floorMask);
+            Pt src[4] = {corners[0], corners[1], corners[2], corners[3]};
+            Pt dst[4] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
+            H = homography4(src, dst);
+            Hinv = invert3(H);
+            buildFloorMask(frameWidth, frameHeight);
             calibDirty = false;
         }
 
@@ -1000,28 +1131,32 @@ int main(int argc, char* argv[]) {
             std::chrono::duration_cast<std::chrono::milliseconds>(detNow - lastDetect).count() >= detectMs;
         if (doDetect) {
             lastDetect = detNow;
-            auto detectOne = [&](int color, Ball& b) {
-                cv::Rect roi;
+            auto detectOne = [&](int color, Ball& b, const Ball& other) {
+                Box roi;
                 if (b.present && b.kx.init) {
                     float margin = std::max(90.0f,
-                        0.75f * std::max(b.bbox.width, b.bbox.height) + 60.0f);
-                    roi = cv::Rect((int)(b.sx - margin), (int)(b.sy - margin),
-                                   (int)(2 * margin), (int)(2 * margin)) & floorROI;
+                        0.75f * std::max((float)b.bbox.w, (float)b.bbox.h) + 60.0f);
+                    int x0 = std::max((int)(b.sx - margin), floorROI.x);
+                    int y0 = std::max((int)(b.sy - margin), floorROI.y);
+                    int x1 = std::min((int)(b.sx + margin), floorROI.x + floorROI.w);
+                    int y1 = std::min((int)(b.sy + margin), floorROI.y + floorROI.h);
+                    roi = Box{x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0)};
                 } else {
                     roi = floorROI;
                 }
-                if (roi.width < 8 || roi.height < 8) roi = floorROI;
-                cv::Mat hsvRoi, maskRoi = floorMask(roi);
-                cv::cvtColor(frame(roi), hsvRoi, cv::COLOR_BGR2HSV);
-                cv::Point2f c; cv::Rect bx;
-                float mS = 0, mV = 0;
-                bool found = detectBall(hsvRoi, color, maskRoi,
-                                        cv::Point2f(b.sx - roi.x, b.sy - roi.y),
-                                        std::max(60.0f, 0.5f * std::min(roi.width, roi.height)),
-                                        b.present, c, bx, &mS, &mV);
+                if (roi.w < 8 || roi.h < 8) roi = floorROI;
+                Pt c; Box bx; float mS = 0, mV = 0;
+                Pt prev = (b.present && b.kx.init) ? Pt{b.sx, b.sy} : Pt{-1, -1};
+                Pt avoid = (other.present && other.kx.init)
+                    ? Pt{other.sx, other.sy} : Pt{-1, -1};
+                // Zamčená koule: jen blob do gate okruhu od predikce (a blíž
+                // k nám než k druhé kouli). Ztracená: největší blob kdekoliv.
+                float gate = std::max(60.0f, 0.5f * std::min((float)roi.w, (float)roi.h));
+                bool found = detectBall(rgbPtr, frameWidth, frameHeight,
+                                        floorMaskFull.data(), color, roi,
+                                        prev, gate, 0.0f, avoid,
+                                        c, bx, &mS, &mV);
                 if (found) {
-                    c.x += roi.x; c.y += roi.y;
-                    bx.x += roi.x; bx.y += roi.y;
                     b.correct(c.x, c.y, bx);
                     // Adaptace saturace/jasu naučené barvy (pomalu, proti
                     // driftu expozice; odstín zůstává naučený).
@@ -1036,8 +1171,8 @@ int main(int argc, char* argv[]) {
                     b.miss();
                 }
             };
-            detectOne(BALL_RED, red);
-            detectOne(BALL_GREEN, green);
+            detectOne(BALL_RED, red, green);
+            detectOne(BALL_GREEN, green, red);
         }
 
         // ── hlasitost: smyčky hrají jen když je interaction zapnutá ────────
@@ -1121,17 +1256,20 @@ int main(int argc, char* argv[]) {
             float mx = ((float)mouse.x - offX) / scale;
             float my = ((float)mouse.y - offY) / scale;
             if (mx >= 0 && my >= 0 && mx < frameWidth && my < frameHeight) {
-                cv::Point2f mp(mx, my);
+                Pt mp{mx, my};
                 // Pravé tlačítko: nauč barvu červené (inter) koule.
                 if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-                    teachColor(frame, BALL_RED, mp);
+                    teachColor(rgbPtr, frameWidth, frameHeight, BALL_RED, mp);
                     saveCalib();
                 }
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     // Na rohu kalibrace se táhne; jinde klik naučí zelenou kouli.
                     dragIdx = nearestCorner(mp);
                     if (dragIdx >= 0) dragging = true;
-                    else { teachColor(frame, BALL_GREEN, mp); saveCalib(); }
+                    else {
+                        teachColor(rgbPtr, frameWidth, frameHeight, BALL_GREEN, mp);
+                        saveCalib();
+                    }
                 } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                     dragging = false;
                 }
@@ -1145,14 +1283,12 @@ int main(int argc, char* argv[]) {
         }
 
         if (!headless) {
-            cv::cvtColor(frame, rgbFrame, cv::COLOR_BGR2RGB);
-            gridLines(rgbFrame, Hinv);
-            raylibImage.data = rgbFrame.data;
+            raylibImage.data = const_cast<unsigned char*>(rgbPtr);
 
             // Texturu vytvoříme jednou a dál do ní jen nahráváme pixely.
             // LoadTextureFromImage každý snímek by znovu alokoval GPU texturu.
             if (videoTex.id == 0) videoTex = LoadTextureFromImage(raylibImage);
-            else UpdateTexture(videoTex, rgbFrame.data);
+            else UpdateTexture(videoTex, rgbPtr);
 
             BeginDrawing();
             ClearBackground(BLACK);
@@ -1160,6 +1296,7 @@ int main(int argc, char* argv[]) {
             rlTranslatef(offX, offY, 0.0f);
             rlScalef(scale, scale, 1.0f);
             DrawTexture(videoTex, 0, 0, WHITE);
+            drawGrid(Hinv);
 
             for (int i = 0; i < 4; i++) {
                 Color c = (i < 2) ? (Color){255, 80, 80, 255} : (Color){80, 80, 255, 255};
@@ -1178,7 +1315,7 @@ int main(int argc, char* argv[]) {
             if (red.present) {
                 DrawRectangleLinesEx(
                     (Rectangle){(float)red.bbox.x, (float)red.bbox.y,
-                                (float)red.bbox.width, (float)red.bbox.height},
+                                (float)red.bbox.w, (float)red.bbox.h},
                     3.0f, rDraw);
                 DrawTextEx(font, "R", {(float)red.bbox.x, (float)red.bbox.y - 20},
                            18, 0.0f, rDraw);
@@ -1188,7 +1325,7 @@ int main(int argc, char* argv[]) {
             if (green.present) {
                 DrawRectangleLinesEx(
                     (Rectangle){(float)green.bbox.x, (float)green.bbox.y,
-                                (float)green.bbox.width, (float)green.bbox.height},
+                                (float)green.bbox.w, (float)green.bbox.h},
                     3.0f, gDraw);
                 DrawTextEx(font, "G", {(float)green.bbox.x, (float)green.bbox.y - 20},
                            18, 0.0f, gDraw);
@@ -1268,6 +1405,6 @@ int main(int argc, char* argv[]) {
         Mix_CloseAudio();
         SDL_Quit();
     }
-    cap.release();
+    v4l2_close();
     return 0;
 }

@@ -36,7 +36,8 @@ Barvy i rohy se ukládají do `calib.txt` včetně rozlišení, pro které plat�
 | Knihovna | Verze | Poznámky |
 |---------|---------|-------|
 | Raylib | 5.x-6.x | Vykreslování oken a vstup |
-| OpenCV | 4.x-5.x | Zpracování obrazu, kalibrace, sledování |
+| grayskull | header-only | Vision: bloby, morfologie, perspektiva (`third_party/`) |
+| libjpeg-turbo | 2.x | Dekódování MJPEG z V4L2 kamery |
 | SDL2 + SDL2_mixer | 2.x | Přehrávání zvuku a ovládání hlasitosti |
 
 ### Sestavení (Desktop Linux)
@@ -576,15 +577,8 @@ Kompletní schémata zapojení jsou k dispozici v [`docs/SCH.md`](docs/SCH.md).
 
 ## Řešení problémů
 
-### Problémy s kamerou na Termuxu
-Android neposkytuje přímý přístup k `/dev/video0`. OpenCV `VideoCapture(0)` vyžaduje buď USB webkameru přes OTG adaptér, nebo přesměrování z `termux-camera-photo` do virtuálního zařízení (experimentální).
-
-### Konflikty mezi Termux Qt6 a OpenCV
-Pokud se OpenCV nenainstaluje na Termuxu kvůli chybám v závislostech Qt6:
-```bash
-pkg upgrade -y && apt --fix-broken install -y && pkg install -y opencv
-```
-Pokud to selže, spusťte `build_termux.sh`, který sestaví OpenCV ze zdrojových kódů bez podpory Qt.
+### Kamera na Termuxu
+Android/Termux neposkytuje V4L2 (`/dev/video0`), takže `build_termux.sh` staví tracker s `HAVE_V4L2=0` — kamera se neotevře a tracker běží jen jako zvuk + RF tlačítka. Na Linuxu (box A, laptop) kameru obsluhuje V4L2 + libjpeg-turbo a žádné OpenCV není potřeba.
 
 ### Nastavení GUI na Termuxu (X11)
 ```bash
