@@ -12,7 +12,11 @@ Type=simple
 User=pi
 Group=pi
 WorkingDirectory=/home/pi/tracker
-ExecStart=/home/pi/tracker/tracker --headless --max-people 1
+# --max-people 1: výchozí limit hlídače na jednoho člověka (main.c).
+# --no-rf: na boxu A běží vedle trackeru i sampler a ten vlastní RF link na
+# GPIO15 (tlačítko F = @stopall v map.csv). RF trackeru jde zapnout přes
+# --rf-pin N, když sampler neběží.
+ExecStart=/home/pi/tracker/tracker --headless --max-people 1 --tracker kcf --no-rf
 Restart=always
 RestartSec=2
 KillSignal=SIGTERM

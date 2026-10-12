@@ -36,4 +36,7 @@
 # hrající vrstvy (@stopall). Služby běží dál. Slot je neaktivní bez
 # --allow-restart (a root) — v sampler.service je zapnutý, bez něj
 # tlačítko hlásí "not in map".
+#
+# Stejný kód má i tracker na boxu A: čte přijímač na GPIO15 a na tuhle
+# konstantu restartuje tracker.service (viz main.c, RF_RESTART_CODE).
 5089457, @stopall
