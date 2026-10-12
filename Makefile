@@ -3,7 +3,7 @@
 #         make PLATFORM=termux
 
 CXX       ?= g++
-SRC       = main.c
+SRC       = main.c buttons.c
 BIN       = tracker
 SAMPLER_SRC = sampler.c
 SAMPLER_BIN = sampler
@@ -90,7 +90,7 @@ SAMPLER_LDFLAGS  = $(LDFLAGS) $(SDL2_LIBS) $(GPIOD_LIBS) -lm -lpthread
 all: $(BIN) $(SAMPLER_BIN)
 
 $(BIN): $(SRC)
-	$(CXX) $< -o $@ $(ALL_CXXFLAGS) $(ALL_LDFLAGS)
+	$(CXX) $(SRC) -o $@ $(ALL_CXXFLAGS) $(ALL_LDFLAGS)
 
 $(SAMPLER_BIN): $(SAMPLER_SRC)
 	$(CXX) $< -o $@ $(SAMPLER_CXXFLAGS) $(SAMPLER_LDFLAGS)

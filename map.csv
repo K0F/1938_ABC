@@ -1,42 +1,19 @@
 # Format: decimal_code, sample_file
-# Odečteno z reálného SRX882S na GPIO15 (box A, sampler --listen
-# --debounce-ms 5000 --confirm 3), 2026-09-29.
-# Kódy A-E jsou tlačítka (A=3365153, B=3478913, C=3387393, D=3380993,
-# E=3382769). Sampler čte jen WAV (opus převádí samples-decode.sh,
-# `make samples`).
+# Box A (tracker). SRX882S přijímač na GPIO15 — pouze Sokol samply.
+# Kódy Sokol tlačítek odečteny z reálného přijímače (box A, sampler --listen
+# --debounce-ms 5000 --confirm 3).
 #
 # Každý slot je vrstva: stisk ji rozfádí od ticha (--fade-ms), vzorek se
 # přehraje jednou a sám se zastaví. Vrstvy se skládají — tlačítko B
-# nepřeruší A, jen přidá další.
-3365153, Kuchyn_A.wav
-3478913, Kuchyn_B.wav
-3387393, Kuchyn_C.wav
-3380993, Kuchyn_D.wav
-3382769, Kuchyn_E.wav
+# nepřeruší A, jen přidá další. Sampler/tracker čte jen WAV (opus převádí
+# samples-decode.sh, `make samples`).
+#
+# F (speciální klíč, kód 5089457): místo samplu umlčí všechny hrající vrstvy
+# a přepne interaction (smyčky track1-4/Inter_*/track9). @interact funguje
+# bez --allow-restart (needá root), na rozdíl od @stopall/@restart.
 1002161, Sokol.wav
 1269233, Sokol_B.wav
 1124401, Sokol_C.wav
 1274993, Sokol_D.wav
 979281, Sokol_E.wav
-#
-# 9 nových tlačítek (Solight) registrováno 2026-10-11 z boxu A, GPIO15
-# (`sampler --learn`), ověřeno listenem `--confirm 3`: každý kód ≥3
-# dekódování. Výchozí názvy — nahraď skutečnými WAV ze samples/ dle potřeby.
-3458897, Sokol.wav
-3526481, Sokol_B.wav
-3447841, Sokol_C.wav
-3458577, Sokol_D.wav
-3449809, Sokol_E.wav
-3452049, sample_b_16.wav
-3451937, sample_b_17.wav
-3447665, sample_b_18.wav
-3458721, sample_b_19.wav
-
-# F (speciální klíč, jiný kód: id 318091): místo samplu umlčí všechny
-# hrající vrstvy (@stopall). Služby běží dál. Slot je neaktivní bez
-# --allow-restart (a root) — v sampler.service je zapnutý, bez něj
-# tlačítko hlásí "not in map".
-#
-# Stejný kód má i tracker na boxu A: čte přijímač na GPIO15 a na tuhle
-# konstantu restartuje tracker.service (viz main.c, RF_RESTART_CODE).
-5089457, @stopall
+5089457, @interact
