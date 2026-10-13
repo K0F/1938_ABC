@@ -11,9 +11,11 @@
 # F (speciální klíč, kód 5089457): místo samplu umlčí všechny hrající vrstvy
 # a přepne interaction (smyčky track1-4/Inter_*/track9). @interact funguje
 # bez --allow-restart (needá root), na rozdíl od @stopall/@restart.
-1002161, Sokol.wav
-1269233, Sokol_B.wav
-1124401, Sokol_C.wav
-1274993, Sokol_D.wav
-979281, Sokol_E.wav
+
+
+3449809, Sokol.wav
+3447841, Sokol_B.wav
+3526481, Sokol_C.wav
+# , Sokol_D.wav
+# 3526481, Sokol_E.wav
 5089457, @interact

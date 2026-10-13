@@ -15,9 +15,8 @@ Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní z
 Tracker používá webkameru k detekci dvou barevných koulí nad hrací plochou a mapuje jejich polohu (rektifikované X/Y) na hlasitost neustále hrajících zvukových smyček. Všech **8 smyček** se nahraje a spustí naráz; znějí ale jen když je zapnutá **interaction** (tlačítko F na 433 MHz). RF tlačítka z `map.csv` přidávají do mixu jednorázové vzorky.
 
 ### Jak to funguje
-- **Zelená koule** míchá 4 náladové stopy `Interactive_music_*` podle kvadrantu (rektifikované X/Y): `Y-up_WAR`, `Y-down_PEACE`, `X-left_DRAMA`, `X-right_INTIMACY`.
-- **Červená koule** míchá 3 intermezza `Inter_*` podle polohy vlevo/vpravo (trojice pásem).
-- Osmou smyčkou je podklad `samples/track9.wav` („bed“), který hraje konstantní hlasitostí, dokud je interaction zapnutá.
+- **Zelená koule** plynule prolíná (2D crossfade) 4 náladové stopy `Interactive_music_*` podle rektifikované polohy X/Y: `Y-up_WAR`, `Y-down_PEACE`, `X-left_DRAMA`, `X-right_INTIMACY`. Mezi kvadranty se prolíná spojitě, uprostřed znějí všechny čtyři.
+- **Červená koule** kvadrantem **tvrdě přepíná (on/off)** 4 intermezza: `I1`=`Inter_Mobilizace_Cisla`, `I2`=`Inter_Emil_Hacha`, `I3`=`Inter_Mobilizace_Emoce`, `I4`=podklad `track9` (dřív samostatný „bed“). Vždy hraje nejvýš jedna.
 - Detekce je barevná (HSV blob) — žádný MOG2 ani KCF, jen převod do HSV a pár prahů na snímek, což je na Raspberry Pi 4 zanedbatelné. Barvy koulí se „naučí“ kliknutím do okna (viz [Ovládání](#ovládání-tracker)); dokud naučené nejsou, použijí se pevné prahy (zelená/červená).
 - Sledování je odolnější: střed bere z `minEnclosingCircle` (ne z bboxu, který posouvá odlesk), tvar filtruje kruhovostí (`--min-roundness`) a mezemi plochy (`--min-area`/`--max-area`). Zamčená koule se hledá v úzkém okně kolem predikce (okno roste s rychlostí), ztracená nejdřív v okruhu `--reacquire-px` kolem poslední polohy a teprve pak globálně — koule tak „nepřeskočí“ na jiný objekt; blob blíž k druhé kouli se zahodí (záměna koulí). Polohu hlazuje drobný 1D Kalman s konstantní rychlostí (plynulý pohyb, krátké výpadky předpoví). Naučená saturace/jas se pomalu přizpůsobují změně osvětlení (`--adapt-alpha`), odstín zůstává naučený; `--lock-exposure` navíc vypne auto-expozici/WB kamery.
 - **Odstranění pozadí**: na prázdné ploše (koule mimo stůl) se změří referenční snímek (klávesa `B`, soubor `--bg`, default `bg.bin`); detekce pak bere jen pixely, které se od reference liší (`--bg-diff`, `--no-bg` vypne). Zmizí statické odlesky a barevné předměty v pozadí, ale koule zůstane detekovaná i když se nehýbe (na rozdíl od MOG2). S `--lock-exposure` zůstává reference platná i při změnách světla.
@@ -58,7 +57,7 @@ bash build_termux.sh # Jednorázová instalace a sestavení
 ### Spuštění Trackeru
 Vložte smyčky do složky `samples/` pod jmény, která tracker očekává:
 `samples/Interactive_music_{Y-up_WAR,Y-down_PEACE,X-left-DRAMA,X-right-INTIMACY}.wav`,
-`samples/Inter_{Mobilizace_Cisla,Emil_Hacha,Mobilizace_Emoce}.wav` a podklad `samples/track9.wav`. Chybějící vzorek tracker jen zaloguje (`audio: missing …`) a jede dál.
+`samples/Inter_{Mobilizace_Cisla,Emil_Hacha,Mobilizace_Emoce}.wav` a `samples/track9.wav` (čtvrté intermezzo `I4`). Chybějící vzorek tracker jen zaloguje (`audio: missing …`) a jede dál.
 
 ```bash
 ./tracker                  # okenní režim (kalibrace, naučení barev), 1280x720
@@ -233,7 +232,7 @@ QEMU má dvě omezení, která nejsou chyba testu: neemuluje `bcm2835` audio kod
 |-------|--------|
 | Tažení myší / Dotyk | Přesun nejbližšího rohového bodu |
 | Levé tlačítko mimo roh | Naučí **zelenou** kouli (4 náladové stopy) |
-| Pravé tlačítko | Naučí **červenou** kouli (3 intermezza) |
+| Pravé tlačítko | Naučí **červenou** kouli (4 intermezza) |
 | `S` | Uloží kalibraci (rohy + barvy + tolerance) do `calib.txt` |
 | `R` | Resetuje rohy na celý obraz |
 | `C` | Zapomene naučené barvy (zpět na pevné prahy) |

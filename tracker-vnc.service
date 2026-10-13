@@ -15,7 +15,9 @@ Group=root
 WorkingDirectory=/home/pi/tracker
 # Okno kreslí na Xvfb :99; kalibrace a učení barev tak jdou přes VNC.
 Environment=DISPLAY=:99
-ExecStart=/home/pi/tracker/tracker --allow-restart --map map.csv
+# --fade-ms 0: one-shot vzorky z RF tlačítek startují okamžitě na 100 %,
+# bez náběhového rampu (dřív 2 s).
+ExecStart=/home/pi/tracker/tracker --allow-restart --map map.csv --fade-ms 0
 Restart=always
 RestartSec=2
 KillSignal=SIGTERM

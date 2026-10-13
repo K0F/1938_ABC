@@ -84,20 +84,21 @@ static Color hsvToRgb(int h, int s, int v, unsigned char a = 255) {
 #define CALIB_FILE "calib.txt"
 
 // ── Dvě barevné koule nad hrací plochou ──────────────────────────────
-// Všech 8 smyček (4 nálady + 3 intermezza + podklad track9) se nahraje a
-// spustí naráz v nekonečné smyčce; hrají ale jen když je zapnutá interaction
-// (tlačítko F = @interact). Když je vypnutá, jsou ztlumené = ticho.
+// Všech 8 smyček (4 nálady + 4 intermezza) se nahraje a spustí naráz v
+// nekonečné smyčce; hrají ale jen když je zapnutá interaction (tlačítko F =
+// @interact). Když je vypnutá, jsou ztlumené = ticho.
 // Koule do nich jen míchají hlasitost:
 //   zelená   = 4 náladové stopy Interactive_* (rektifikovaná poloha X/Y ->
-//              kvadranty),
-//   červená  = 3 intermezza Inter_* (poloha vlevo/vpravo -> trojice pásem).
+//              kvadranty, plynulý 2D crossfade),
+//   červená  = 4 intermezza Inter_* (kvadrant -> tvrdý on/off switch).
 // Na boxu A jsou náladové stopy Interactive_music_{Y-up_WAR,Y-down_PEACE,
 // X-left-DRAMA,X-right-INTIMACY}. Sledování je barevné (HSV blob) — na
 // Pi 4 nestojí skoro nic, žádný MOG2 ani KCF, jen převod do HSV a pár
 // prahů na snímek.
 #define N_MOOD 4
-#define N_INTER 3
-#define N_BED 1
+// I1-I4: Inter_Mobilizace_Cisla, Inter_Emil_Hacha, Inter_Mobilizace_Emoce
+// a podklad track9 (dřív samostatný "bed") — viz interFiles níže.
+#define N_INTER 4
 // Nejmenší plocha blobu, aby se počítal za kouli. Menší koule (zelená bývá
 // menší než červená) dává jen pár desítek pixelů, takže vyšší práh ji zahodil.
 #define BALL_MIN_AREA 8
@@ -168,15 +169,12 @@ static const char* moodFiles[N_MOOD] = {
 
 // Intermezza červené koule (jména ASCII — "Čísla" by dělalo problém s
 // kódováním napříč stroji; na boxu je soubor i pod původním jménem).
+// I4 je podklad track9 (dřív samostatný „bed"), takže dohromady běží 8 smyček
+// ve synchronu (4 nálady T + 4 intermezza I).
 static const char* interFiles[N_INTER] = {
     "samples/Inter_Mobilizace_Cisla.wav",
     "samples/Inter_Emil_Hacha.wav",
     "samples/Inter_Mobilizace_Emoce.wav",
-};
-
-// Osmý „looping" vzorek — hraje jako podklad pod koulemi, když je interaction
-// zapnutá. Dohromady tak v trackeru běží 8 smyček ve synchronu.
-static const char* bedFiles[N_BED] = {
     "samples/track9.wav",
 };
 
@@ -190,12 +188,14 @@ static const char* bedFiles[N_BED] = {
 #define RF_GPIO_LINE 15
 #define RF_CHIP "gpiochip0"
 
-// Trvalé smyčky trackeru (4 nálady + 3 intermezza + 1 podklad) na kanálech
+// Trvalé smyčky trackeru (4 nálady + 4 intermezza) na kanálech
 // 0..N_LOOP-1, vzorky z map.csv na kanálech od N_LOOP výš
 // (viz buttons.setChannelBase). Smyčky hrají jen když je interaction zapnutá.
-#define N_LOOP (N_MOOD + N_INTER + N_BED)
-// Podklad hraje konstantní hlasitostí, když je interaction zapnutá.
-#define LOOP_BED_VOLUME 110
+#define N_LOOP (N_MOOD + N_INTER)
+// Čtyři náladové stopy (první čtyři vzorky trackeru) jedou na čtvrtinu
+// hlasitosti, aby nepřebíjely jednorázové vzorky z map.csv (RF tlačítka),
+// které zůstávají na plné 1.0.
+#define LOOP_MOOD_VOLUME 0.25f
 #define MIX_RATE 24000   // stejné jako sampler a samples-decode.sh (mono 24 kHz)
 
 static volatile sig_atomic_t g_quit = 0;
@@ -854,9 +854,10 @@ int main(int argc, char* argv[]) {
             std::cout << "  --no-audio       skip audio init (decode and act, play nothing)\n"
                          "  --simulate       read RF codes from stdin instead of GPIO15\n";
             std::cout << "  --version, -v    print version" << std::endl;
-            std::cout << "Dvě koule: zelená míchá " << N_MOOD
-                      << " náladové stopy Interactive_*, červená míchá " << N_INTER
-                      << " intermezza Inter_*, osmou smyčkou je podklad track9. "
+            std::cout << "Dvě koule: zelená plynule prolíná " << N_MOOD
+                      << " náladové stopy Interactive_* (crossfade), červená "
+                      << "kvadrantem přepíná " << N_INTER
+                      << " intermezza Inter_* (I4 je podklad track9) on/off. "
                       << "Všech " << N_LOOP
                       << " smyček hraje, jen když je interaction zapnutá "
                       << "tlačítkem F (@interact v mapě); RF tlačítka nad ně "
@@ -1007,11 +1008,6 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < N_INTER; i++) {
             chunks[N_MOOD + i] = Mix_LoadWAV(interFiles[i]);
             if (!chunks[N_MOOD + i]) std::cerr << "audio: missing " << interFiles[i] << std::endl;
-        }
-        for (int i = 0; i < N_BED; i++) {
-            chunks[N_MOOD + N_INTER + i] = Mix_LoadWAV(bedFiles[i]);
-            if (!chunks[N_MOOD + N_INTER + i])
-                std::cerr << "audio: missing " << bedFiles[i] << std::endl;
         }
         for (int i = 0; i < mixCh; i++) {
             Mix_Volume(i, 0);
@@ -1175,7 +1171,8 @@ int main(int argc, char* argv[]) {
     std::cerr << "tracker " VERSION_STRING << " start: "
               << (headless ? "headless" : "window") << ", "
               << (camReady ? "camera " : "no camera yet, waiting, ")
-              << "balls green(4 mood)+red(" << N_INTER << " inter) volume-mixed, "
+              << "green " << N_MOOD << " mood crossfade + red " << N_INTER
+              << " inter switch, "
               << mixCh << " loop (interaction off until F) + "
               << BUTTONS_MAX_SLOTS << " button channel(s), "
               << buttons.slotCount() << " RF slot(s), "
@@ -1192,7 +1189,7 @@ int main(int argc, char* argv[]) {
     Mat3 H, Hinv;
     bool calibDirty = true;
 
-    Ball red, green;            // green = 4 náladové stopy, red = 3 intermezza
+    Ball red, green;            // green = 4 náladové stopy, red = 4 intermezza
 
     // Kameru zkoušíme otevřít nejvýš každé 2 s — otevření V4L2 zařízení
     // blokuje a bez throttlingu by pokusy zaplavily CPU i journal.
@@ -1345,25 +1342,29 @@ int main(int argc, char* argv[]) {
 
         // ── hlasitost: smyčky hrají jen když je interaction zapnutá ────────
         // Vypnutá interaction = ticho (F ztlumí všechny smyčky); zapnutá
-        // interaction míchá 4 nálady + 3 intermezza podle koulí a k tomu
-        // hraje osmý podkladový track konstantní hlasitostí.
+        // interaction míchá 4 nálady + 4 intermezza podle koulí.
         if (!interactive) {
             for (int ch = 0; ch < N_LOOP; ch++)
                 if (Mix_Volume(ch, -1) != 0) Mix_Volume(ch, 0);
         } else {
-        // ── hlasitost: zelená koule do 4 náladových stop (Interactive_*) ───
+        // ── hlasitost: zelená koule plynule prolíná 4 náladové stopy ────────
+        // Náladové stopy (T1-T4 = Interactive_*) se míchají 2D crossfadem:
+        // rektifikovaná X/Y dává lineární váhu oběma osám, takže se mezi
+        // kvadranty plynule prolíná (uprostřed znějí všechny čtyři).
+        //   T1 (WAR) = nahoře, T2 (PEACE) = dole, T3 (DRAMA) = vlevo,
+        //   T4 (INTIMACY) = vpravo. Bez koule = všechny ztlumené.
         float tgt[N_MOOD] = {0, 0, 0, 0};
         if (green.present) {
             float u, v;
             rectify(H, green.sx, green.sy, u, v);
-            tgt[0] += (float)(1.0 - v);   // Y nahoře -> track1 (WAR)
-            tgt[1] += (float)v;           // Y dole   -> track2 (PEACE)
-            tgt[2] += (float)(1.0 - u);   // X vlevo  -> track3 (DRAMA)
-            tgt[3] += (float)u;           // X vpravo -> track4 (INTIMACY)
+            tgt[0] = 1.0f - v;   // Y nahoře -> T1 (WAR)
+            tgt[1] = v;          // Y dole   -> T2 (PEACE)
+            tgt[2] = 1.0f - u;   // X vlevo  -> T3 (DRAMA)
+            tgt[3] = u;          // X vpravo -> T4 (INTIMACY)
         }
         for (int ch = 0; ch < N_MOOD; ch++) {
             if (tgt[ch] > 1.0f) tgt[ch] = 1.0f;
-            int target = (int)(tgt[ch] * 128.0f);
+            int target = (int)(tgt[ch] * 128.0f * LOOP_MOOD_VOLUME);
             int cur = Mix_Volume(ch, -1);
             int next = (int)(cur + (float)(target - cur) * VOL_SMOOTH_ALPHA);
             if (target == 0 && cur < 2) next = 0;   // bez šumu v tichu
@@ -1372,33 +1373,22 @@ int main(int argc, char* argv[]) {
             Mix_Volume(ch, next);
         }
 
-        // ── hlasitost: červená koule do 3 intermezzových stop (Inter_*) ────
-        // Tři intermezza sedí ve třech svislých pásmech; koule mezi nimi
-        // plynule prolíná (trojúhelníková váha, na okraji pásma nula).
-        float itgt[N_INTER] = {0, 0, 0};
+        // ── hlasitost: červená koule tvrdě přepíná 4 intermezza on/off ──────
+        // Intermezza (I1-I4 = Inter_* + podklad track9) hrají vždy nejvýš
+        // jedna: kvadrant, ve kterém je červená koule, danou stopu zapne a
+        // ostatní vypne (žádný crossfade — je to switch). Stejné pořadí jako
+        // u T: I1 nahoře, I2 dole, I3 vlevo, I4 vpravo. Bez koule jsou všechny
+        // vypnuté.
+        int interOn = -1;
         if (red.present) {
             float u, v;
             rectify(H, red.sx, red.sy, u, v);
-            for (int i = 0; i < N_INTER; i++) {
-                float c = ((float)i + 0.5f) / (float)N_INTER;
-                float w = 1.0f - fabsf(u - c) * (float)N_INTER;
-                if (w > 0.0f) itgt[i] = w;
-            }
+            float du = u - 0.5f, dv = v - 0.5f;
+            if (fabsf(dv) >= fabsf(du)) interOn = (dv < 0.0f) ? 0 : 1;
+            else                        interOn = (du < 0.0f) ? 2 : 3;
         }
-        for (int i = 0; i < N_INTER; i++) {
-            int ch = N_MOOD + i;
-            if (itgt[i] > 1.0f) itgt[i] = 1.0f;
-            int target = (int)(itgt[i] * 128.0f);
-            int cur = Mix_Volume(ch, -1);
-            int next = (int)(cur + (float)(target - cur) * VOL_SMOOTH_ALPHA);
-            if (target == 0 && cur < 2) next = 0;   // bez šumu v tichu
-            if (next > 128) next = 128;
-            if (next < 0) next = 0;
-            Mix_Volume(ch, next);
-        }
-
-        // Osmý podkladový track hraje konstantně, dokud je interaction zapnutá.
-        Mix_Volume(N_MOOD + N_INTER, LOOP_BED_VOLUME);
+        for (int ch = 0; ch < N_INTER; ch++)
+            Mix_Volume(N_MOOD + ch, ch == interOn ? 128 : 0);
         }
 
         if (!headless) {
@@ -1539,15 +1529,12 @@ int main(int argc, char* argv[]) {
                 float fill = (float)vol / 128.0f;
                 int bx = i * barW + 5;
                 int bw = barW - 10;
-                Color c = (i < N_MOOD) ? GREEN
-                         : (i < N_MOOD + N_INTER) ? RED : BLUE;
+                Color c = (i < N_MOOD) ? GREEN : RED;
                 DrawRectangle(bx, barY, bw, barH, (Color){c.r, c.g, c.b, 40});
                 DrawRectangle(bx, barY + barH - (int)(fill * barH), bw, (int)(fill * barH), c);
                 DrawRectangleLines(bx, barY, bw, barH, WHITE);
                 const char* lbl = (i < N_MOOD) ? TextFormat("T%d", i + 1)
-                                : (i < N_MOOD + N_INTER)
-                                      ? TextFormat("I%d", i - N_MOOD + 1)
-                                      : "B";
+                                               : TextFormat("I%d", i - N_MOOD + 1);
                 DrawTextEx(font, lbl, {(float)(bx + 4), (float)(barY + 2)}, 14, 0.0f, WHITE);
             }
 
@@ -1559,7 +1546,7 @@ int main(int argc, char* argv[]) {
                 {10, 10}, 16, 0.0f, RAYWHITE);
             DrawTextEx(font, "left-click=teach G  right-click=teach R",
                 {10, 30}, 16, 0.0f, RAYWHITE);
-            DrawTextEx(font, "green=4 Interactive tracks  red=3 Inter  B=track9 (bed)",
+            DrawTextEx(font, "green=T1-T4 crossfade  red=I1-I4 switch (I4=track9)",
                 {10, (float)(frameHeight - 80)}, 16, 0.0f, RAYWHITE);
 
             rlPopMatrix();

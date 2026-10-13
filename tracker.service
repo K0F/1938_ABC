@@ -5,8 +5,8 @@ Wants=sound.target
 # Kameru a zvukovku smí držet jen jeden tracker, proto se bezhlavá a okenní
 # (VNC) služba vzájemně vylučují.
 Conflicts=tracker-vnc.service
-# Tracker + sampler sloučené do jednoho procesu: 8 smyček (4 nálady + 3
-# intermezza + podklad track9) hraje jen když je zapnutá interaction,
+# Tracker + sampler sloučené do jednoho procesu: 8 smyček (4 nálady + 4
+# intermezza, I4 = podklad track9) hraje jen když je zapnutá interaction,
 # RF tlačítka (GPIO15) přes map.csv pouští vzorky navrch (one-shot vrstvy),
 # F = @interact umlčí vrstvy a přepne interaction (on/off, ticho). Kamera je
 # volitelná — bez ní proces jede dál (zvuk + tlačítka) a kameru zkouší
@@ -21,9 +21,10 @@ User=root
 Group=root
 WorkingDirectory=/home/pi/tracker
 # Smyčky nahrané a spuštěné naráz; dokud je interaction vypnutá, jsou
-# ztlumené (ticho). Zelená koule míchá nálady, červená intermezza,
-# podklad track9 hraje konstantně, RF vzorky hrají navrch.
-ExecStart=/home/pi/tracker/tracker --headless --allow-restart --map map.csv
+# ztlumené (ticho). Zelená koule prolíná nálady (crossfade), červená
+# kvadrantem přepíná intermezza (switch), RF vzorky hrají navrch.
+# --fade-ms 0: one-shot vzorky startují okamžitě na 100 %, bez rampu.
+ExecStart=/home/pi/tracker/tracker --headless --allow-restart --map map.csv --fade-ms 0
 Restart=always
 RestartSec=2
 KillSignal=SIGTERM

@@ -10,7 +10,8 @@ WorkingDirectory=/home/pi/tracker
 # a tlačítko F hlásí "not in map". Služba běží jako root, aby systemctl
 # restart fungoval. Pokud se někdy mapu edituje ručně, je to ekvivalent
 # úrovni přístupu k root — mapa je důvěryhodný vstup, ne data z boxu.
-ExecStart=/usr/local/bin/sampler --box b --allow-restart
+# --fade-ms 20: zkrácený náběh na ~20ms (bez dlouhého 2s rampu na boxu B)
+ExecStart=/usr/local/bin/sampler --box b --allow-restart --fade-ms 20
 Restart=always
 RestartSec=2
 # 433 MHz readout do journalu: každý stisk tlačítka jako
