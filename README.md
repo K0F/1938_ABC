@@ -4,7 +4,7 @@ Tento repozitář obsahuje dvě hlavní aplikace vytvořené pro interaktivní z
 1. **Tracker (Box A)**: Přehrávač osmi synchronních smyček řízený webkamerou. Dvě barevné koule (zelená/červená) modulují hlasitost podle polohy nad hrací plochou (s korekcí perspektivy). Do stejné binárky je vložený i sampler: 433 MHz RF tlačítka přes `map.csv` přidávají jednorázové vzorky a tlačítko F (`@interact`) pouští/zastavuje smyčky.
 2. **Sampler (Box B/C)**: Samostatný bezdrátový sampler, ve kterém 433 MHz RF tlačítka spouští jednorázové zvukové samply.
 
-**Režie:** Barbora Jeřábková  
+**Režie:** Barbora Jeřábková, Lucia Schubert 
 **Realizace:** Pavel Sterec, Matouš Hakela, Kryštof Pešek  
 **Produkce:** Jakub Beran
 
