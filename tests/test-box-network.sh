@@ -22,13 +22,6 @@ trap 'rm -rf "$TMP"' EXIT
 ok()  { PASS=$((PASS + 1)); printf '    ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '    FAIL %s\n' "$1"; }
 
-gen() {
-    local r="$TMP/$1"; shift
-    rm -rf "$r"
-    ABC38_NET_ROOT="$r" "$@" bash "$SCRIPT" "$@" >/dev/null 2>&1 || true
-    echo "$r"
-}
-
 # gen N BOX [BOX_* ...] — vygeneruje profil do TMP/N a vrátí cestu k souboru
 # ABC38_NET_DEFAULTS= vypne čtení box-network.defaults: jinak by si testy tahly
 # WiFi z lokalního (gitignorovaného) souboru a chovaly by se jinak než v CI.

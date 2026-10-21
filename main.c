@@ -265,9 +265,11 @@ int main(int argc, char* argv[]) {
     std::vector<cv::Rect> bboxes(numBalls, cv::Rect(100, 100, 80, 80));
     std::vector<cv::Ptr<cv::TrackerCSRT>> trackers(numBalls);
     std::vector<bool> ok(numBalls, false);
+    int spanW = std::max(1, frameWidth - 200);
+    int spanH = std::max(1, frameHeight - 200);
     for (int i = 0; i < numBalls; i++) {
-        bboxes[i].x = 100 + (i * 90) % (frameWidth - 200);
-        bboxes[i].y = 100 + (i * 70) % (frameHeight - 200);
+        bboxes[i].x = 100 + (i * 90) % spanW;
+        bboxes[i].y = 100 + (i * 70) % spanH;
         trackers[i] = cv::TrackerCSRT::create();
         trackers[i]->init(frame, bboxes[i]);
         ok[i] = true;
@@ -331,12 +333,18 @@ int main(int argc, char* argv[]) {
                     mixCh = 4 * numBalls;
                     if (mixCh > 8) mixCh = 8;
                     Mix_AllocateChannels(mixCh);
+                    for (int i = 0; i < mixCh; i++) {
+                        if (!tracks[i])
+                            tracks[i] = Mix_LoadWAV(TextFormat("samples/track%d.wav", i + 1));
+                        if (tracks[i] && !Mix_Playing(i))
+                            Mix_PlayChannel(i, tracks[i], -1);
+                    }
                     bboxes.resize(numBalls, cv::Rect(100, 100, 80, 80));
                     trackers.resize(numBalls);
                     ok.resize(numBalls, false);
                     for (int i = 0; i < numBalls; i++) {
-                        bboxes[i].x = 100 + (i * 90) % (frameWidth - 200);
-                        bboxes[i].y = 100 + (i * 70) % (frameHeight - 200);
+                        bboxes[i].x = 100 + (i * 90) % spanW;
+                        bboxes[i].y = 100 + (i * 70) % spanH;
                         trackers[i] = cv::TrackerCSRT::create();
                         trackers[i]->init(frame, bboxes[i]);
                         ok[i] = true;
@@ -429,7 +437,8 @@ int main(int argc, char* argv[]) {
 
     std::cerr << "tracker " VERSION_STRING << " stop" << std::endl;
     if (!headless) {
-        UnloadFont(font);
+        if (font.texture.id > 0 && font.texture.id != GetFontDefault().texture.id)
+            UnloadFont(font);
         CloseWindow();
     }
     for (int i = 0; i < 8; i++) if (tracks[i]) Mix_FreeChunk(tracks[i]);

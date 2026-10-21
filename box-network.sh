@@ -80,6 +80,8 @@ if [ -n "$DEFAULTS" ] && [ -f "$DEFAULTS" ]; then
               BOX_WIFI_SSID BOX_WIFI_PSK BOX_WIFI_HIDDEN BOX_CONN_NAME \
               BOX_WIFI2_SSID BOX_WIFI2_PSK BOX_WIFI2_HIDDEN BOX_WIFI2_IP \
               BOX_WIFI2_PREFIX BOX_WIFI2_GATEWAY BOX_WIFI2_DNS \
+              BOX_WIFI_SSID2 BOX_WIFI_PSK2 BOX_WIFI_HIDDEN2 BOX_IP2 \
+              BOX_PREFIX2 BOX_GATEWAY2 BOX_DNS2 \
               BOX_IFACE2 BOX_CONN_NAME2; do
         [ -n "${!_v+set}" ] && _env_was["$_v"]="${!_v}"
     done
@@ -113,24 +115,48 @@ DNS="${BOX_DNS-192.168.8.1}"
 SSID="${BOX_WIFI_SSID:-}"
 PSK="${BOX_WIFI_PSK:-}"
 HIDDEN="${BOX_WIFI_HIDDEN:-0}"
-IP2="${BOX_WIFI2_IP-$DEFAULT_IP}"
-PREFIX2="${BOX_WIFI2_PREFIX:-24}"
-GATEWAY2="${BOX_WIFI2_GATEWAY-$GATEWAY}"
-DNS2="${BOX_WIFI2_DNS-$DNS}"
-SSID2="${BOX_WIFI2_SSID:-}"
-PSK2="${BOX_WIFI2_PSK:-}"
-HIDDEN2="${BOX_WIFI2_HIDDEN:-0}"
-[ -n "$BOX_IFACE" ] && IFACE="$BOX_IFACE" || { [ -n "$SSID" ] && IFACE=wlan0 || IFACE=eth0; }
+[ -n "${BOX_IFACE:-}" ] && IFACE="$BOX_IFACE" || { [ -n "$SSID" ] && IFACE=wlan0 || IFACE=eth0; }
 IFACE2="${BOX_IFACE2:-wlan0}"
 CONN_NAME="${BOX_CONN_NAME:-box-$BOX}"
-CONN_NAME2="${BOX_CONN_NAME2:-box-$BOX-2}"
+
+if [ -n "${BOX_WIFI2_SSID:-}" ]; then
+    SSID2="$BOX_WIFI2_SSID"
+    PSK2="${BOX_WIFI2_PSK:-${BOX_WIFI_PSK2:-}}"
+    HIDDEN2="${BOX_WIFI2_HIDDEN:-${BOX_WIFI_HIDDEN2:-0}}"
+    IP2="${BOX_WIFI2_IP-$DEFAULT_IP}"
+    PREFIX2="${BOX_WIFI2_PREFIX:-${BOX_PREFIX2:-24}}"
+    GATEWAY2="${BOX_WIFI2_GATEWAY-$GATEWAY}"
+    DNS2="${BOX_WIFI2_DNS-$DNS}"
+    CONN_NAME2="${BOX_CONN_NAME2:-box-$BOX-2}"
+    UUID_KEY2="box-$BOX-2"
+elif [ -n "${BOX_WIFI_SSID2:-}" ]; then
+    SSID2="$BOX_WIFI_SSID2"
+    PSK2="${BOX_WIFI_PSK2:-${BOX_WIFI2_PSK:-}}"
+    HIDDEN2="${BOX_WIFI_HIDDEN2:-${BOX_WIFI2_HIDDEN:-0}}"
+    IP2="${BOX_IP2-${BOX_WIFI2_IP-}}"
+    PREFIX2="${BOX_PREFIX2:-${BOX_WIFI2_PREFIX:-24}}"
+    GATEWAY2="${BOX_GATEWAY2-${BOX_WIFI2_GATEWAY-$GATEWAY}}"
+    DNS2="${BOX_DNS2-${BOX_WIFI2_DNS-$DNS}}"
+    CONN_NAME2="${BOX_CONN_NAME2:-${CONN_NAME}-backup}"
+    UUID_KEY2="${CONN_NAME}-backup"
+else
+    SSID2=""
+    PSK2=""
+    HIDDEN2="0"
+    IP2=""
+    PREFIX2="24"
+    GATEWAY2="$GATEWAY"
+    DNS2="$DNS"
+    CONN_NAME2="${BOX_CONN_NAME2:-box-$BOX-2}"
+    UUID_KEY2="box-$BOX-2"
+fi
 
 if [ -n "$IP" ] && ! printf '%s' "$IP" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
     echo "ERROR: BOX_IP is not an IPv4 address: $IP" >&2
     exit 1
 fi
 if [ -n "$IP2" ] && ! printf '%s' "$IP2" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
-    echo "ERROR: BOX_WIFI2_IP is not an IPv4 address: $IP2" >&2
+    echo "ERROR: BOX_WIFI2_IP / BOX_IP2 is not an IPv4 address: $IP2" >&2
     exit 1
 fi
 
@@ -143,13 +169,13 @@ uuid_for() {
         || cat /proc/sys/kernel/random/uuid
 }
 
-# write_profile NÁZEV UUID-KEY TYP IFACE ADRESA PREFIX GATEWAY DNS SSID PSK HIDDEN
+# write_profile NÁZEV UUID-KEY TYP IFACE ADRESA PREFIX GATEWAY DNS SSID PSK HIDDEN PRIORITY
 # Prázdná ADRESA = DHCP (method=auto). Pro wifi je interface wlan0, pro eth0
 # fallback ethernet profil bez SSID.
 write_profile() {
     local name="$1" uuid_key="$2" type="$3" iface="$4" ip="$5" prefix="$6"
     local gw="$7" dns="$8" ssid="$9"
-    local psk="${10}" hidden="${11}"
+    local psk="${10}" hidden="${11}" priority="${12:-100}"
     local out="$CONN_DIR/$name.$SUFFIX"
 
     {
@@ -161,6 +187,7 @@ write_profile() {
         echo "type=$type"
         echo "interface-name=$iface"
         echo "autoconnect=true"
+        echo "autoconnect-priority=$priority"
         echo "autoconnect-retries=0"
         echo ""
         if [ "$type" = wifi ]; then
@@ -212,16 +239,16 @@ write_profile() {
 
 if [ -n "$SSID" ]; then
     write_profile "$CONN_NAME" "box-$BOX" wifi "$IFACE" \
-        "$IP" "$PREFIX" "$GATEWAY" "$DNS" "$SSID" "$PSK" "$HIDDEN"
+        "$IP" "$PREFIX" "$GATEWAY" "$DNS" "$SSID" "$PSK" "$HIDDEN" 100
 else
     write_profile "$CONN_NAME" "box-$BOX" ethernet "$IFACE" \
-        "$IP" "$PREFIX" "$GATEWAY" "$DNS" "" "" 0
+        "$IP" "$PREFIX" "$GATEWAY" "$DNS" "" "" 0 100
 fi
 
 if [ -n "$SSID2" ]; then
-    write_profile "$CONN_NAME2" "box-$BOX-2" wifi "$IFACE2" \
-        "$IP2" "$PREFIX2" "$GATEWAY2" "$DNS2" "$SSID2" "$PSK2" "$HIDDEN2"
+    write_profile "$CONN_NAME2" "$UUID_KEY2" wifi "$IFACE2" \
+        "$IP2" "$PREFIX2" "$GATEWAY2" "$DNS2" "$SSID2" "$PSK2" "$HIDDEN2" -100
 else
     # Druhý profil jen přepsal, box by držel profil cizí síti.
-    rm -f "$CONN_DIR/$CONN_NAME2.$SUFFIX"
+    rm -f "$CONN_DIR/$CONN_NAME2.$SUFFIX" "$CONN_DIR/${CONN_NAME}-backup.$SUFFIX"
 fi

@@ -19,8 +19,8 @@ Feature ideas and planned work for the tracker.
 - [x] **Zapojit přijímač v Boxu B** — SRX882S 433 MHz na GPIO (viz `docs/SCH.md`),
       VCC/GND/Data proti pinům RPi, anténa drát cca λ/4. Bez přijímače tlačítka
       neslyší sampler. Ověřeno: kódy chodí do journalu (`code=... -> file.wav`).
-- [ ] **Namapovat kód `11183491`** — v journalu boxu B se opakovaně objevuje
-      `code=11183491 not in map`, tlačítko hraje nic. Přidat do `map.csv`.
+- [x] **Namapovat kód `11183491`** — v journalu boxu B se opakovaně objevuje
+      `code=11183491 not in map`, tlačítko hraje nic. Přidáno do `map.csv` (`Teskno.wav`).
 - [x] **Vyzkoušet asociaci tlačítek u B** — párování Solight 1L67T probíhá na
       samotném tlačítku (learning-code EV1527, držet PAIR na ovladači), kódy se pak
       namapují na samply. Postup: `sudo ./sampler --box b --listen` vypíše kód
