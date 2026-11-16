@@ -6,11 +6,15 @@
 # Každý slot je vrstva: stisk ji rozfádí od ticha (--fade-ms), vzorek se
 # přehraje jednou a sám se zastaví. Vrstvy se skládají — tlačítko B
 # nepřeruší A, jen přidá další. Sampler/tracker čte jen WAV (opus převádí
-# samples-decode.sh, `make samples`).
+# samples-decode.sh, ./samples-decode.sh
+no *.opus in /home/kof/src/1938ABC/samples — nothing to do).
 #
 # F (speciální klíč, kód 5089457): místo samplu umlčí všechny hrající vrstvy
 # a přepne interaction (smyčky track1-4/Inter_*/track9). @interact funguje
 # bez --allow-restart (needá root), na rozdíl od @stopall/@restart.
+#
+# Lokální doplněk (boxc/local-41e07c4)
+11183491, Teskno.wav
 
 
 3449809, Sokol.wav

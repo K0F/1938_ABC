@@ -238,9 +238,11 @@ static void lcdStatusHit(int idx) {
 }
 
 static void lcdStatusListen(uint32_t code) {
+    char l1[LCD_COLS + 1];
+    snprintf(l1, sizeof(l1), "BOX %c LISTEN", boxLetter);
     char l2[LCD_COLS + 1];
     snprintf(l2, sizeof(l2), "code=%u", code);
-    lcdLine(0, "BOX %c LISTEN");
+    lcdLine(0, l1);
     lcdLine(1, l2);
 }
 
@@ -259,15 +261,17 @@ static void loadMap(const char* path) {
 
         char* end = NULL;
         unsigned long code = strtoul(p, &end, 10);
+        if (end == p) continue;
         p = end;
         while (*p == ' ' || *p == '\t' || *p == ',') p++;
 
         int k = 0;
-        char name[256];
-        while (*p && *p != '\n' && *p != '\r') {
+        char name[sizeof(line)];
+        while (*p && *p != '\n' && *p != '\r' && k < (int)sizeof(name) - 1) {
             if (*p == ' ' || *p == '\t') {
                 while (*p == ' ' || *p == '\t') p++;
-                if (*p && *p != '\n' && *p != '\r') name[k++] = ' ';
+                if (*p && *p != '\n' && *p != '\r' && k < (int)sizeof(name) - 1)
+                    name[k++] = ' ';
                 continue;
             }
             name[k++] = *p++;
@@ -354,6 +358,7 @@ static void loadMap(const char* path) {
         slots[n].fadeStartUs = 0;
         slots[n].fadeFromVol = 0;
         slots[n].fadingOut = 0;
+        slots[n].loadTried = 0;
         n++;
     }
     fclose(f);
@@ -441,20 +446,25 @@ static void learnCode(uint32_t code) {
 
     if (learnAppendMap(code, name) < 0) return;
     slots[numSlots].code = code;
+    slots[numSlots].channel = numSlots;
     slots[numSlots].file = name;
+    slots[numSlots].chunk = NULL;
     slots[numSlots].lastUs = 0;
     slots[numSlots].restartUnits.clear();
     slots[numSlots].stopAll = 0;
     slots[numSlots].fadeStartUs = 0;
     slots[numSlots].fadeFromVol = 0;
     slots[numSlots].fadingOut = 0;
+    slots[numSlots].loadTried = 0;
     numSlots++;
     fprintf(stdout, "  zapsáno do %s (%d/%d)\n", mapPath, numSlots, MAX_BUTTONS);
     fflush(stdout);
     if (lcdEnabled) {
+        char l1[LCD_COLS + 1];
+        snprintf(l1, sizeof(l1), "BOX %c LEARN", boxLetter);
         char l2[LCD_COLS + 1];
         snprintf(l2, sizeof(l2), "S%02d ok", numSlots);
-        lcdLine(0, "BOX %c LEARN");
+        lcdLine(0, l1);
         lcdLine(1, l2);
     }
 }
@@ -684,10 +694,7 @@ static void onCode(uint32_t code) {
                 code, code >> 4, code & 0x0f);
         fflush(stdout);
         if (lcdEnabled) {
-            char l2[LCD_COLS + 1];
-            snprintf(l2, sizeof(l2), "code=%u", code);
-            lcdLine(0, "BOX %c LISTEN");
-            lcdLine(1, l2);
+            lcdStatusListen(code);
         }
         return;
     }
@@ -939,7 +946,8 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--te-us") == 0 && i + 1 < argc) {
             teUs = std::atoi(argv[++i]);
             if (teUs <= 0) { fprintf(stderr, "Error: --te-us must be positive\n"); return -1; }
-        } else if (strcmp(argv[i], "--debounce-ms") == 0 && i + 1 < argc) {
+        } else if ((strcmp(argv[i], "--debounce-ms") == 0 ||
+                    strcmp(argv[i], "--debounce") == 0) && i + 1 < argc) {
             int ms = std::atoi(argv[++i]);
             if (ms < 0) { fprintf(stderr, "Error: --debounce-ms must be >= 0\n"); return -1; }
             debounceUs = (uint64_t)ms * 1000ull;
@@ -1033,9 +1041,14 @@ int main(int argc, char* argv[]) {
 
     if (lcdEnabled) {
         if (lcdOpen() == 0) {
-            if (learnMode) lcdLine(0, "BOX %c LEARN");
-            else if (listenMode) lcdLine(0, "BOX %c LISTEN");
-            else lcdStatusReady();
+            if (learnMode || listenMode) {
+                char l1[LCD_COLS + 1];
+                snprintf(l1, sizeof(l1), "BOX %c %s",
+                         boxLetter, learnMode ? "LEARN" : "LISTEN");
+                lcdLine(0, l1);
+            } else {
+                lcdStatusReady();
+            }
         } else {
             lcdEnabled = 0;
         }
