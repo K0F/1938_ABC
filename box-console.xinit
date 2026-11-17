@@ -26,7 +26,7 @@
 # Testy: tests/test-box-console.sh (falešný tracker i /dev/video0 přes
 # BOX_CONSOLE_* proměnné).
 #
-#   BOX_CONSOLE_TRACKER   default /home/pi/tracker/tracker
+#   BOX_CONSOLE_TRACKER   default /home/kof/src/1938ABC/tracker
 #   BOX_CONSOLE_CAMERA    default /dev/video0
 #   BOX_CONSOLE_BALLS     default 1
 #   BOX_CONSOLE_WAIT      default 60      (sekund čekání na kameru)
@@ -39,7 +39,7 @@
 
 set -u
 
-TRACKER="${BOX_CONSOLE_TRACKER:-/home/pi/tracker/tracker}"
+TRACKER="${BOX_CONSOLE_TRACKER:-/home/kof/src/1938ABC/tracker}"
 CAMERA="${BOX_CONSOLE_CAMERA:-/dev/video0}"
 BALLS="${BOX_CONSOLE_BALLS:-1}"
 WAIT="${BOX_CONSOLE_WAIT:-60}"
