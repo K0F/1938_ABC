@@ -27,15 +27,10 @@ UID:20261117T090000-alzabox@pesek.com
 DTSTAMP:20261117T012700Z
 DTSTART;TZID=Europe/Prague:20261117T090000
 DTEND;TZID=Europe/Prague:20261117T093000
-SUMMARY:Vyzvednout balíček v AlzaBoxu
-DESCRIPTION:Vyzvednout dorazivší balíček v AlzaBoxu (příjezd zásilky v 9:00).
+SUMMARY:[ODLOŽENO] Vyzvednout balíček v AlzaBoxu
+DESCRIPTION:Zásilka z AlzaBoxu byla odložena dopravcem/systémem.
 LOCATION:AlzaBox
-STATUS:CONFIRMED
-BEGIN:VALARM
-TRIGGER:-PT15M
-ACTION:DISPLAY
-DESCRIPTION:Připomínka: AlzaBox balíček v 9:00
-END:VALARM
+STATUS:CANCELLED
 END:VEVENT
 BEGIN:VEVENT
 UID:20261117T093000-abc@pesek.com
