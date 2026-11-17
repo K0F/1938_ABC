@@ -12,12 +12,12 @@ Type=simple
 # root kvůli @restart akcím z map.csv (systemctl restart), stejně jako tracker.service.
 User=root
 Group=root
-WorkingDirectory=/home/pi/tracker
+WorkingDirectory=/home/kof/src/1938ABC
 # Okno kreslí na Xvfb :99; kalibrace a učení barev tak jdou přes VNC.
 Environment=DISPLAY=:99
 # --fade-ms 0: one-shot vzorky z RF tlačítek startují okamžitě na 100 %,
 # bez náběhového rampu (dřív 2 s).
-ExecStart=/home/pi/tracker/tracker --allow-restart --map map.csv --fade-ms 0
+ExecStart=/home/kof/src/1938ABC/tracker --allow-restart --map map.csv --fade-ms 0
 Restart=always
 RestartSec=2
 KillSignal=SIGTERM

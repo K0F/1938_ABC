@@ -51,7 +51,7 @@ cmd_on() {
         die "chybí X (startx/xrandr). Nejdřív:
   apt-get install -y --no-install-recommends xserver-xorg-core xinit xfonts-base x11-xserver-utils libglfw3"
     fi
-    [ -x /home/pi/tracker/tracker ] || die "chybí /home/pi/tracker/tracker — nejdřív make v /home/pi/tracker"
+    [ -x /home/kof/src/1938ABC/tracker ] || die "chybí /home/kof/src/1938ABC/tracker — nejdřív make v /home/kof/src/1938ABC"
 
     install -m 0755 "$(src box-console.xinit)" "$XINIT"
     install -m 0644 "$(src box-console-profile.sh)" "$PROFILE"

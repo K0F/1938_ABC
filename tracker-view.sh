@@ -15,7 +15,7 @@
 
 set -u
 
-TRACKER_DIR="${TRACKER_DIR:-/home/pi/tracker}"
+TRACKER_DIR="${TRACKER_DIR:-/home/kof/src/1938ABC}"
 GEOM="${GEOM:-1280x720x24}"
 RPORT="${RPORT:-5900}"
 LABEL="tracker-view"
@@ -53,9 +53,9 @@ do_start() {
     echo $! > "$RUN/xvfb.pid"
     sleep 2
 
-    if [ ! -f /home/pi/.vnc/passwd ]; then
-        mkdir -p /home/pi/.vnc
-        x11vnc -storepasswd tracker /home/pi/.vnc/passwd >/dev/null 2>&1 || true
+    if [ ! -f /home/kof/.vnc/passwd ]; then
+        mkdir -p /home/kof/.vnc
+        x11vnc -storepasswd tracker /home/kof/.vnc/passwd >/dev/null 2>&1 || true
     fi
 
     log "startuji tracker v okně na :99"
@@ -66,11 +66,11 @@ do_start() {
 
     log "startuji x11vnc na portu $RPORT"
     x11vnc -display :99 -forever -shared -rfbport "$RPORT" \
-        -rfbauth /home/pi/.vnc/passwd -o /tmp/x11vnc.log -quiet &
+        -rfbauth /home/kof/.vnc/passwd -o /tmp/x11vnc.log -quiet &
     echo $! > "$RUN/x11vnc.pid"
     sleep 1
 
-    log "hotovo — VNC na <boxa>:$RPORT, heslo 'tracker'"
+    log "hotovo — VNC na <boxc>:$RPORT, heslo 'tracker'"
 }
 
 do_stop() {

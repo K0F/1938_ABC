@@ -5,11 +5,11 @@ Wants=xvfb99.service
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi
+User=kof
+Group=kof
+WorkingDirectory=/home/kof
 ExecStart=/usr/bin/x11vnc -display :99 -forever -shared -rfbport 5900 \
-    -rfbauth /home/pi/.vnc/passwd -o /tmp/x11vnc99.log -quiet
+    -rfbauth /home/kof/.vnc/passwd -o /tmp/x11vnc99.log -quiet
 Restart=always
 RestartSec=2
 StandardOutput=journal

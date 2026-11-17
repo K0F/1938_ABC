@@ -19,12 +19,12 @@ Type=simple
 # pouštěl naprázdno. @stopall/@interact root nepotřebují, ale nic nerozbijí.
 User=root
 Group=root
-WorkingDirectory=/home/pi/tracker
+WorkingDirectory=/home/kof/src/1938ABC
 # Smyčky nahrané a spuštěné naráz; dokud je interaction vypnutá, jsou
 # ztlumené (ticho). Zelená koule prolíná nálady (crossfade), červená
 # kvadrantem přepíná intermezza (switch), RF vzorky hrají navrch.
 # --fade-ms 0: one-shot vzorky startují okamžitě na 100 %, bez rampu.
-ExecStart=/home/pi/tracker/tracker --headless --allow-restart --map map.csv --fade-ms 0
+ExecStart=/home/kof/src/1938ABC/tracker --headless --allow-restart --map map.csv --fade-ms 0
 Restart=always
 RestartSec=2
 KillSignal=SIGTERM

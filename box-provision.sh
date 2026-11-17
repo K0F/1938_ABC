@@ -17,7 +17,7 @@
 #   ABC38_SUDO       default "" (testy: odpadne, vše běží pod aktuálním uživatelem)
 #   ABC38_APT        default apt-get      (testy: true)
 #   ABC38_CMD        default systemctl    (testy: zapisovací náhrada)
-#   ABC38_SRC        default /home/pi/tracker
+#   ABC38_SRC        default /home/kof/src/1938ABC
 #                    (make se hledá v PATH, testy strkají do PATH svou náhradu)
 #   ABC38_DEPS       default 1 (testy: 0 = žádný apt)
 
@@ -33,7 +33,7 @@ R="${ABC38_ROOT:-/}"
 SUDO="${ABC38_SUDO:-}"
 APT="${ABC38_APT:-apt-get}"
 CMD="${ABC38_CMD:-systemctl}"
-SRC="${ABC38_SRC:-/home/pi/tracker}"
+SRC="${ABC38_SRC:-/home/kof/src/1938ABC}"
 DEPS="${ABC38_DEPS:-1}"
 
 STAMP="$R/var/lib/box-provisioned"
