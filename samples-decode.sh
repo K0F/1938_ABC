@@ -84,4 +84,19 @@ for src in "${srcs[@]}"; do
 done
 
 echo "decoded $done_n, skipped $skip_n, failed $fail_n"
+
+# Zajisti kompatibilitu nazvu s main.c (bez diakritiky, mezer a zavorek)
+if [ -f "$SAMPLES_DIR/Inter_Mobilizace_Čísla.wav" ] && [ ! -f "$SAMPLES_DIR/Inter_Mobilizace_Cisla.wav" ]; then
+    ln -sf "Inter_Mobilizace_Čísla.wav" "$SAMPLES_DIR/Inter_Mobilizace_Cisla.wav"
+    echo "  linked Inter_Mobilizace_Cisla.wav -> Inter_Mobilizace_Čísla.wav"
+fi
+if [ -f "$SAMPLES_DIR/Gro Teskno.wav" ] && [ ! -f "$SAMPLES_DIR/Gro_Teskno.wav" ]; then
+    ln -sf "Gro Teskno.wav" "$SAMPLES_DIR/Gro_Teskno.wav"
+    echo "  linked Gro_Teskno.wav -> Gro Teskno.wav"
+fi
+if [ -f "$SAMPLES_DIR/Sokol(2).wav" ] && [ ! -f "$SAMPLES_DIR/Sokol-2.wav" ]; then
+    ln -sf "Sokol(2).wav" "$SAMPLES_DIR/Sokol-2.wav"
+    echo "  linked Sokol-2.wav -> Sokol(2).wav"
+fi
+
 [ "$fail_n" -eq 0 ] || exit 1
