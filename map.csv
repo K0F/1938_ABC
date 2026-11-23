@@ -6,8 +6,7 @@
 # Každý slot je vrstva: stisk ji rozfádí od ticha (--fade-ms), vzorek se
 # přehraje jednou a sám se zastaví. Vrstvy se skládají — tlačítko B
 # nepřeruší A, jen přidá další. Sampler/tracker čte jen WAV (opus převádí
-# samples-decode.sh, ./samples-decode.sh
-no *.opus in /home/kof/src/1938ABC/samples — nothing to do).
+# samples-decode.sh, ./samples-decode.sh).
 #
 # F (speciální klíč, kód 5089457): místo samplu umlčí všechny hrající vrstvy
 # a přepne interaction (smyčky track1-4/Inter_*/track9). @interact funguje

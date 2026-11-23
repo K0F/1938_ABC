@@ -16,7 +16,7 @@ Tracker používá webkameru k detekci dvou barevných koulí nad hrací plochou
 
 ### Jak to funguje
 - **Zelená koule** plynule prolíná (2D crossfade) 4 náladové stopy `Interactive_music_*` podle rektifikované polohy X/Y: `Y-up_WAR`, `Y-down_PEACE`, `X-left_DRAMA`, `X-right_INTIMACY`. Mezi kvadranty se prolíná spojitě, uprostřed znějí všechny čtyři.
-- **Červená koule** kvadrantem **tvrdě přepíná (on/off)** 4 intermezza: `I1`=`Inter_Mobilizace_Cisla`, `I2`=`Inter_Emil_Hacha`, `I3`=`Inter_Mobilizace_Emoce`, `I4`=podklad `track9` (dřív samostatný „bed“). Vždy hraje nejvýš jedna.
+- **Červená koule** kvadrantem **tvrdě přepíná (on/off)** 4 intermezza: `I1`=`Inter_Samply_Cisla`, `I2`=`Inter_Samply_Hacha`, `I3`=`Inter_Samply_Emoce`, `I4`=`Inter_Samply_Nemci`. Vždy hraje nejvýš jedna.
 - Detekce je barevná (HSV blob) — žádný MOG2 ani KCF, jen převod do HSV a pár prahů na snímek, což je na Raspberry Pi 4 zanedbatelné. Barvy koulí se „naučí“ kliknutím do okna (viz [Ovládání](#ovládání-tracker)); dokud naučené nejsou, použijí se pevné prahy (zelená/červená).
 - Sledování je odolnější: střed bere z `minEnclosingCircle` (ne z bboxu, který posouvá odlesk), tvar filtruje kruhovostí (`--min-roundness`) a mezemi plochy (`--min-area`/`--max-area`). Zamčená koule se hledá v úzkém okně kolem predikce (okno roste s rychlostí), ztracená nejdřív v okruhu `--reacquire-px` kolem poslední polohy a teprve pak globálně — koule tak „nepřeskočí“ na jiný objekt; blob blíž k druhé kouli se zahodí (záměna koulí). Polohu hlazuje drobný 1D Kalman s konstantní rychlostí (plynulý pohyb, krátké výpadky předpoví). Naučená saturace/jas se pomalu přizpůsobují změně osvětlení (`--adapt-alpha`), odstín zůstává naučený; `--lock-exposure` navíc vypne auto-expozici/WB kamery.
 - **Odstranění pozadí**: na prázdné ploše (koule mimo stůl) se změří referenční snímek (klávesa `B`, soubor `--bg`, default `bg.bin`); detekce pak bere jen pixely, které se od reference liší (`--bg-diff`, `--no-bg` vypne). Zmizí statické odlesky a barevné předměty v pozadí, ale koule zůstane detekovaná i když se nehýbe (na rozdíl od MOG2). S `--lock-exposure` zůstává reference platná i při změnách světla.
@@ -57,7 +57,7 @@ bash build_termux.sh # Jednorázová instalace a sestavení
 ### Spuštění Trackeru
 Vložte smyčky do složky `samples/` pod jmény, která tracker očekává:
 `samples/Interactive_music_{Y-up_WAR,Y-down_PEACE,X-left-DRAMA,X-right-INTIMACY}.wav`,
-`samples/Inter_{Mobilizace_Cisla,Emil_Hacha,Mobilizace_Emoce}.wav` a `samples/track9.wav` (čtvrté intermezzo `I4`). Chybějící vzorek tracker jen zaloguje (`audio: missing …`) a jede dál.
+`samples/Inter_Samply_{Cisla,Hacha,Emoce,Nemci}.wav` (čtyři intermezza `I1`-`I4`). Chybějící vzorek tracker jen zaloguje (`audio: missing …`) a jede dál.
 
 ```bash
 ./tracker                  # okenní režim (kalibrace, naučení barev), 1280x720

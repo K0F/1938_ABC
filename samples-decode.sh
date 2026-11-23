@@ -86,6 +86,18 @@ done
 echo "decoded $done_n, skipped $skip_n, failed $fail_n"
 
 # Zajisti kompatibilitu nazvu s main.c (bez diakritiky, mezer a zavorek)
+if [ -f "$SAMPLES_DIR/Inter_Samply_Cisla.wav" ]; then
+    ln -sf "Inter_Samply_Cisla.wav" "$SAMPLES_DIR/Inter_Samply_Čísla.wav" 2>/dev/null || true
+    ln -sf "Inter_Samply_Cisla.wav" "$SAMPLES_DIR/Inter_Samply_Čísla.wav" 2>/dev/null || true
+fi
+if [ -f "$SAMPLES_DIR/Inter_Samply_Hacha.wav" ]; then
+    ln -sf "Inter_Samply_Hacha.wav" "$SAMPLES_DIR/Inter_Samply_Hácha.wav" 2>/dev/null || true
+    ln -sf "Inter_Samply_Hacha.wav" "$SAMPLES_DIR/Inter_Samply_Hácha.wav" 2>/dev/null || true
+fi
+if [ -f "$SAMPLES_DIR/Inter_Samply_Nemci.wav" ]; then
+    ln -sf "Inter_Samply_Nemci.wav" "$SAMPLES_DIR/Inter_Samply_Němci.wav" 2>/dev/null || true
+    ln -sf "Inter_Samply_Nemci.wav" "$SAMPLES_DIR/Inter_Samply_Němci.wav" 2>/dev/null || true
+fi
 if [ -f "$SAMPLES_DIR/Inter_Mobilizace_Čísla.wav" ] && [ ! -f "$SAMPLES_DIR/Inter_Mobilizace_Cisla.wav" ]; then
     ln -sf "Inter_Mobilizace_Čísla.wav" "$SAMPLES_DIR/Inter_Mobilizace_Cisla.wav"
     echo "  linked Inter_Mobilizace_Cisla.wav -> Inter_Mobilizace_Čísla.wav"

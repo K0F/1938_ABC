@@ -96,8 +96,7 @@ static Color hsvToRgb(int h, int s, int v, unsigned char a = 255) {
 // Pi 4 nestojí skoro nic, žádný MOG2 ani KCF, jen převod do HSV a pár
 // prahů na snímek.
 #define N_MOOD 4
-// I1-I4: Inter_Mobilizace_Cisla, Inter_Emil_Hacha, Inter_Mobilizace_Emoce
-// a podklad track9 (dřív samostatný "bed") — viz interFiles níže.
+// I1-I4: Inter_Samply_{Cisla,Hacha,Emoce,Nemci} — viz interFiles níže.
 #define N_INTER 4
 // Nejmenší plocha blobu, aby se počítal za kouli. Menší koule (zelená bývá
 // menší než červená) dává jen pár desítek pixelů, takže vyšší práh ji zahodil.
@@ -169,13 +168,13 @@ static const char* moodFiles[N_MOOD] = {
 
 // Intermezza červené koule (jména ASCII — "Čísla" by dělalo problém s
 // kódováním napříč stroji; na boxu je soubor i pod původním jménem).
-// I4 je podklad track9 (dřív samostatný „bed"), takže dohromady běží 8 smyček
-// ve synchronu (4 nálady T + 4 intermezza I).
+// Pořadí odpovídá kvadrantům: 0=nahoře (Čísla), 1=dole (Hácha),
+// 2=vlevo (Emoce), 3=vpravo (Němci).
 static const char* interFiles[N_INTER] = {
-    "samples/Inter_Mobilizace_Cisla.wav",
-    "samples/Inter_Emil_Hacha.wav",
-    "samples/Inter_Mobilizace_Emoce.wav",
-    "samples/track9.wav",
+    "samples/Inter_Samply_Cisla.wav",
+    "samples/Inter_Samply_Hacha.wav",
+    "samples/Inter_Samply_Emoce.wav",
+    "samples/Inter_Samply_Nemci.wav",
 };
 
 // ── 433 MHz přijímač SRX882S na GPIO15 ────────────────────────────────
@@ -857,7 +856,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Dvě koule: zelená plynule prolíná " << N_MOOD
                       << " náladové stopy Interactive_* (crossfade), červená "
                       << "kvadrantem přepíná " << N_INTER
-                      << " intermezza Inter_* (I4 je podklad track9) on/off. "
+                      << " intermezza Inter_Samply_* (Čísla, Hácha, Emoce, Němci) on/off. "
                       << "Všech " << N_LOOP
                       << " smyček hraje, jen když je interaction zapnutá "
                       << "tlačítkem F (@interact v mapě); RF tlačítka nad ně "
@@ -1374,7 +1373,7 @@ int main(int argc, char* argv[]) {
         }
 
         // ── hlasitost: červená koule tvrdě přepíná 4 intermezza on/off ──────
-        // Intermezza (I1-I4 = Inter_* + podklad track9) hrají vždy nejvýš
+        // Intermezza (I1-I4 = Inter_Samply_*) hrají vždy nejvýš
         // jedna: kvadrant, ve kterém je červená koule, danou stopu zapne a
         // ostatní vypne (žádný crossfade — je to switch). Stejné pořadí jako
         // u T: I1 nahoře, I2 dole, I3 vlevo, I4 vpravo. Bez koule jsou všechny
@@ -1546,7 +1545,7 @@ int main(int argc, char* argv[]) {
                 {10, 10}, 16, 0.0f, RAYWHITE);
             DrawTextEx(font, "left-click=teach G  right-click=teach R",
                 {10, 30}, 16, 0.0f, RAYWHITE);
-            DrawTextEx(font, "green=T1-T4 crossfade  red=I1-I4 switch (I4=track9)",
+            DrawTextEx(font, "green=T1-T4 crossfade  red=I1-I4 switch",
                 {10, (float)(frameHeight - 80)}, 16, 0.0f, RAYWHITE);
 
             rlPopMatrix();
