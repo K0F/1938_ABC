@@ -571,6 +571,66 @@ skript, takže jde ověřit logika, ne samotný převod. Oba směry:
 
 ---
 
+## Aktualizace a provoz Boxu A v divadle (ABC)
+
+Box A (Raspberry Pi 4) je v divadle nainstalován na pevném místě a **vypíná se společně se scénickými světly** (tzv. hard power-cut, není trvale zapojený). Box B je samostatný, funguje spolehlivě a k síti se nepřipojuje.
+
+### Chování při startu se světly:
+1. Jakmile se rozsvítí světla, Box A nabootuje z SD karty.
+2. NetworkManager automaticky připojí divadelní WiFi `cafe` (nebo záložní `HUAWEI-B310-C3A0`).
+3. Služba `box-autossh.service` ihned naváže reverzní SSH tunel na centrální server `pesek.com` (port 2224).
+4. Služba `tracker.service` naběhne v bezhlavém režimu s webkamerou a 8 zvukovými smyčkami.
+5. Všechny služby mají `Restart=always` a `StartLimitIntervalSec=0` — žádný výpadek sítě ani prodleva kamery proces nezabije.
+
+### Postup aktualizace z notebooku t520 v divadle
+
+Pro nahrání aktualizací (nové vzorky intermezz, oprava tlačítka D v `map.csv`, reverzní tunel) jsou připraveny dva přímočaré skripty:
+
+#### Varianta 1: Offline aktualizace SD karty (Box A je vypnutý)
+Vyjměte SD kartu z Boxu A a zasuňte ji do čtečky notebooku `t520`:
+```bash
+cd ~/src/1938ABC
+sudo ./update-boxa-sd.sh
+```
+Skript automaticky:
+- Detekuje připojenou SD kartu (`/run/media/kof/rootfs` nebo `/dev/mmcblk0p2`).
+- Nahraje aktualizovaný `map.csv` s funkčním tlačítkem D (`3458577, Sokol_D.wav`).
+- Zkopíruje 4 nová intermezza (`Inter_Samply_{Cisla,Hacha,Emoce,Nemci}.wav`) a symlinky.
+- Zkopíruje nové zdrojáky `main.c`, `Makefile` a skripty.
+- Nainstaluje a povolí službu `box-autossh.service` s privátním klíčem pro přístup.
+- Zkontroluje a zapíše WiFi profily pro `cafe` i `HUAWEI`.
+- Provede `sync`. Kartu pak stačí vrátit do Boxu A a zapnout světla.
+
+#### Varianta 2: Online aktualizace přes síť / SSH (Box A běží na světla)
+Pokud je Box A zapnutý a přihlášený k místní síti (nebo spojený ethernetem s `t520`):
+```bash
+cd ~/src/1938ABC
+./update-boxa-ssh.sh 192.168.88.104
+```
+Skript přes `scp`/`ssh` přenese data, na Boxu A spustí `make tracker`, aktivuje tunel a restartuje službu `tracker.service`.
+
+### Vzdálený přístup přes reverzní tunel (odkudkoliv)
+Kdykoliv v divadle svítí světla a Box A je připojen k internetu:
+```bash
+ssh -p 2224 pi@pesek.com
+```
+```bash
+# Kontrola stavu služeb na Boxu A:
+systemctl status tracker.service
+systemctl status box-autossh.service
+journalctl -u tracker -f
+```
+
+### Mapování RF tlačítek (Solight 433 MHz na Boxu A):
+Box A má 4 fyzická tlačítka Solight (přijímač na GPIO15):
+- **Tlačítko 1:** kód `3449809` → `Sokol.wav`
+- **Tlačítko 2:** kód `3447841` → `Sokol_B.wav`
+- **Tlačítko 3:** kód `3526481` → `Sokol_C.wav`
+- **Tlačítko 4:** kód `3458577` → `Sokol_D.wav` *(dříve chybělo v map.csv)*
+- **Kláč F:** kód `5089457` → `@interact` (umlčí hrající vrstvy a zapne/vypne smyčky koulí)
+
+---
+
 ## Hardware / BOM (Česky)
 Kompletní požadavky na hardware a nákupní seznam naleznete v souboru [`HW.md`](HW.md). 
 Systém běží na sestavě dvou zařízení (vše Raspberry Pi 4, 8 GB). Box A je tracker s webkamerou, zatímco Box B je bezdrátový spouštěč samplů. Každý box má vlastní USB zvukovou kartu (AXAGON ADA-17), panelové audio výstupy a interní reproduktor se zesilovačem.
