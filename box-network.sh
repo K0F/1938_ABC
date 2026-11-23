@@ -82,7 +82,8 @@ if [ -n "$DEFAULTS" ] && [ -f "$DEFAULTS" ]; then
               BOX_WIFI2_PREFIX BOX_WIFI2_GATEWAY BOX_WIFI2_DNS \
               BOX_WIFI_SSID2 BOX_WIFI_PSK2 BOX_WIFI_HIDDEN2 BOX_IP2 \
               BOX_PREFIX2 BOX_GATEWAY2 BOX_DNS2 \
-              BOX_IFACE2 BOX_CONN_NAME2; do
+              BOX_IFACE2 BOX_CONN_NAME2 \
+              BOX_A_IP BOX_B_IP BOX_A_WIFI2_IP BOX_B_WIFI2_IP; do
         [ -n "${!_v+set}" ] && _env_was["$_v"]="${!_v}"
     done
     # shellcheck disable=SC1090
@@ -105,8 +106,14 @@ case "$BOX" in
 esac
 
 case "$BOX" in
-    A) DEFAULT_IP=192.168.8.104 ;;
-    B) DEFAULT_IP=192.168.8.103 ;;
+    A)
+        DEFAULT_IP="${BOX_A_IP:-192.168.8.104}"
+        DEFAULT_IP2="${BOX_A_WIFI2_IP:-192.168.8.104}"
+        ;;
+    B)
+        DEFAULT_IP="${BOX_B_IP:-192.168.8.103}"
+        DEFAULT_IP2="${BOX_B_WIFI2_IP:-192.168.8.103}"
+        ;;
 esac
 IP="${BOX_IP-$DEFAULT_IP}"
 PREFIX="${BOX_PREFIX:-24}"
@@ -122,8 +129,8 @@ CONN_NAME="${BOX_CONN_NAME:-box-$BOX}"
 if [ -n "${BOX_WIFI2_SSID:-}" ]; then
     SSID2="$BOX_WIFI2_SSID"
     PSK2="${BOX_WIFI2_PSK:-${BOX_WIFI_PSK2:-}}"
-    HIDDEN2="${BOX_WIFI2_HIDDEN:-${BOX_WIFI_HIDDEN2:-0}}"
-    IP2="${BOX_WIFI2_IP-$DEFAULT_IP}"
+    HIDDEN2="${BOX_WIFI2_HIDDEN:-${BOX_WIFI2_HIDDEN2:-0}}"
+    IP2="${BOX_WIFI2_IP-$DEFAULT_IP2}"
     PREFIX2="${BOX_WIFI2_PREFIX:-${BOX_PREFIX2:-24}}"
     GATEWAY2="${BOX_WIFI2_GATEWAY-$GATEWAY}"
     DNS2="${BOX_WIFI2_DNS-$DNS}"

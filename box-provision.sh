@@ -54,7 +54,8 @@ if [ "$DEPS" = 1 ]; then
         $SUDO $APT install -y --no-install-recommends \
             g++ make pkg-config git ca-certificates \
             libjpeg-dev libx11-dev libgl-dev \
-            libsdl2-dev libsdl2-mixer-dev libxrandr-dev libgpiod-dev
+            libsdl2-dev libsdl2-mixer-dev libxrandr-dev libgpiod-dev \
+            autossh
         # X + mesa zůstávají v image: kalibrace přes HDMI ručně (startx na tty1,
         # ./tracker s oknem a klávesou S) a volitelná HDMI konzole
         # (box-console.sh on), která autologuje na tty1 a plní TV oknem trackeru.
@@ -64,7 +65,8 @@ if [ "$DEPS" = 1 ]; then
     else
         $SUDO $APT install -y --no-install-recommends \
             g++ make pkg-config git ca-certificates \
-            libsdl2-dev libsdl2-mixer-dev libgpiod-dev
+            libsdl2-dev libsdl2-mixer-dev libgpiod-dev \
+            autossh
     fi
 fi
 
@@ -152,6 +154,28 @@ if [ -e "$CONN" ]; then
 elif [ -x box-network.sh ]; then
     ABC38_NET_ROOT="$R" $SUDO ./box-network.sh "$BOX" || \
         echo "[box$BOX] POZOR: box-network.sh selhal" >&2
+fi
+
+# ── autossh mód (reverzní tunel do pesek.com / xn--peek-h6a.com) ──
+echo "$BOX" > "$R/etc/box-identity"
+if [ -f box-autossh.sh ]; then
+    install -m 0755 box-autossh.sh "$R/usr/local/sbin/box-autossh.sh"
+fi
+if [ -f box-autossh.service ]; then
+    install -m 0644 box-autossh.service "$R/etc/systemd/system/box-autossh.service"
+    $CMD enable box-autossh.service
+    if [ "${START:-0}" = 1 ]; then
+        $CMD start box-autossh.service || true
+    fi
+fi
+if [ -f 99-box-autossh.sh ]; then
+    mkdir -p "$R/etc/NetworkManager/dispatcher.d"
+    install -m 0755 99-box-autossh.sh "$R/etc/NetworkManager/dispatcher.d/99-box-autossh.sh"
+fi
+if [ -f box_tunnel_key ]; then
+    mkdir -p "$R/home/pi/.ssh"
+    install -m 0600 box_tunnel_key "$R/home/pi/.ssh/id_ed25519"
+    [ "$R" = "/" ] && chown -R 1000:1000 "$R/home/pi/.ssh" 2>/dev/null || true
 fi
 
 # ── start služby ──────────────────────────────────────────────────

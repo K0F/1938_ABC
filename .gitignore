@@ -33,3 +33,7 @@ samples/raw/
 # track?.wav jsou male placeholdery, ty se commituji.
 samples/*.wav
 !samples/track?.wav
+
+# SSH reverzní tunel klíče
+box_tunnel_key
+

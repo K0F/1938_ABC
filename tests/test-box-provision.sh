@@ -52,9 +52,9 @@ chmod 755 "$FAKEBIN/make"
 STAGE="$TMP/stage"
 mkdir -p "$STAGE"
 # všechno, co provisioning instaluje — chybějící souroj by ho zastavil (set -e)
-cp "$ROOT"/box-{alsa-setup,sound-restart,network,provision}.sh "$STAGE/"
-cp "$ROOT"/{sampler,tracker,box-sound-restart}.service "$STAGE/"
-cp "$ROOT"/99-box-sound.rules "$ROOT"/map.csv.example "$ROOT"/install-deps.sh "$STAGE/"
+cp "$ROOT"/box-{alsa-setup,sound-restart,network,provision,autossh}.sh "$STAGE/"
+cp "$ROOT"/{sampler,tracker,box-sound-restart,box-autossh,xvfb99,x11vnc99,tracker-vnc}.service "$STAGE/"
+cp "$ROOT"/99-box-{sound.rules,autossh.sh} "$ROOT"/map.csv.example "$ROOT"/install-deps.sh "$STAGE/"
 
 # Box A jde přes install-deps.sh (raylib se staví z Gitu) — v testu to musí být
 # náhrada, jinak by provisioning sáhl na síť
@@ -119,11 +119,12 @@ has '^disable box-firstboot\.service$' "$SYSTEMCTL_LOG" "firstboot se sám vypne
 
 echo "== 2) Box B: sampler.service, identita b, restartuje se sampler =="
 RB="$(run_box B)"
+cp "$SYSTEMCTL_LOG" "$TMP/systemctl-B.log"
 has '^enable sampler\.service$'    "$SYSTEMCTL_LOG" "sampler.service zapnutá"
 has '^start sampler\.service$'     "$SYSTEMCTL_LOG" "sampler.service spuštěná"
 has 'Environment=RESTART_UNITS=sampler\.service' "$RB/etc/systemd/system/box-sound-restart.service" \
     "box-sound-restart restartuje sampler"
-has 'ExecStart=/usr/local/bin/sampler --box b --allow-restart$' \
+has 'ExecStart=/usr/local/bin/sampler --box b --allow-restart' \
     "$RB/etc/systemd/system/sampler.service" \
     "sampler.service spuštěný s --box b a --allow-restart"
 # Náhrada písmena za --box nesmí spadnout i na zbytek ExecStart řádku:
@@ -180,6 +181,15 @@ fi
 
 echo "== 7) ALSA default se propíše do image, ne do hosta =="
 has '^pcm\.usb \{' "$RB/etc/asound.conf" "asound.conf v image má pcm.usb"
+
+echo "== 8) autossh reverzní tunel a NetworkManager dispatcher nainstalován =="
+[ -x "$RB/usr/local/sbin/box-autossh.sh" ] && ok "box-autossh.sh nainstalován" || bad "box-autossh.sh chybí"
+[ -f "$RB/etc/systemd/system/box-autossh.service" ] && ok "box-autossh.service nainstalována" || bad "box-autossh.service chybí"
+[ -x "$RB/etc/NetworkManager/dispatcher.d/99-box-autossh.sh" ] && ok "NM dispatcher nainstalován" || bad "NM dispatcher chybí"
+[ -f "$RB/etc/box-identity" ] && [ "$(cat "$RB/etc/box-identity")" = "B" ] && ok "box-identity B zapsána" || bad "box-identity B chybí"
+[ -f "$RA/etc/box-identity" ] && [ "$(cat "$RA/etc/box-identity")" = "A" ] && ok "box-identity A zapsána" || bad "box-identity A chybí"
+has '^enable box-autossh\.service$' "$TMP/systemctl-B.log" "box-autossh.service zapnutá"
+has '^start box-autossh\.service$'  "$TMP/systemctl-B.log" "box-autossh.service spuštěná"
 
 echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
