@@ -135,10 +135,10 @@ if [ -f "$SCRIPT_DIR/box_tunnel_key" ]; then
     chown -R 1000:1000 "$ROOTFS/home/pi/.ssh" 2>/dev/null || true
 fi
 
-# 7. WiFi síť a statická IP přes box-network.sh
+# 7. WiFi síť a statická IP přes box-network.sh (Box A = .104 v kavárně, přepíše .103 z defaults)
 echo "  Generuji WiFi profily pro divadlo (cafe) a domov (HUAWEI)..."
 if [ -x "$SCRIPT_DIR/box-network.sh" ]; then
-    ABC38_NET_ROOT="$ROOTFS" "$SCRIPT_DIR/box-network.sh" A
+    BOX_IP=192.168.88.104 ABC38_NET_ROOT="$ROOTFS" "$SCRIPT_DIR/box-network.sh" A
 fi
 
 # 8. Nastavení vlastnictví pro uživatele pi (UID 1000)
