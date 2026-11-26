@@ -220,6 +220,10 @@ static float ballMinRoundness = BALL_MIN_ROUNDNESS;  // --min-roundness
 static float ballGatePx = BALL_GATE_PX;   // --gate-px, 0 = bez gate
 static float ballAdaptAlpha = BALL_ADAPT_ALPHA;      // --adapt-alpha
 static float ballReacquirePx = BALL_REACQUIRE_PX;    // --reacquire-px
+static bool whiteMode = false;                       // --white: bílé míče (nízká sytost, vysoký jas)
+static int whiteSMax = 65;                           // --white-s N: max saturace pro bílou
+static int whiteVMin = 150;                          // --white-v N: min jas pro bílou
+static int ballSplitArea = 0;                        // --split-area N: <N = zelená/nálady, >=N = červená/intermezza
 static const char* camDevice = "/dev/video0";        // --device
 
 // Referenční snímek prázdné plochy pro odstranění pozadí (bg.bin, RGB).
@@ -579,10 +583,22 @@ static bool detectBall(const unsigned char* rgb, int fw, int fh,
 
     const ColorModel& cm = ballColor[color];
     const bool learned = cm.set;
-    int sMin, vMin;
-    if (learned)       { sMin = std::max(25, cm.s / 4); vMin = std::max(20, cm.v / 4); }
-    else if (color == BALL_RED) { sMin = 80; vMin = 50; }
-    else               { sMin = 45; vMin = 30; }
+    const bool achromatic = whiteMode || (learned && cm.s < 40);
+    int sMin = 0, sMax = 255, vMin = 0;
+    if (whiteMode) {
+        sMax = whiteSMax;
+        vMin = whiteVMin;
+    } else if (learned && cm.s < 40) {
+        sMax = std::max(60, cm.s + 35);
+        vMin = std::max(100, cm.v * 2 / 3);
+    } else if (learned) {
+        sMin = std::max(25, cm.s / 4);
+        vMin = std::max(20, cm.v / 4);
+    } else if (color == BALL_RED) {
+        sMin = 80; vMin = 50;
+    } else {
+        sMin = 45; vMin = 30;
+    }
 
     for (int ry = 0; ry < rh; ry++) {
         const unsigned char* rp = rgb + ((size_t)(roi.y + ry) * fw + roi.x) * 3;
@@ -597,16 +613,21 @@ static bool detectBall(const unsigned char* rgb, int fw, int fh,
             if (fm && !fm[rx]) continue;
             if (gm && !gm[rx]) continue;   // stejné jako prázdná plocha
             int H, S, V; rgbToHsv(rp[0], rp[1], rp[2], H, S, V);
-            if (S < sMin || V < vMin) continue;
+            if (V < vMin) continue;
             bool match;
-            if (learned) {
-                int d = H - cm.h; if (d < 0) d = -d;
-                if (d > 90) d = 180 - d;          // odstín se obepíná přes 0/180
-                match = d <= hueTol;
-            } else if (color == BALL_RED) {
-                match = (H <= 12 || H >= 158);
+            if (achromatic) {
+                match = (S <= sMax);
             } else {
-                match = (H >= 35 && H <= 90);
+                if (S < sMin) continue;
+                if (learned) {
+                    int d = H - cm.h; if (d < 0) d = -d;
+                    if (d > 90) d = 180 - d;          // odstín se obepíná přes 0/180
+                    match = d <= hueTol;
+                } else if (color == BALL_RED) {
+                    match = (H <= 12 || H >= 158);
+                } else {
+                    match = (H >= 35 && H <= 90);
+                }
             }
             if (match) { *mp = 255; *sp = (unsigned char)S; *vp = (unsigned char)V; }
         }
@@ -636,6 +657,10 @@ static bool detectBall(const unsigned char* rgb, int fw, int fh,
         float a = (float)bl.area;
         if (a < (float)ballMinArea) continue;
         if (ballMaxArea > 0 && a > (float)ballMaxArea) continue;
+        if (ballSplitArea > 0) {
+            if (color == BALL_GREEN && a >= (float)ballSplitArea) continue;
+            if (color == BALL_RED   && a <  (float)ballSplitArea) continue;
+        }
         int bw = (int)bl.box.w, bh = (int)bl.box.h;
         double aspect = (double)std::min(bw, bh) / (double)std::max(bw, bh);
         double fill = (double)a / (double)(bw * bh);
@@ -648,6 +673,7 @@ static bool detectBall(const unsigned char* rgb, int fw, int fh,
         float dPrev = 1e30f, dAvoid = 1e30f;
         if (hasPrev) { float dx = ctr.x - prev.x, dy = ctr.y - prev.y; dPrev = std::sqrt(dx*dx+dy*dy); }
         if (hasAvoid) { float dx = ctr.x - avoid.x, dy = ctr.y - avoid.y; dAvoid = std::sqrt(dx*dx+dy*dy); }
+        if (hasAvoid && dAvoid < 25.0f) continue;          // nekraď již zamčený druhý míč
         if (hasPrev && hasAvoid && dAvoid < dPrev) continue;  // patří druhé kouli
         if (hasPrev && gatePx > 0 && dPrev <= gatePx && (!haveNear || dPrev < bestNear)) {
             bestNear = dPrev; cNear = ctr; rNear = box; lNear = bl.label; haveNear = true;
@@ -847,6 +873,10 @@ int main(int argc, char* argv[]) {
                       << BG_DIFF_DEFAULT << ")\n"
                          "  --no-bg          disable background removal\n";
             std::cout << "  --lock-exposure  turn off camera auto-exposure/WB\n";
+            std::cout << "  --white          track white balls (low S, high V; ignores hue)\n"
+                         "  --white-s N      max saturation for --white (default 65)\n"
+                         "  --white-v N      min value/brightness for --white (default 150)\n"
+                         "  --split-area N   split balls by px area: <N=mood(G), >=N=inter(R) (0=off)\n";
             std::cout << "  --detect-ms N    max CV detection rate in ms (default "
                       << DETECT_MS_DEFAULT << "; 0 = every frame)\n";
             std::cout << "  --no-rf          do not read the 433 MHz receiver" << std::endl;
@@ -949,6 +979,19 @@ int main(int argc, char* argv[]) {
         }
         if (strcmp(argv[i], "--lock-exposure") == 0) {
             lockExposure = true;
+        }
+        if (strcmp(argv[i], "--white") == 0) {
+            whiteMode = true;
+        }
+        if (strcmp(argv[i], "--white-s") == 0 && i + 1 < argc) {
+            whiteSMax = std::atoi(argv[++i]);
+        }
+        if (strcmp(argv[i], "--white-v") == 0 && i + 1 < argc) {
+            whiteVMin = std::atoi(argv[++i]);
+        }
+        if (strcmp(argv[i], "--split-area") == 0 && i + 1 < argc) {
+            ballSplitArea = std::atoi(argv[++i]);
+            if (ballSplitArea < 0) ballSplitArea = 0;
         }
         if (strcmp(argv[i], "--width") == 0 && i + 1 < argc) {
             reqWidth = std::atoi(argv[++i]);
